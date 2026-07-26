@@ -212,10 +212,8 @@ async def show_main_menu(uid, qz):
     output += "<qqbot-cmd-input text='药园菜单' show='药园菜单' /> | <qqbot-cmd-input text='炼丹菜单' show='炼丹菜单' />\n\n"
 
     output += "<qqbot-cmd-input text='商城' show='商城' /> | <qqbot-cmd-input text='物品背包' show='物品背包' />\n\n"
-    output += "<qqbot-cmd-input text='灵兽' show='灵兽园' /> | <qqbot-cmd-input text='灵兽寻访' show='灵兽寻访' />\n\n"
-    output += "<qqbot-cmd-input text='洞府' show='洞府' /> | <qqbot-cmd-input text='洞府收取 稳健' show='洞府收取' />\n\n"
-    output += "<qqbot-cmd-input text='队伍创建' show='群内创建队伍' /> | <qqbot-cmd-input text='队伍' show='查看队伍' />\n\n"
-    output += "<qqbot-cmd-input text='更新日志' show='更新日志 v1.21' />\n\n"
+    output += "<qqbot-cmd-input text='灵兽菜单' show='灵兽菜单' /> | <qqbot-cmd-input text='洞府菜单' show='洞府菜单' />\n\n"
+    output += "<qqbot-cmd-input text='队伍菜单' show='队伍菜单' /> | <qqbot-cmd-input text='更新日志' show='更新日志 v1.22' />\n\n"
     output += "<qqbot-cmd-input text='战力菜单' show='战力菜单' /> | <qqbot-cmd-input text='玩法介绍' show='玩法介绍' />\n\n"
 
     return {"type": "markdown", "content": output}
@@ -224,6 +222,40 @@ async def show_main_menu(uid, qz):
 # ================================
 # 子菜单功能
 # ================================
+
+@reg_xz_func
+async def show_spirit_beast_menu(uid, qz):
+    """灵兽相关指令统一入口，避免主菜单出现操作级按钮。"""
+    output = "##### 🐾 灵兽菜单\n\n"
+    output += "寻访灵兽、查看图鉴与设置出战灵兽都集中在此处；灵兽只从玩法中获得，不在商城出售。\n\n"
+    output += "<qqbot-cmd-input text='灵兽' show='我的灵兽' /> | <qqbot-cmd-input text='灵兽图鉴' show='灵兽图鉴' />\n\n"
+    output += "<qqbot-cmd-input text='灵兽寻访' show='每日寻访' /> | <qqbot-cmd-input text='灵兽出战 ' show='灵兽出战 编号*' />\n\n"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
+    return {"type": "markdown", "content": output}
+
+
+@reg_xz_func
+async def show_estate_menu(uid, qz):
+    """洞府建设与收取入口。洞府详情仍由原有“洞府”指令展示。"""
+    output = "##### 🏡 洞府菜单\n\n"
+    output += "洞府提供离线灵气。每日可选一次稳健收取或冒险共鸣；建筑升级只消耗灵石。\n\n"
+    output += "<qqbot-cmd-input text='洞府' show='查看洞府' /> | <qqbot-cmd-input text='洞府收取 稳健' show='稳健收取' />\n\n"
+    output += "<qqbot-cmd-input text='洞府收取 冒险' show='冒险共鸣' /> | <qqbot-cmd-input text='洞府升级 ' show='升级建筑*' />\n\n"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
+    return {"type": "markdown", "content": output}
+
+
+@reg_xz_func
+async def show_party_menu(uid, qz):
+    """群协作系统入口：队伍、阵法与三千道途。"""
+    output = "##### 👥 队伍菜单\n\n"
+    output += "队伍与三千道途仅限群聊使用。先创建或加入队伍，再布阵并让全员准备。\n\n"
+    output += "<qqbot-cmd-input text='队伍' show='查看队伍' /> | <qqbot-cmd-input text='队伍创建' show='创建队伍' />\n\n"
+    output += "<qqbot-cmd-input text='队伍加入 ' show='加入队伍 队伍码*' /> | <qqbot-cmd-input text='队伍准备' show='确认准备' />\n\n"
+    output += "<qqbot-cmd-input text='布阵 ' show='布阵 阵法-位置*' /> | <qqbot-cmd-input text='队伍离开' show='离开队伍' />\n\n"
+    output += "<qqbot-cmd-input text='道途' show='三千道途' /> | <qqbot-cmd-input text='道途开启' show='队长开启道途' />\n\n"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
+    return {"type": "markdown", "content": output}
 
 @reg_xz_func
 async def show_role_menu(uid, qz):
@@ -592,12 +624,13 @@ async def show_help(uid):
 
 async def show_update_log(uid):
     """显示当前线上版本的玩家可见更新内容。"""
-    output = "##### 📜 更新日志｜v1.21\n\n"
+    output = "##### 📜 更新日志｜v1.22\n\n"
     output += "**⚔️ 回合战斗优化**\n> 新增道心资源、五行反应与 Boss 天机破局提示；副本战斗可恢复并支持超时防御。\n\n"
     output += "**🐾 灵兽园开放**\n> 完成副本后每日可寻访灵兽；可设置出战灵兽并获得透明的战斗灵契加成。灵兽不在商城出售。\n\n"
-    output += "**👥 群队伍与阵法**\n> 同群可创建、加入、准备或离开队伍；支持锋矢、玄武、流云三套阵法与前后列配置。\n\n"
+    output += "**🧭 三千道途开放**\n> 2~4 名已准备的同群道友可挑战 6 节异步秘境；每节投票一次，超时沿用上次偏好，节点奖励与因果印记均可追溯。\n\n"
+    output += "**👥 菜单体验整理**\n> 队伍、灵兽和洞府操作已分别收拢为独立菜单；主菜单只保留系统入口，常用指令更易查找。\n\n"
     output += "**🛍️ 体验改进**\n> 群聊快捷入口统一改为参数输入按钮，按钮展示名称与实际执行指令分离，减少误操作。\n\n"
-    output += "**🔜 后续预告**\n> 三千道途异步秘境、洞府建筑与丹道研习将按功能清单继续迭代。\n\n"
+    output += "**🔜 后续预告**\n> 丹道研习、宗门协作与赛季玩法将按功能清单继续迭代。\n\n"
     output += "<qqbot-cmd-input text='主菜单' show='主菜单' /> | <qqbot-cmd-input text='玩法介绍' show='玩法介绍' />"
     return {"type": "markdown", "content": output}
 
@@ -682,6 +715,6 @@ async def show_game_guide(uid):
     output += "> `我的战力` - 查看战力详情\n\n"
 
     output += "***\n\n"
-    output += "<qqbot-cmd-input text='主菜单' show='主菜单' /> | <qqbot-cmd-input text='更新日志' show='更新日志 v1.21' />"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' /> | <qqbot-cmd-input text='更新日志' show='更新日志 v1.22' />"
 
     return {"type": "markdown", "content": output}

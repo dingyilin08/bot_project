@@ -12,6 +12,6 @@ class UpdateLogTests(unittest.TestCase):
     def test_update_log_mentions_current_version_and_features(self):
         response = asyncio.run(show_update_log(1))
         content = response["content"]
-        self.assertIn("v1.21", content)
+        self.assertIn("v1.22", content)
         self.assertIn("灵兽园", content)
         self.assertIn("队伍", content)
