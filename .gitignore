@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+config.yaml
+ssl/
+
+# Runtime files
+*.log
+logs/
+
+# Database exports may contain player data
+*.sql
+
+# IDE and assistant state
+.idea/
+.vscode/
+.claude/
+.codex/
+.trae/
+.workbuddy/
+参考项目/
+
+# Deployment artifacts
+releases/
+shared/

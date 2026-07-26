@@ -1,0 +1,35 @@
+# 问道诸天 - QQ机器人修仙游戏 依赖包
+# Web框架
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# 数据验证
+pydantic==2.5.0
+
+# 加密库
+cryptography==41.0.7
+
+# 数据库连接
+aiomysql==0.2.0
+
+# HTTP客户端
+aiohttp==3.9.1
+
+# QQ机器人SDK
+# botpy 为本地库，需手动安装
+
+# YAML配置文件解析
+PyYAML==6.0.1
+
+# 标准库（无需安装）
+# asyncio - Python标准库
+# json - Python标准库
+# hashlib - Python标准库
+# os - Python标准库
+# threading - Python标准库
+# time - Python标准库
+# re - Python标准库
+# random - Python标准库
+# functools - Python标准库
+# logging - Python标准库
+# datetime - Python标准库

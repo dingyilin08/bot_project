@@ -1,0 +1,22 @@
+[Unit]
+Description=QQ RPG webhook bot
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=qqbot
+Group=qqbot
+WorkingDirectory=/opt/qq-rpg/current
+EnvironmentFile=/etc/qq-rpg/qq-rpg.env
+ExecStart=/opt/qq-rpg/current/.venv/bin/python main.py
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

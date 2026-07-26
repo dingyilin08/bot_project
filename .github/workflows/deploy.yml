@@ -1,0 +1,46 @@
+name: Deploy production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ secrets.DEPLOY_HOST != '' && secrets.DEPLOY_USER != '' && secrets.DEPLOY_SSH_PRIVATE_KEY != '' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify Python syntax
+        run: find . -type f -name '*.py' -not -path './venv/*' -not -path './.venv/*' -not -path './参考项目/*' -print0 | xargs -0 python -m py_compile
+
+      - name: Configure deployment SSH key
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload and activate release
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          DEPLOY_PORT="${DEPLOY_PORT:-22}"
+          REMOTE_SOURCE="/opt/qq-rpg/incoming/${GITHUB_SHA}"
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$REMOTE_SOURCE'"
+          rsync -az --delete \
+            --exclude '.git/' --exclude '.github/' --exclude '.venv/' --exclude 'venv/' \
+            -e "ssh -p $DEPLOY_PORT" ./ "$DEPLOY_USER@$DEPLOY_HOST:$REMOTE_SOURCE/"
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "GITHUB_SHA='$GITHUB_SHA' bash '$REMOTE_SOURCE/deployment/deploy.sh' '$REMOTE_SOURCE' && rm -rf '$REMOTE_SOURCE'"
