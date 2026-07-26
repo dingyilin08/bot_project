@@ -9,6 +9,7 @@ SERVICE_NAME="${SERVICE_NAME:-qq-rpg.service}"
 VERSION="$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA:-manual}"
 RELEASE_DIR="$APP_ROOT/releases/$VERSION"
 CURRENT_LINK="$APP_ROOT/current"
+SHARED_VENV="$APP_ROOT/shared/venv"
 PREVIOUS_RELEASE=""
 
 if [[ ! -d "$SOURCE_DIR" ]]; then
@@ -32,9 +33,12 @@ rsync -a --delete \
     "$SOURCE_DIR/" "$RELEASE_DIR/"
 ln -sfn "$APP_ROOT/shared/logs/con_error.log" "$RELEASE_DIR/con_error.log"
 
-python3 -m venv "$RELEASE_DIR/.venv"
-"$RELEASE_DIR/.venv/bin/pip" install --disable-pip-version-check -r "$RELEASE_DIR/requirements.txt"
-"$RELEASE_DIR/.venv/bin/python" -m compileall -q "$RELEASE_DIR"
+if [[ ! -x "$SHARED_VENV/bin/python" ]]; then
+    python3 -m venv "$SHARED_VENV"
+fi
+"$SHARED_VENV/bin/pip" install --disable-pip-version-check --no-input --timeout 30 --retries 2 -r "$RELEASE_DIR/requirements.txt"
+ln -s "$SHARED_VENV" "$RELEASE_DIR/.venv"
+"$SHARED_VENV/bin/python" -m compileall -q "$RELEASE_DIR"
 
 ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
 
