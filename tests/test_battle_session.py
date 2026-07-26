@@ -95,13 +95,15 @@ class BattleSessionTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result.round_no, 2)
 
-    async def test_timeout_uses_auto_action(self):
+    async def test_timeout_uses_defend_action(self):
         result = await self.service.resolve_round(
             battle_id=self.session.battle_id,
             force=True,
         )
         self.assertEqual(result.round_no, 1)
         self.assertFalse(result.idempotent)
+        saved = await self.repository.get_session(self.session.battle_id)
+        self.assertTrue(any(buff["buff_type"] == "defense_up" for buff in saved.snapshot["player"]["buffs"]))
 
     async def test_finished_battle_cannot_accept_new_action(self):
         manager = CombatManager(

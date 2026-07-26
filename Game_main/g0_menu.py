@@ -39,7 +39,7 @@ MENU_CONFIG = {
         "name": "副本挑战",
         "icon": "⚔️",
         "description": "挑战副本、战斗记录、查看怪物",
-        "commands": ["副本列表", "挑战副本", "战斗记录", "查看怪物"]
+        "commands": ["副本列表", "挑战副本", "查看怪物", "战斗状态", "战斗记录"]
     },
     "skill": {
         "name": "技能系统",
@@ -426,6 +426,8 @@ async def show_dungeon_menu(uid, qz):
     output += "> 点击后发送可查看当前副本中可挑战的怪物。\n\n"
     output += "<qqbot-cmd-input text='挑战怪物 ' show='挑战怪物 怪物编号' />\n"
     output += "> 点击后输入怪物编号，可指定挑战此怪物。如：挑战怪物 1\n\n"
+    output += "<qqbot-cmd-enter text='战斗状态' />\n"
+    output += "> 查看进行中的回合战斗；每回合可选择普攻、防御、调息、御器或已装备技能。\n\n"
     output += "<qqbot-cmd-enter text='放弃副本' />\n"
     output += "> 三十六计跑为上策，保命逃跑，放弃挑战。\n\n"
 

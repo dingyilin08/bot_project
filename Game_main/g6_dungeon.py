@@ -1238,7 +1238,7 @@ async def show_monster_list(uid, qz):
 
 # 挑战怪物
 @reg_xz_func
-async def fight_monster(uid, qz, monster_index):
+async def fight_monster(uid, qz, monster_index, combat_manager=None):
     try:
         monster_index = int(monster_index)
     except (ValueError, TypeError):
@@ -1498,9 +1498,34 @@ async def fight_monster(uid, qz, monster_index):
     monster_attr['entity_type'] = target_monster.get('type', 'normal')  # 'normal' 或 'boss'
     monster_entity = CombatEntity(target_monster['name'], monster_attr, monster_skills)
 
-    # 开始战斗
-    combat_manager = CombatManager(player_entity, monster_entity, max_rounds=50)
-    winner, combat_logs = combat_manager.start_combat()
+    # P0：首次挑战只创建可恢复的回合会话；战斗结束后再进入下方既有奖励结算。
+    if combat_manager is None:
+        from Game_main.g11_battle import get_battle_service, render_battle_panel
+
+        service = get_battle_service()
+        active_session = await service.get_active_battle(uid)
+        if active_session:
+            return render_battle_panel(active_session, "你已有进行中的战斗，请先完成该回合。")
+        combat_manager = CombatManager(player_entity, monster_entity, max_rounds=50)
+        session = await service.create_battle(
+            uid=uid,
+            manager=combat_manager,
+            battle_type="SOLO_DUNGEON",
+            metadata={
+                "participants": [uid],
+                "dungeon_id": dungeon_id,
+                "monster_index": monster_index,
+                "monster_name": target_monster["name"],
+                "monster_type": target_monster.get("type", "normal"),
+            },
+        )
+        return render_battle_panel(session, f"遭遇 {target_monster['name']}，请选择本回合行动。")
+
+    # 会话已结束，使用快照内的实体与战报走原有结算，确保奖励与历史记录不回归。
+    player_entity = combat_manager.player
+    monster_entity = combat_manager.enemy
+    winner = combat_manager.winner
+    combat_logs = combat_manager.combat_log
 
     # 计算战斗后的血量比例
     final_hp_ratio = player_entity.hp / player_entity.max_hp
