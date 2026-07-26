@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from Tool.combat_system import CombatEntity, CombatManager, Skill
 
@@ -74,8 +75,25 @@ class P0CombatRulesTests(unittest.TestCase):
     def test_tianji_state_survives_snapshot(self):
         manager = CombatManager(entity("Player"), entity("Boss", hp=100, entity_type="boss"))
         manager.boss_tianji = {"triggered": ["first"], "intent": {"name": "Guard", "broken": False}}
+        manager.dao_heart = {"value": 5, "cap": 5, "last_element": "WATER", "stored": True}
         restored = CombatManager.from_snapshot(manager.to_snapshot())
         self.assertEqual(restored.boss_tianji, manager.boss_tianji)
+        self.assertEqual(restored.dao_heart, manager.dao_heart)
+
+    def test_same_element_skills_accumulate_and_spend_dao_heart(self):
+        water = attack_skill(1, "Water Art", "WATER")
+        manager = CombatManager(
+            entity("Player", skills=[water]),
+            entity("Target", hp=1000, attack=1, speed=1, entity_type="normal"),
+        )
+        with patch("Tool.combat_system.random.random", return_value=0.5):
+            for _ in range(3):
+                manager.resolve_round({"action_type": "SKILL", "skill_id": 1})
+
+        self.assertEqual(manager.dao_heart["value"], 3)
+        manager.resolve_round({"action_type": "DAO_HEART_BURST"})
+        self.assertEqual(manager.dao_heart["value"], 0)
+        self.assertTrue(any(log["type"] == "dao_heart" for log in manager.combat_log))
 
 
 if __name__ == "__main__":

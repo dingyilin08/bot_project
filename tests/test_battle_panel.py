@@ -18,6 +18,7 @@ class BattlePanelTests(unittest.TestCase):
     def test_action_parser_supports_p0_actions_and_skills(self):
         self.assertEqual(_parse_action("调息"), ("MEDITATE", None))
         self.assertEqual(_parse_action("御器"), ("ARTIFACT", None))
+        self.assertEqual(_parse_action("道心爆发"), ("DAO_HEART_BURST", None))
         self.assertEqual(_parse_action("技能-12"), ("SKILL", 12))
 
     def test_panel_exposes_commands_and_boss_counter(self):
@@ -27,11 +28,13 @@ class BattlePanelTests(unittest.TestCase):
         manager.boss_tianji["intent"] = {
             "name": "Guard", "counter_name": "Metal", "counter_element": "METAL", "broken": False,
         }
+        manager.dao_heart["value"] = 3
         session = BattleSession.new(owner_uid=1, battle_type="SOLO_DUNGEON", snapshot=manager.to_snapshot())
 
         panel = render_battle_panel(session)["content"]
         self.assertIn("战斗行动 调息", panel)
         self.assertIn("战斗行动 技能-12", panel)
+        self.assertIn("战斗行动 道心爆发", panel)
         self.assertIn("Boss 天机", panel)
 
 

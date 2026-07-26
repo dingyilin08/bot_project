@@ -16,6 +16,9 @@ ACTION_ALIASES = {
     "防御": ("DEFEND", None),
     "调息": ("MEDITATE", None),
     "御器": ("ARTIFACT", None),
+    "道心爆发": ("DAO_HEART_BURST", None),
+    "道心延势": ("DAO_HEART_EXTEND", None),
+    "留存道心": ("DAO_HEART_STORE", None),
 }
 
 
@@ -44,6 +47,8 @@ def render_battle_panel(session, notice="", events=None):
     output += f"**第 {session.round_no + 1} 回合** | 剩余决策时间：{_remaining_seconds(session)} 秒\n\n"
     output += f"**我方** {player.name}\n> HP：{max(0, player.hp)}/{player.max_hp} | 法力：{player.mana}/{player.max_mana}\n"
     output += f"> 状态：{player.get_status_summary() or '无'}\n\n"
+    dao_heart = manager.dao_heart
+    output += f"> 道心：{dao_heart['value']}/{dao_heart['cap']}（{dao_heart['last_element'] or '未定'}）\n\n"
     output += f"**敌方** {enemy.name}\n> HP：{max(0, enemy.hp)}/{enemy.max_hp}\n"
     output += f"> 状态：{enemy.get_status_summary() or '无'}\n\n"
 
@@ -59,6 +64,10 @@ def render_battle_panel(session, notice="", events=None):
     output += "***\n\n**选择行动**\n"
     output += "<qqbot-cmd-enter text='战斗行动 普攻' /> | <qqbot-cmd-enter text='战斗行动 防御' />\n"
     output += "<qqbot-cmd-enter text='战斗行动 调息' /> | <qqbot-cmd-enter text='战斗行动 御器' />\n"
+    if dao_heart["value"] >= 3:
+        output += "<qqbot-cmd-enter text='战斗行动 道心爆发' /> | <qqbot-cmd-enter text='战斗行动 道心延势' />\n"
+    if dao_heart["value"] >= dao_heart["cap"]:
+        output += "<qqbot-cmd-enter text='战斗行动 留存道心' />\n"
     for skill in player.skills:
         cooldown = player.cooldowns.get(skill.id, 0)
         suffix = f"（冷却{cooldown}）" if cooldown else ""

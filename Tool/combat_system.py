@@ -778,6 +778,8 @@ class CombatManager:
         self.combat_ended = False
         # 天机为 Boss 的可读机制预告。每个阶段只触发一次，完整写入快照。
         self.boss_tianji = {"triggered": [], "intent": None}
+        # 道心由玩家连续施展同系技能积累，作为手动战斗的短回合资源。
+        self.dao_heart = {"value": 0, "cap": 5, "last_element": "", "stored": False}
 
     def initialize(self) -> None:
         """初始化战斗顺序；可单独调用以创建可持久化的待行动战斗。"""
@@ -801,6 +803,14 @@ class CombatManager:
             cost = max(1, int(self.player.max_mana * 0.2))
             if self.player.mana < cost:
                 return False, f'法力不足，御器至少需要{cost}点法力'
+            return True, ''
+        if action_type in ('DAO_HEART_BURST', 'DAO_HEART_EXTEND'):
+            if self.dao_heart['value'] < 3:
+                return False, '道心不足，需要连续同系技能积累至3层'
+            return True, ''
+        if action_type == 'DAO_HEART_STORE':
+            if self.dao_heart['value'] < self.dao_heart['cap']:
+                return False, '道心不足，需要积累至5层才能留存'
             return True, ''
         if action_type in ('NORMAL_ATTACK', 'DEFEND', 'MEDITATE', 'AUTO'):
             return True, ''
@@ -884,6 +894,24 @@ class CombatManager:
             self.player.add_buff(Buff('defense_up', 30, 2, '御器', '御器护体'))
             self._log('action', f"✨ {self.player.name} 御器护体，消耗{cost}法力并提升30%防御！")
             return
+        if action_type == 'DAO_HEART_BURST':
+            damage = max(1, int(self.enemy.max_hp * 0.08))
+            self.enemy.hp -= damage
+            self.dao_heart['value'] -= 3
+            self.dao_heart['last_element'] = ''
+            self._log('dao_heart', f"💥 {self.player.name} 引爆3层道心，对{self.enemy.name}造成{damage}点道心伤害！")
+            return
+        if action_type == 'DAO_HEART_EXTEND':
+            for buff in self.player.buffs:
+                buff.duration += 1
+            self.dao_heart['value'] -= 3
+            self.dao_heart['last_element'] = ''
+            self._log('dao_heart', f"🌀 {self.player.name} 以3层道心延势，身上增益延长1回合！")
+            return
+        if action_type == 'DAO_HEART_STORE':
+            self.dao_heart['stored'] = True
+            self._log('dao_heart', f"🔮 {self.player.name} 留存5层道心，下一次五行技能将获得额外威能！")
+            return
         if action_type == 'NORMAL_ATTACK':
             self._execute_normal_attack(self.player, self.enemy)
             return
@@ -894,6 +922,7 @@ class CombatManager:
         result = skill.execute(self.player, self.enemy)
         self._log_skill_result(self.player, self.enemy, skill, result)
         self._apply_elemental_effect(self.player, self.enemy, skill, result)
+        self._gain_dao_heart(skill, result)
         self.skill_history.append({
             'round': self.round,
             'actor': self.player.name,
@@ -1200,6 +1229,12 @@ class CombatManager:
         if not element:
             return
 
+        if actor is self.player and self.dao_heart.get('stored'):
+            bonus = max(1, int(target.max_hp * 0.05))
+            target.hp -= bonus
+            self.dao_heart = {"value": 0, "cap": 5, "last_element": "", "stored": False}
+            self._log('dao_heart', f"✨ 留存道心共鸣{element}行，{target.name}额外受到{bonus}点伤害！")
+
         intent = self.boss_tianji.get('intent')
         if target is self.enemy and intent and not intent.get('broken') and element == intent['counter_element']:
             intent['broken'] = True
@@ -1231,6 +1266,27 @@ class CombatManager:
         elif element == 'EARTH':
             actor.add_buff(Buff('defense_up', 12, 2, skill.name, '地脉护体'))
             self._log('element', f"⛰️ 土行护体！{actor.name} 防御提升12%。")
+
+    def _gain_dao_heart(self, skill: Skill, result: Dict) -> None:
+        """玩家连续使用同系且命中的技能，才会积累道心。"""
+        if result.get('is_dodge'):
+            return
+        element = self._infer_element(skill)
+        if not element:
+            self.dao_heart['value'] = 0
+            self.dao_heart['last_element'] = ''
+            return
+        if self.dao_heart.get('last_element') == element:
+            self.dao_heart['value'] = min(self.dao_heart['cap'], self.dao_heart['value'] + 1)
+        else:
+            self.dao_heart['value'] = 1
+            self.dao_heart['last_element'] = element
+        value = self.dao_heart['value']
+        self._log('dao_heart', f"☯️ {element}行道心积累至{value}/{self.dao_heart['cap']}层。")
+        if value == 3:
+            self._log('dao_heart', '✨ 道心可用：下回合可选择「道心爆发」或「道心延势」。')
+        elif value == self.dao_heart['cap']:
+            self._log('dao_heart', '🔮 道心圆满：可选择「留存道心」强化下一次五行技能。')
 
     def _prepare_boss_tianji(self) -> None:
         """Boss 在血量跨越 75%/40% 时预告一次，玩家可在该回合破局。"""
@@ -1468,6 +1524,7 @@ class CombatManager:
             'total_skills_used': len(self.skill_history),
             'skill_history': self.skill_history,
             'boss_tianji': copy.deepcopy(self.boss_tianji),
+            'dao_heart': copy.deepcopy(self.dao_heart),
         }
 
     def to_snapshot(self) -> Dict:
@@ -1494,6 +1551,7 @@ class CombatManager:
             'initialized': self.initialized,
             'combat_ended': self.combat_ended,
             'boss_tianji': copy.deepcopy(self.boss_tianji),
+            'dao_heart': copy.deepcopy(self.dao_heart),
         }
 
     @classmethod
@@ -1509,6 +1567,7 @@ class CombatManager:
         manager.initialized = snapshot.get('initialized', False)
         manager.combat_ended = snapshot.get('combat_ended', False)
         manager.boss_tianji = copy.deepcopy(snapshot.get('boss_tianji', manager.boss_tianji))
+        manager.dao_heart = copy.deepcopy(snapshot.get('dao_heart', manager.dao_heart))
         first_side = snapshot.get('first_side')
         if first_side == 'player':
             manager.first, manager.second = manager.player, manager.enemy
