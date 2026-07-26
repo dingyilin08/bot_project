@@ -11,7 +11,6 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ secrets.DEPLOY_HOST != '' && secrets.DEPLOY_USER != '' && secrets.DEPLOY_SSH_PRIVATE_KEY != '' }}
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -19,6 +18,16 @@ jobs:
 
       - name: Verify Python syntax
         run: find . -type f -name '*.py' -not -path './venv/*' -not -path './.venv/*' -not -path './参考项目/*' -print0 | xargs -0 python -m py_compile
+
+      - name: Verify deployment configuration
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+        run: |
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          test -n "$DEPLOY_SSH_PRIVATE_KEY"
 
       - name: Configure deployment SSH key
         env:
