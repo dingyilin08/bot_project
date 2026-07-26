@@ -36,7 +36,7 @@ ln -sfn "$APP_ROOT/shared/logs/con_error.log" "$RELEASE_DIR/con_error.log"
 if [[ ! -x "$SHARED_VENV/bin/python" ]]; then
     python3 -m venv "$SHARED_VENV"
 fi
-"$SHARED_VENV/bin/pip" install --disable-pip-version-check --no-input --timeout 30 --retries 2 -r "$RELEASE_DIR/requirements.txt"
+"$SHARED_VENV/bin/python" -m pip install --disable-pip-version-check --no-input --timeout 30 --retries 2 -r "$RELEASE_DIR/requirements.txt"
 ln -s "$SHARED_VENV" "$RELEASE_DIR/.venv"
 "$SHARED_VENV/bin/python" -m compileall -q "$RELEASE_DIR"
 
