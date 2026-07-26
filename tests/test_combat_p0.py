@@ -35,11 +35,12 @@ class P0CombatRulesTests(unittest.TestCase):
             entity("Target", hp=1000, speed=1, entity_type="normal"),
         )
 
-        manager.resolve_round({"action_type": "SKILL", "skill_id": 1})
-        self.assertTrue(manager.enemy.has_buff("wet"))
-        hp_after_water = manager.enemy.hp
-
-        manager.resolve_round({"action_type": "SKILL", "skill_id": 2})
+        # 固定命中随机数：本用例只验证五行反应，不应受闪避概率影响。
+        with patch("Tool.combat_system.random.random", return_value=0.5):
+            manager.resolve_round({"action_type": "SKILL", "skill_id": 1})
+            self.assertTrue(manager.enemy.has_buff("wet"))
+            hp_after_water = manager.enemy.hp
+            manager.resolve_round({"action_type": "SKILL", "skill_id": 2})
         self.assertFalse(manager.enemy.has_buff("wet"))
         self.assertLess(manager.enemy.hp, hp_after_water)
         self.assertTrue(any(log["type"] == "reaction" for log in manager.combat_log))

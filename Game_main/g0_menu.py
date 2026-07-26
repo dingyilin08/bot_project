@@ -213,7 +213,9 @@ async def show_main_menu(uid, qz):
 
     output += "<qqbot-cmd-input text='商城' show='商城' /> | <qqbot-cmd-input text='物品背包' show='物品背包' />\n\n"
     output += "<qqbot-cmd-input text='灵兽' show='灵兽园' /> | <qqbot-cmd-input text='灵兽寻访' show='灵兽寻访' />\n\n"
+    output += "<qqbot-cmd-input text='洞府' show='洞府' /> | <qqbot-cmd-input text='洞府收取 稳健' show='洞府收取' />\n\n"
     output += "<qqbot-cmd-input text='队伍创建' show='群内创建队伍' /> | <qqbot-cmd-input text='队伍' show='查看队伍' />\n\n"
+    output += "<qqbot-cmd-input text='更新日志' show='更新日志 v1.21' />\n\n"
     output += "<qqbot-cmd-input text='战力菜单' show='战力菜单' /> | <qqbot-cmd-input text='玩法介绍' show='玩法介绍' />\n\n"
 
     return {"type": "markdown", "content": output}
@@ -588,6 +590,18 @@ async def show_help(uid):
     return await show_game_guide(uid)
 
 
+async def show_update_log(uid):
+    """显示当前线上版本的玩家可见更新内容。"""
+    output = "##### 📜 更新日志｜v1.21\n\n"
+    output += "**⚔️ 回合战斗优化**\n> 新增道心资源、五行反应与 Boss 天机破局提示；副本战斗可恢复并支持超时防御。\n\n"
+    output += "**🐾 灵兽园开放**\n> 完成副本后每日可寻访灵兽；可设置出战灵兽并获得透明的战斗灵契加成。灵兽不在商城出售。\n\n"
+    output += "**👥 群队伍与阵法**\n> 同群可创建、加入、准备或离开队伍；支持锋矢、玄武、流云三套阵法与前后列配置。\n\n"
+    output += "**🛍️ 体验改进**\n> 群聊快捷入口统一改为参数输入按钮，按钮展示名称与实际执行指令分离，减少误操作。\n\n"
+    output += "**🔜 后续预告**\n> 三千道途异步秘境、洞府建筑与丹道研习将按功能清单继续迭代。\n\n"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' /> | <qqbot-cmd-input text='玩法介绍' show='玩法介绍' />"
+    return {"type": "markdown", "content": output}
+
+
 async def show_game_guide(uid):
     """
     显示游戏玩法介绍
@@ -668,6 +682,6 @@ async def show_game_guide(uid):
     output += "> `我的战力` - 查看战力详情\n\n"
 
     output += "***\n\n"
-    output += "<qqbot-cmd-input text='主菜单' show='主菜单' /> | <qqbot-cmd-input text='帮助' show='帮助' />"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' /> | <qqbot-cmd-input text='更新日志' show='更新日志 v1.21' />"
 
     return {"type": "markdown", "content": output}

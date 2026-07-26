@@ -20,10 +20,11 @@ from Game_main.g10_shop import *         # 灵石商城
 from Game_main.g11_battle import *       # 回合战斗
 from Game_main.g12_spirit_beast import * # P1 灵兽
 from Game_main.g13_party import *        # P1 队伍与阵法
+from Game_main.g14_estate import *       # P1 洞府生产中枢
 from Game_main.g0_menu import *          # 菜单系统
 
-wuhouzhui = '收回|当前角色|参悟|参悟状态|领取参悟经验|悟道进阶|查看本源|本源升级|本源技能|战斗记录|战斗状态|查看怪物|怪物列表|放弃副本|药园|查看药田|种子背包|一键采摘|查看丹炉|一键收丹|添火次数|商城|菜单|MENU|主菜单|帮助|HELP|角色菜单|参悟菜单|装备菜单|本源菜单|技能菜单|副本菜单|药园菜单|炼丹菜单|装备菜单|战力菜单|玩法介绍|当前装备|我的战力|战力|新手攻略|游戏指南|灵兽|灵兽图鉴|灵兽寻访|队伍|队伍创建|队伍准备|队伍离开'
-youhouzhui = '注册游戏|选择角色|角色介绍|角色属性|出战|角色背包|物品背包|物品信息|副本信息|副本列表|挑战副本|挑战怪物|战斗行动|激活技能|卷轴信息|技能信息|技能融合|技能装备|技能卸下|穿戴装备|卸下装备|强化装备|装备详情|出售装备|技能背包|装备背包|战力排行|排行榜|商城|购买商品|使用体力药|种子商店|购买种子|播种|一键播种|采摘|解锁药田|施肥|出售药材|丹方列表|炼丹|收丹|服丹|解锁丹炉|加速炼丹|添火|关闭图片模式|开启图片模式|灵兽出战|队伍加入|布阵'
+wuhouzhui = '收回|当前角色|参悟|参悟状态|领取参悟经验|悟道进阶|查看本源|本源升级|本源技能|战斗记录|战斗状态|查看怪物|怪物列表|放弃副本|药园|查看药田|种子背包|一键采摘|查看丹炉|一键收丹|添火次数|商城|菜单|MENU|主菜单|帮助|HELP|角色菜单|参悟菜单|装备菜单|本源菜单|技能菜单|副本菜单|药园菜单|炼丹菜单|装备菜单|战力菜单|玩法介绍|当前装备|我的战力|战力|新手攻略|游戏指南|灵兽|灵兽图鉴|灵兽寻访|队伍|队伍创建|队伍准备|队伍离开|更新日志|洞府'
+youhouzhui = '注册游戏|选择角色|角色介绍|角色属性|出战|角色背包|物品背包|物品信息|副本信息|副本列表|挑战副本|挑战怪物|战斗行动|激活技能|卷轴信息|技能信息|技能融合|技能装备|技能卸下|穿戴装备|卸下装备|强化装备|装备详情|出售装备|技能背包|装备背包|战力排行|排行榜|商城|购买商品|使用体力药|种子商店|购买种子|播种|一键播种|采摘|解锁药田|施肥|出售药材|丹方列表|炼丹|收丹|服丹|解锁丹炉|加速炼丹|添火|关闭图片模式|开启图片模式|灵兽出战|队伍加入|布阵|洞府升级|洞府收取'
 
 user_last_call_time = {}
 
@@ -239,6 +240,18 @@ async def content(con_arr0, con_arr1, openid, group_openid=None):
     elif con_arr0 == '队伍离开':
         return await party_leave(uid, group_openid)
 
+    # ==================== P1 洞府生产中枢命令 ==================== #
+    elif con_arr0 == '洞府':
+        return await estate_home(uid)
+    elif con_arr0 == '洞府升级':
+        if con_arr1 == "":
+            return "指令错误，正确指令：洞府升级 建筑名"
+        return await estate_upgrade(uid, con_arr1)
+    elif con_arr0 == '洞府收取':
+        if con_arr1 == "":
+            return "指令错误，正确指令：洞府收取 稳健/冒险"
+        return await estate_claim(uid, con_arr1)
+
     # ==================== 技能系统命令 ==================== #
 
     elif con_arr0 == '技能背包':
@@ -406,6 +419,8 @@ async def content(con_arr0, con_arr1, openid, group_openid=None):
         return await show_help(uid)
     elif con_arr0 == '玩法介绍' or con_arr0 == '新手攻略' or con_arr0 == '游戏指南':
         return await show_game_guide(uid)
+    elif con_arr0 == '更新日志':
+        return await show_update_log(uid)
     elif con_arr0 == '角色菜单':
         return await show_role_menu(uid)
     elif con_arr0 == '参悟菜单':
