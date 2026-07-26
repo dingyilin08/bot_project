@@ -1,5 +1,6 @@
 import asyncio
 import unittest
+from unittest.mock import patch
 
 from Game_domain.battle_models import (
     ACTION_NORMAL_ATTACK,
@@ -109,12 +110,13 @@ class BattleSessionTests(unittest.IsolatedAsyncioTestCase):
             max_rounds=2,
         )
         session = await self.service.create_battle(uid=10002, manager=manager)
-        result = await self.service.submit_action(
-            battle_id=session.battle_id,
-            uid=10002,
-            action_type=ACTION_NORMAL_ATTACK,
-            action_id="finish-1",
-        )
+        with patch("Tool.combat_system.random.random", return_value=0.0):
+            result = await self.service.submit_action(
+                battle_id=session.battle_id,
+                uid=10002,
+                action_type=ACTION_NORMAL_ATTACK,
+                action_id="finish-1",
+            )
         self.assertEqual(result.state, STATE_FINISHED)
         with self.assertRaises(BattleError) as context:
             await self.service.submit_action(
@@ -128,4 +130,3 @@ class BattleSessionTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

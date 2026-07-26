@@ -7,6 +7,7 @@ from Tool.combat_system import CombatManager
 
 from .battle_models import (
     ACTION_AUTO,
+    ACTION_DEFEND,
     BattleActionRecord,
     BattleError,
     BattleEvent,
@@ -155,7 +156,8 @@ class BattleSessionService:
         if owner_action:
             player_action = owner_action.to_action_dict()
         else:
-            player_action = {"action_type": ACTION_AUTO}
+            # 超时后采用防御，避免离线玩家被系统强制进攻而意外消耗资源。
+            player_action = {"action_type": ACTION_DEFEND}
 
         old_log_count = len(session.snapshot.get("combat_log", []))
         winner, round_logs = manager.resolve_round(player_action)

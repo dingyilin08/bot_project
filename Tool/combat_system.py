@@ -53,6 +53,8 @@ BUFF_TYPE_CN = {
     "god_mode": "神模式",
     "death_sentence": "死亡宣告",
     "burning": "燃烧",
+    "wet": "潮湿",
+    "rooted": "缠绕",
     "poison": "中毒",
     "HP_down": "持续伤害",
     "HP_up": "持续回复",
@@ -136,6 +138,8 @@ class BuffType(Enum):
     CRIT_DMG_UP = "crit_dmg_up"
     DODGE_UP = "dodge_up"
     DODGE_DOWN = "dodge_down"
+    WET = "wet"
+    ROOTED = "rooted"
     HIT_UP = "hit_up"
     HIT_DOWN = "hit_down"
     PIERCE_UP = "pierce_up"
@@ -259,6 +263,7 @@ class Skill:
     buff_target: int = 2  # 1:我方, 2:敌方
     buff_name: str = ""  # BUFF显示名称（从data_skill.buff_name获取）
     description: str = ""
+    element: str = ""
 
     def can_use(self, entity: 'CombatEntity') -> Tuple[bool, str]:
         """检查是否可以使用技能"""
@@ -471,6 +476,7 @@ class Skill:
             'buff_target': self.buff_target,
             'buff_name': self.buff_name,
             'description': self.description,
+            'element': self.element,
         }
 
     @classmethod
@@ -491,6 +497,7 @@ class Skill:
             buff_target=data.get('buff_target', 2),
             buff_name=data.get('buff_name', ''),
             description=data.get('description', ''),
+            element=data.get('element', ''),
         )
 
 
@@ -681,6 +688,10 @@ class CombatEntity:
             status.append('[沉默]')
         if self.has_buff('burning'):
             status.append('[燃烧]')
+        if self.has_buff('wet'):
+            status.append('[潮湿]')
+        if self.has_buff('rooted'):
+            status.append('[缠绕]')
         if self.has_buff('poison'):
             status.append('[中毒]')
         if self.has_buff('invincible'):
@@ -765,6 +776,8 @@ class CombatManager:
         self.second: Optional[CombatEntity] = None
         self.initialized = False
         self.combat_ended = False
+        # 天机为 Boss 的可读机制预告。每个阶段只触发一次，完整写入快照。
+        self.boss_tianji = {"triggered": [], "intent": None}
 
     def initialize(self) -> None:
         """初始化战斗顺序；可单独调用以创建可持久化的待行动战斗。"""
@@ -784,7 +797,12 @@ class CombatManager:
     def validate_player_action(self, action: Dict) -> Tuple[bool, str]:
         """验证手动行动，不改变战斗状态。"""
         action_type = str(action.get('action_type', '')).upper()
-        if action_type in ('NORMAL_ATTACK', 'DEFEND', 'AUTO'):
+        if action_type == 'ARTIFACT':
+            cost = max(1, int(self.player.max_mana * 0.2))
+            if self.player.mana < cost:
+                return False, f'法力不足，御器至少需要{cost}点法力'
+            return True, ''
+        if action_type in ('NORMAL_ATTACK', 'DEFEND', 'MEDITATE', 'AUTO'):
             return True, ''
         if action_type != 'SKILL':
             return False, '不支持的行动类型'
@@ -816,6 +834,7 @@ class CombatManager:
         before = len(self.combat_log)
         self.round += 1
         self._log("round", f"═══ 第 {self.round} 回合 ═══")
+        self._prepare_boss_tianji()
 
         if self.first == self.player:
             self._execute_player_action(player_action)
@@ -827,6 +846,7 @@ class CombatManager:
                 self._execute_player_action(player_action)
 
         self._end_of_round()
+        self._resolve_boss_tianji()
         self._check_combat_end()
         if not self.winner and self.round >= self.max_rounds:
             self._log('draw', '⚖️ 达到最大回合数，战斗平局！')
@@ -846,7 +866,23 @@ class CombatManager:
 
         action_type = str(action.get('action_type', '')).upper()
         if action_type == 'DEFEND':
-            self._log('action', f"🛡️ {self.player.name} 采取防御姿态！")
+            self.player.add_buff(Buff('defense_up', 45, 2, '防御', '防御姿态'))
+            self._log('action', f"🛡️ {self.player.name} 采取防御姿态，防御提升45%！")
+            return
+        if action_type == 'MEDITATE':
+            recover = max(1, int(self.player.max_mana * 0.3))
+            before_mana = self.player.mana
+            self.player.mana = min(self.player.max_mana, self.player.mana + recover)
+            self._log('action', f"🧘 {self.player.name} 调息回灵，法力 {before_mana} → {self.player.mana}！")
+            return
+        if action_type == 'ARTIFACT':
+            cost = max(1, int(self.player.max_mana * 0.2))
+            if self.player.mana < cost:
+                self._log('action', f"❌ {self.player.name} 法力不足，无法御器护体！")
+                return
+            self.player.mana -= cost
+            self.player.add_buff(Buff('defense_up', 30, 2, '御器', '御器护体'))
+            self._log('action', f"✨ {self.player.name} 御器护体，消耗{cost}法力并提升30%防御！")
             return
         if action_type == 'NORMAL_ATTACK':
             self._execute_normal_attack(self.player, self.enemy)
@@ -857,6 +893,7 @@ class CombatManager:
         self._log('action', f"🎯 {self.player.name} 使用技能：{skill.name}")
         result = skill.execute(self.player, self.enemy)
         self._log_skill_result(self.player, self.enemy, skill, result)
+        self._apply_elemental_effect(self.player, self.enemy, skill, result)
         self.skill_history.append({
             'round': self.round,
             'actor': self.player.name,
@@ -919,6 +956,7 @@ class CombatManager:
             self._log("action", f"🎯 {actor.name} 使用技能：{skill.name}")
             result = skill.execute(actor, target)
             self._log_skill_result(actor, target, skill, result)
+            self._apply_elemental_effect(actor, target, skill, result)
 
             # 记录技能使用历史
             self.skill_history.append({
@@ -1136,6 +1174,98 @@ class CombatManager:
 
         return random.choice(available) if available else None
 
+    @staticmethod
+    def _infer_element(skill: Skill) -> str:
+        """由既有技能名推断五行，首发不要求一次性迁移全部技能数据。"""
+        if skill.element:
+            return str(skill.element).upper()
+        text = f"{skill.name}{skill.buff_type or ''}"
+        if any(word in text for word in ('冰', '水', '雨', '寒', '玄冰')):
+            return 'WATER'
+        if any(word in text for word in ('火', '炎', '焰', '燃烧')):
+            return 'FIRE'
+        if any(word in text for word in ('木', '草', '藤', '青莲', '缠绕')):
+            return 'WOOD'
+        if any(word in text for word in ('金', '剑', '雷', '庚')):
+            return 'METAL'
+        if any(word in text for word in ('土', '石', '山', '地脉')):
+            return 'EARTH'
+        return ''
+
+    def _apply_elemental_effect(self, actor: CombatEntity, target: CombatEntity, skill: Skill, result: Dict) -> None:
+        """处理首发五行状态。每次技能最多触发一种反应，闪避不附加状态。"""
+        if result.get('is_dodge') or skill.buff_target == 1 or target is actor:
+            return
+        element = self._infer_element(skill)
+        if not element:
+            return
+
+        intent = self.boss_tianji.get('intent')
+        if target is self.enemy and intent and not intent.get('broken') and element == intent['counter_element']:
+            intent['broken'] = True
+            self._log('boss_break', f"⚡ {actor.name} 以{intent['counter_name']}之法看破天机「{intent['name']}」！")
+
+        if element == 'WATER':
+            target.add_buff(Buff('wet', 0, 2, skill.name, '潮湿'))
+            self._log('element', f"💧 {target.name} 被水行之力浸染，陷入潮湿！")
+        elif element == 'WOOD':
+            target.add_buff(Buff('rooted', 0, 2, skill.name, '缠绕'))
+            target.add_buff(Buff('slow', 15, 2, skill.name, '缠绕减速'))
+            self._log('element', f"🌿 {target.name} 被木行缠绕，速度降低！")
+        elif element == 'FIRE':
+            if target.has_buff('wet'):
+                target.remove_buff('wet')
+                bonus = max(1, int(target.max_hp * 0.04))
+                target.hp -= bonus
+                self._log('reaction', f"♨️ 水火相激触发「蒸腾」！{target.name} 额外受到{bonus}点伤害。")
+            elif target.has_buff('rooted'):
+                target.remove_buff('rooted')
+                target.add_buff(Buff('burning', 3, 2, skill.name, '焚林'))
+                self._log('reaction', f"🔥 木火相燃触发「焚林」！{target.name} 获得强化燃烧。")
+            else:
+                target.add_buff(Buff('burning', 2, 2, skill.name, '燃烧'))
+                self._log('element', f"🔥 {target.name} 被火行点燃！")
+        elif element == 'METAL':
+            target.add_buff(Buff('defense_down', 15, 2, skill.name, '破甲'))
+            self._log('element', f"⚔️ 金行破甲！{target.name} 防御降低15%。")
+        elif element == 'EARTH':
+            actor.add_buff(Buff('defense_up', 12, 2, skill.name, '地脉护体'))
+            self._log('element', f"⛰️ 土行护体！{actor.name} 防御提升12%。")
+
+    def _prepare_boss_tianji(self) -> None:
+        """Boss 在血量跨越 75%/40% 时预告一次，玩家可在该回合破局。"""
+        if self.enemy.entity_type != 'boss' or self.boss_tianji.get('intent'):
+            return
+        hp_ratio = self.enemy.hp / max(1, self.enemy.max_hp)
+        triggered = self.boss_tianji['triggered']
+        if hp_ratio <= 0.40 and 'second' not in triggered:
+            intent = {
+                'stage': 'second', 'name': '天机·蓄力', 'counter_element': 'WATER',
+                'counter_name': '水行', 'broken': False, 'effect': 'attack_up', 'value': 30,
+            }
+        elif hp_ratio <= 0.75 and 'first' not in triggered:
+            intent = {
+                'stage': 'first', 'name': '天机·护体', 'counter_element': 'METAL',
+                'counter_name': '金行', 'broken': False, 'effect': 'defense_up', 'value': 35,
+            }
+        else:
+            return
+        triggered.append(intent['stage'])
+        self.boss_tianji['intent'] = intent
+        self._log('boss_telegraph', f"☯️ {self.enemy.name} 显化「{intent['name']}」：本回合使用{intent['counter_name']}技能可破局！")
+
+    def _resolve_boss_tianji(self) -> None:
+        intent = self.boss_tianji.get('intent')
+        if not intent:
+            return
+        if intent.get('broken'):
+            self._log('boss_break', f"✅ 「{intent['name']}」已被破局，Boss 未能获得强化。")
+        elif not self.enemy.is_dead():
+            self.enemy.add_buff(Buff(intent['effect'], intent['value'], 2, intent['name'], intent['name']))
+            effect_name = '防御' if intent['effect'] == 'defense_up' else '攻击'
+            self._log('boss_resolve', f"⚠️ 天机未破！{self.enemy.name}{effect_name}提升{intent['value']}%，持续2回合。")
+        self.boss_tianji['intent'] = None
+
     def _execute_normal_attack(self, attacker: CombatEntity, defender: CombatEntity):
         """执行普通攻击"""
         self._log("action", f"⚔️ {attacker.name} 发动普通攻击！")
@@ -1336,7 +1466,8 @@ class CombatManager:
             'player_hp': self.player.hp,
             'enemy_hp': self.enemy.hp,
             'total_skills_used': len(self.skill_history),
-            'skill_history': self.skill_history
+            'skill_history': self.skill_history,
+            'boss_tianji': copy.deepcopy(self.boss_tianji),
         }
 
     def to_snapshot(self) -> Dict:
@@ -1362,6 +1493,7 @@ class CombatManager:
             'winner_side': winner_side,
             'initialized': self.initialized,
             'combat_ended': self.combat_ended,
+            'boss_tianji': copy.deepcopy(self.boss_tianji),
         }
 
     @classmethod
@@ -1376,6 +1508,7 @@ class CombatManager:
         manager.skill_history = copy.deepcopy(snapshot.get('skill_history', []))
         manager.initialized = snapshot.get('initialized', False)
         manager.combat_ended = snapshot.get('combat_ended', False)
+        manager.boss_tianji = copy.deepcopy(snapshot.get('boss_tianji', manager.boss_tianji))
         first_side = snapshot.get('first_side')
         if first_side == 'player':
             manager.first, manager.second = manager.player, manager.enemy
@@ -1410,7 +1543,8 @@ def create_skill_from_db(skill_data: Dict) -> Skill:
         buff_duration=skill_data.get('buff_duration', 0),
         buff_target=skill_data.get('buff_target', 2),
         buff_name=skill_data.get('buff_name', ''),
-        description=skill_data.get('buff_desc', skill_data.get('skill_desc', ''))
+        description=skill_data.get('buff_desc', skill_data.get('skill_desc', '')),
+        element=skill_data.get('element', '')
     )
 
 

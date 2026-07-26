@@ -15,6 +15,8 @@ STATE_RECOVERY_REQUIRED = "RECOVERY_REQUIRED"
 ACTION_NORMAL_ATTACK = "NORMAL_ATTACK"
 ACTION_SKILL = "SKILL"
 ACTION_DEFEND = "DEFEND"
+ACTION_MEDITATE = "MEDITATE"
+ACTION_ARTIFACT = "ARTIFACT"
 ACTION_AUTO = "AUTO"
 
 
@@ -154,4 +156,3 @@ class BattleResult:
     events: List[BattleEvent] = field(default_factory=list)
     summary: Dict[str, Any] = field(default_factory=dict)
     idempotent: bool = False
-
