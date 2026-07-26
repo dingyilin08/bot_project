@@ -30,6 +30,7 @@ rsync -a --delete \
     --exclude '__pycache__/' \
     --exclude '*.log' \
     "$SOURCE_DIR/" "$RELEASE_DIR/"
+ln -sfn "$APP_ROOT/shared/logs/con_error.log" "$RELEASE_DIR/con_error.log"
 
 python3 -m venv "$RELEASE_DIR/.venv"
 "$RELEASE_DIR/.venv/bin/pip" install --disable-pip-version-check -r "$RELEASE_DIR/requirements.txt"
