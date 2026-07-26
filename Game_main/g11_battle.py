@@ -2,6 +2,7 @@
 """P0 回合战斗面板：负责会话读取、玩家行动和结果交接。"""
 
 from uuid import NAMESPACE_URL, uuid5
+from html import escape
 
 from func.pd_func import reg_xz_func
 from Game_domain.battle_models import BattleError, STATE_FINISHED, utcnow
@@ -62,17 +63,17 @@ def render_battle_panel(session, notice="", events=None):
         output += "**本回合战报**\n> " + "\n> ".join(messages) + "\n\n"
 
     output += "***\n\n**选择行动**\n"
-    output += "<qqbot-cmd-enter text='战斗行动 普攻' /> | <qqbot-cmd-enter text='战斗行动 防御' />\n"
-    output += "<qqbot-cmd-enter text='战斗行动 调息' /> | <qqbot-cmd-enter text='战斗行动 御器' />\n"
+    output += "<qqbot-cmd-input text='战斗行动 普攻' show='普攻' /> | <qqbot-cmd-input text='战斗行动 防御' show='防御' />\n"
+    output += "<qqbot-cmd-input text='战斗行动 调息' show='调息' /> | <qqbot-cmd-input text='战斗行动 御器' show='御器' />\n"
     if dao_heart["value"] >= 3:
-        output += "<qqbot-cmd-enter text='战斗行动 道心爆发' /> | <qqbot-cmd-enter text='战斗行动 道心延势' />\n"
+        output += "<qqbot-cmd-input text='战斗行动 道心爆发' show='道心爆发' /> | <qqbot-cmd-input text='战斗行动 道心延势' show='道心延势' />\n"
     if dao_heart["value"] >= dao_heart["cap"]:
-        output += "<qqbot-cmd-enter text='战斗行动 留存道心' />\n"
+        output += "<qqbot-cmd-input text='战斗行动 留存道心' show='留存道心' />\n"
     for skill in player.skills:
         cooldown = player.cooldowns.get(skill.id, 0)
         suffix = f"（冷却{cooldown}）" if cooldown else ""
-        output += f"<qqbot-cmd-enter text='战斗行动 技能-{skill.id}' /> {skill.name}{suffix}\n"
-    output += "\n<qqbot-cmd-enter text='战斗状态' />"
+        output += f"<qqbot-cmd-input text='战斗行动 技能-{skill.id}' show='{escape(skill.name + suffix, quote=True)}' />\n"
+    output += "\n<qqbot-cmd-input text='战斗状态' show='战斗状态' />"
     return {"type": "markdown", "content": output}
 
 
@@ -102,7 +103,7 @@ async def battle_status(uid, qz):
     service = get_battle_service()
     session = await service.get_active_battle(uid)
     if not session:
-        return {"type": "markdown", "content": "当前没有进行中的回合战斗。\n<qqbot-cmd-enter text='查看怪物' />"}
+        return {"type": "markdown", "content": "当前没有进行中的回合战斗。\n<qqbot-cmd-input text='查看怪物' show='查看怪物' />"}
     try:
         return await _resolve_expired_or_render(uid, session, service)
     except BattleError as error:
@@ -126,7 +127,7 @@ async def battle_action(uid, qz, action_text):
     service = get_battle_service()
     session = await service.get_active_battle(uid)
     if not session:
-        return {"type": "markdown", "content": "当前没有进行中的回合战斗。\n<qqbot-cmd-enter text='查看怪物' />"}
+        return {"type": "markdown", "content": "当前没有进行中的回合战斗。\n<qqbot-cmd-input text='查看怪物' show='查看怪物' />"}
     try:
         if session.is_expired():
             return await _resolve_expired_or_render(uid, session, service)
@@ -145,4 +146,4 @@ async def battle_action(uid, qz, action_text):
         notice = "该行动已处理。" if result.idempotent else "行动已结算，请选择下一回合行动。"
         return render_battle_panel(session, notice, result.events)
     except BattleError as error:
-        return {"type": "markdown", "content": f"行动未生效：{error.message}\n<qqbot-cmd-enter text='战斗状态' />"}
+        return {"type": "markdown", "content": f"行动未生效：{error.message}\n<qqbot-cmd-input text='战斗状态' show='战斗状态' />"}

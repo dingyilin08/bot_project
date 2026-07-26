@@ -420,7 +420,7 @@ async def skill_bag(uid, qz, page_num=1):
                 elif skill_type == 4 or skill_type == '4':
                     skill_type = "穿透型"
 
-                skill_bt = f"<qqbot-cmd-enter text='技能信息 {skill_name}' />"
+                skill_bt = f"<qqbot-cmd-input text='技能信息 {skill_name}' show='技能信息 {skill_name}' />"
                 output += f"〔{skill_id}〕{skill_bt}『{skill_type}』{biaoshi}\n"
 
             output += "> 点击蓝字可查看该技能信息噢~\n"
@@ -437,7 +437,7 @@ async def skill_bag(uid, qz, page_num=1):
             if total_pages > 1:
                 prev_page = page_num - 1 if page_num > 1 else 1
                 next_page = page_num + 1 if page_num < total_pages else page_num
-                output += f"<qqbot-cmd-enter text='技能背包 {prev_page}' /> | <qqbot-cmd-input text='技能背包' show='跳转[页码]' /> | <qqbot-cmd-enter text='技能背包 {next_page}' />\n"
+                output += f"<qqbot-cmd-input text='技能背包 {prev_page}' show='技能背包 {prev_page}' /> | <qqbot-cmd-input text='技能背包' show='跳转[页码]' /> | <qqbot-cmd-input text='技能背包 {next_page}' show='技能背包 {next_page}' />\n"
 
             return {"type": "markdown", "content": qz + output}
 

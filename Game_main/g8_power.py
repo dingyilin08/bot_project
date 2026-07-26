@@ -39,7 +39,7 @@ async def my_power(uid, qz):
             output += "> 您还没有出战角色，或角色数据未初始化\n"
             output += "> 请先选择角色并出战\n"
             output += "***\n"
-            output += '<qqbot-cmd-enter text="角色背包" /> | <qqbot-cmd-input text="出战" show="出战角色" />'
+            output += '<qqbot-cmd-input text="角色背包" show="角色背包" /> | <qqbot-cmd-input text="出战" show="出战角色" />'
             return {"type": "markdown", "content": output}
         
         power, power_base, power_level, power_equip = power_data[0], power_data[1], power_data[2], power_data[3]
@@ -68,7 +68,7 @@ async def my_power(uid, qz):
         output += f"> 💎 本源战力：{format_power(power_benyuan)} ({percentages['benyuan']}%)\n"
         output += f"> ⚡ 技能战力：{format_power(power_skill)} ({percentages['skill']}%)\n"
         output += "***\n"
-        output += '<qqbot-cmd-enter text="战力排行" /> | <qqbot-cmd-enter text="装备背包" /> | <qqbot-cmd-enter text="查看本源" />'
+        output += '<qqbot-cmd-input text="战力排行" show="战力排行" /> | <qqbot-cmd-input text="装备背包" show="装备背包" /> | <qqbot-cmd-input text="查看本源" show="查看本源" />'
         
         return {"type": "markdown", "content": output}
 
@@ -81,13 +81,13 @@ async def power_rank(uid, qz):
     """
     output = "##### 🏆 战力排行榜\n\n"
     output += "请选择查看的排行榜类型：\n\n"
-    output += '<qqbot-cmd-enter text="战力排行 全服" />\n'
-    output += '<qqbot-cmd-enter text="战力排行 萧炎" />\n'
-    output += '<qqbot-cmd-enter text="战力排行 王林" />\n'
-    output += '<qqbot-cmd-enter text="战力排行 韩立" />\n'
-    output += '<qqbot-cmd-enter text="战力排行 石昊" />\n'
-    output += '<qqbot-cmd-enter text="战力排行 叶凡" />\n'
-    output += '<qqbot-cmd-enter text="战力排行 孟川" />\n'
+    output += '<qqbot-cmd-input text="战力排行 全服" show="战力排行 全服" />\n'
+    output += '<qqbot-cmd-input text="战力排行 萧炎" show="战力排行 萧炎" />\n'
+    output += '<qqbot-cmd-input text="战力排行 王林" show="战力排行 王林" />\n'
+    output += '<qqbot-cmd-input text="战力排行 韩立" show="战力排行 韩立" />\n'
+    output += '<qqbot-cmd-input text="战力排行 石昊" show="战力排行 石昊" />\n'
+    output += '<qqbot-cmd-input text="战力排行 叶凡" show="战力排行 叶凡" />\n'
+    output += '<qqbot-cmd-input text="战力排行 孟川" show="战力排行 孟川" />\n'
     output += "***\n"
     output += "> 💡 排行榜数据实时更新"
     
@@ -112,7 +112,7 @@ async def power_rank_detail(uid, qz, rank_type_name):
             output = "##### ⚠️ 暂无排行数据\n\n"
             output += f"> 当前没有符合条件的玩家数据\n"
             output += "***\n"
-            output += '<qqbot-cmd-enter text="战力排行" />'
+            output += '<qqbot-cmd-input text="战力排行" show="战力排行" />'
             return {"type": "markdown", "content": output}
         
         async with conn.cursor() as cursor:
@@ -142,7 +142,7 @@ async def power_rank_detail(uid, qz, rank_type_name):
         stats = f"\n\n📊 总玩家数：{total_players}人"
         
         buttons = "\n\n***\n"
-        buttons += '<qqbot-cmd-enter text="我的战力" /> | <qqbot-cmd-enter text="战力排行" />'
+        buttons += '<qqbot-cmd-input text="我的战力" show="我的战力" /> | <qqbot-cmd-input text="战力排行" show="战力排行" />'
         
         content = title + rank_text + my_rank_text + stats + buttons
         return {"type": "markdown", "content": content}

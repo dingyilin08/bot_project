@@ -115,7 +115,7 @@ async def all_write_command(uid, command):
             output = "\n***\n"
             for i in range(0, len(command), 3):
                 line_commands = command[i:i+3]
-                button_line = " | ".join([f'<qqbot-cmd-enter text="{cmd}" />' for cmd in line_commands])
+                button_line = " | ".join([f'<qqbot-cmd-input text="{cmd}" show="{cmd}" />' for cmd in line_commands])
                 output += button_line + "\n"
             return output
 
@@ -159,7 +159,7 @@ async def all_write_cmd(uid, command):
                 line_commands = command[i:i+3]
                 button_line = " | ".join([
                     f'<qqbot-cmd-input text="{content}" show="{content}*" />' if flag == 1
-                    else f'<qqbot-cmd-enter text="{content}" />'
+                    else f'<qqbot-cmd-input text="{content}" show="{content}" />'
                     for content, flag in line_commands
                 ])
                 output += button_line + "\n"

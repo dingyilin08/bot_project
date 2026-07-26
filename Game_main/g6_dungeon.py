@@ -681,11 +681,11 @@ def format_dungeon_markdown(dungeons, page, total_pages, role_info, remaining_co
         if can_challenge and remaining_count > 0:
             lines.append(f"**{dungeon_id}. {dungeon['name']}**")
             lines.append(f"> 所属世界：{dungeon['world']} | {dungeon['min_level']}级可挑战")
-            lines.append(f"> 🗒︎<qqbot-cmd-enter text='副本信息 {dungeon_id}' /> ⚔️<qqbot-cmd-enter text='挑战副本 {dungeon_id}' />")
+            lines.append(f"> 🗒︎<qqbot-cmd-input text='副本信息 {dungeon_id}' show='详情：{dungeon['name']}' /> ⚔️<qqbot-cmd-input text='挑战副本 {dungeon_id}' show='挑战：{dungeon['name']}' />")
         elif can_challenge:
             lines.append(f"**{dungeon_id}. {dungeon['name']}**)")
             lines.append(f"> 所属世界：{dungeon['world']} | {dungeon['min_level']}级可挑战")
-            lines.append(f"> 🗒︎<qqbot-cmd-enter text='副本信息 {dungeon_id}' /> 挑战次数已耗尽")
+            lines.append(f"> 🗒︎<qqbot-cmd-input text='副本信息 {dungeon_id}' show='详情：{dungeon['name']}' /> 挑战次数已耗尽")
         else:
             lines.append(f"{dungeon_id}. {dungeon['name']} [{dungeon['world']}] (等级{dungeon['min_level']}级)")
 
@@ -694,7 +694,7 @@ def format_dungeon_markdown(dungeons, page, total_pages, role_info, remaining_co
     lines.append("***")
     lines.append("⚠️跨界挑战将有因果压制，怪物全属性提升15%")
     lines.append("***")
-    lines.append(f"<qqbot-cmd-enter text='副本列表 {page - 1}' /> | <qqbot-cmd-input text='副本列表' show='跳转【页数】' /> | <qqbot-cmd-enter text='副本列表 {page + 1}' />")
+    lines.append(f"<qqbot-cmd-input text='副本列表 {page - 1}' show='副本列表 {page - 1}' /> | <qqbot-cmd-input text='副本列表' show='跳转【页数】' /> | <qqbot-cmd-input text='副本列表 {page + 1}' show='副本列表 {page + 1}' />")
 
     return "\n".join(lines)
 
@@ -777,7 +777,7 @@ def format_dungeon_info_markdown(dungeon, role_info, remaining_count, is_differe
 
     if can_challenge and remaining_count > 0:
         lines.append("***")
-        lines.append(f" <qqbot-cmd-enter text='挑战副本 {dungeon['id']}' /> | <qqbot-cmd-enter text='副本列表' /> | <qqbot-cmd-enter text='收回' />")
+        lines.append(f" <qqbot-cmd-input text='挑战副本 {dungeon['id']}' show='挑战：{dungeon['name']}' /> | <qqbot-cmd-input text='副本列表' show='副本列表' /> | <qqbot-cmd-input text='收回' show='收回' />")
 
     return "\n".join(lines)
 
@@ -836,7 +836,7 @@ def format_monster_list_markdown(dungeon_name, progress, dungeon, is_different_w
 
     # 底部操作
     lines.append("***")
-    lines.append("<qqbot-cmd-enter text='放弃副本' /> | <qqbot-cmd-enter text='当前角色' /> | <qqbot-cmd-enter text='收回' />")
+    lines.append("<qqbot-cmd-input text='放弃副本' show='放弃副本' /> | <qqbot-cmd-input text='当前角色' show='当前角色' /> | <qqbot-cmd-input text='收回' show='收回' />")
 
     return "\n".join(lines)
 
@@ -945,7 +945,7 @@ async def dungeon_list(uid, qz, page=1):
             if role_result is None:
                 lines = []
                 lines.append("没有出战角色，请先出战[角色ID]")
-                lines.append("<qqbot-cmd-enter text='角色背包' /> | <qqbot-cmd-input text='出战' show='出战' /> | <qqbot-cmd-enter text='收回' />")
+                lines.append("<qqbot-cmd-input text='角色背包' show='角色背包' /> | <qqbot-cmd-input text='出战' show='出战' /> | <qqbot-cmd-input text='收回' show='收回' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             role_id, role_name, role_level, role_world = role_result
@@ -987,14 +987,14 @@ async def dungeon_info(uid, qz, dungeon_id):
     except (ValueError, TypeError):
         lines = []
         lines.append("副本ID格式错误，请输入正确的副本ID")
-        lines.append("<qqbot-cmd-enter text='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' />")
+        lines.append("<qqbot-cmd-input text='副本列表' show='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' />")
         return {"type": "markdown", "content": "\n".join(lines)}
 
     dungeon = await get_dungeon_info(dungeon_id)
     if dungeon is None:
         lines = []
         lines.append("副本ID不存在，请输入正确的副本ID")
-        lines.append("<qqbot-cmd-enter text='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' />")
+        lines.append("<qqbot-cmd-input text='副本列表' show='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' />")
         return {"type": "markdown", "content": "\n".join(lines)}
 
     async with connect_mysql() as conn:
@@ -1007,7 +1007,7 @@ async def dungeon_info(uid, qz, dungeon_id):
             if role_result is None:
                 lines = []
                 lines.append("当前没有出战角色，请先出战[角色ID]")
-                lines.append("<qqbot-cmd-enter text='角色背包' /> | <qqbot-cmd-input text='出战' show='出战' /> | <qqbot-cmd-enter text='收回' />")
+                lines.append("<qqbot-cmd-input text='角色背包' show='角色背包' /> | <qqbot-cmd-input text='出战' show='出战' /> | <qqbot-cmd-input text='收回' show='收回' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             role_id, role_name, role_level, role_world = role_result
@@ -1102,7 +1102,7 @@ async def challenge_dungeon(uid, qz):
             if role_data is None:
                 lines = []
                 lines.append("当前没有出战角色，请先出战[角色ID]")
-                lines.append("<qqbot-cmd-enter text='角色背包' /> | <qqbot-cmd-input text='出战' show='出战' /> | <qqbot-cmd-enter text='收回' />")
+                lines.append("<qqbot-cmd-input text='角色背包' show='角色背包' /> | <qqbot-cmd-input text='出战' show='出战' /> | <qqbot-cmd-input text='收回' show='收回' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             (role_id, role_name, role_level, gongji, fangyu, qixue, sudu, baoji, baoshang,
@@ -1117,7 +1117,7 @@ async def challenge_dungeon(uid, qz):
             if existing:
                 dungeon_id = existing[0]
                 dungeon = await get_dungeon_info(dungeon_id)
-                return {"type": "markdown", "content": f"正在进行**{dungeon['name']}**的挑战\n\n请先放弃当前挑战\n\n<qqbot-cmd-enter text='查看怪物' /> <qqbot-cmd-enter text='放弃副本' />"}
+                return {"type": "markdown", "content": f"正在进行**{dungeon['name']}**的挑战\n\n请先放弃当前挑战\n\n<qqbot-cmd-input text='查看怪物' show='查看怪物' /> <qqbot-cmd-input text='放弃副本' show='放弃副本' />"}
 
             # 获取可挑战的副本列表
             dungeons = await get_dungeon_list_by_level(level=role_level)
@@ -1133,10 +1133,10 @@ async def challenge_dungeon(uid, qz):
 
                 if remaining_count > 0 and can_challenge:
                     lines.append(f"**{dungeon['id']}. {dungeon['name']}** ({dungeon['min_level']}级+)")
-                    lines.append(f"<qqbot-cmd-enter text='副本信息 {dungeon['id']}' /> <qqbot-cmd-enter text='挑战副本 {dungeon['id']}' />")
+                    lines.append(f"<qqbot-cmd-input text='副本信息 {dungeon['id']}' show='副本信息 {dungeon['id']}' /> <qqbot-cmd-input text='挑战副本 {dungeon['id']}' show='挑战副本 {dungeon['id']}' />")
                 elif can_challenge:
                     lines.append(f"**{dungeon['id']}. {dungeon['name']}** ({dungeon['min_level']}级+ 次数用尽)")
-                    lines.append(f"<qqbot-cmd-enter text='副本信息 {dungeon['id']}' />")
+                    lines.append(f"<qqbot-cmd-input text='副本信息 {dungeon['id']}' show='副本信息 {dungeon['id']}' />")
                 else:
                     lines.append(f"{dungeon['id']}. {dungeon['name']} (等级{dungeon['min_level']}级+)")
 
@@ -1151,14 +1151,14 @@ async def start_challenge_dungeon(uid, qz, dungeon_id):
     except (ValueError, TypeError):
         lines = []
         lines.append("副本ID格式错误，请输入正确的副本ID")
-        lines.append("<qqbot-cmd-enter text='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' /> | <qqbot-cmd-enter text='挑战副本' />")
+        lines.append("<qqbot-cmd-input text='副本列表' show='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' /> | <qqbot-cmd-input text='挑战副本' show='挑战副本' />")
         return {"type": "markdown", "content": "\n".join(lines)}
 
     dungeon = await get_dungeon_info(dungeon_id)
     if dungeon is None:
         lines = []
         lines.append("副本ID不存在，请输入正确的副本ID")
-        lines.append("<qqbot-cmd-enter text='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' /> | <qqbot-cmd-enter text='挑战副本' />")
+        lines.append("<qqbot-cmd-input text='副本列表' show='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' /> | <qqbot-cmd-input text='挑战副本' show='挑战副本' />")
         return {"type": "markdown", "content": "\n".join(lines)}
 
     async with connect_mysql() as conn:
@@ -1171,7 +1171,7 @@ async def start_challenge_dungeon(uid, qz, dungeon_id):
             if role_result is None:
                 lines = []
                 lines.append("当前没有出战角色，请先出战[角色ID]")
-                lines.append("<qqbot-cmd-enter text='角色背包' /> | <qqbot-cmd-input text='出战' show='出战' /> | <qqbot-cmd-enter text='收回' />")
+                lines.append("<qqbot-cmd-input text='角色背包' show='角色背包' /> | <qqbot-cmd-input text='出战' show='出战' /> | <qqbot-cmd-input text='收回' show='收回' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             role_id, role_name, role_level, role_world = role_result
@@ -1214,7 +1214,7 @@ async def show_monster_list(uid, qz):
             if not result:
                 lines = []
                 lines.append("没有正在进行的副本，请输入发送挑战副本[副本ID]开始挑战吧！")
-                lines.append("<qqbot-cmd-enter text='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' /> | <qqbot-cmd-input text='挑战副本' show='挑战副本 1' />")
+                lines.append("<qqbot-cmd-input text='副本列表' show='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' /> | <qqbot-cmd-input text='挑战副本' show='挑战副本 1' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             dungeon_id = result[0]
@@ -1244,7 +1244,7 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None):
     except (ValueError, TypeError):
         lines = []
         lines.append("怪物编号格式错误，请输入发送正确的格式开始挑战吧！")
-        lines.append("<qqbot-cmd-enter text='查看怪物' /> | <qqbot-cmd-enter text='挑战怪物 1' />")
+        lines.append("<qqbot-cmd-input text='查看怪物' show='查看怪物' /> | <qqbot-cmd-input text='挑战怪物 1' show='挑战怪物 1' />")
         return {"type": "markdown", "content": "\n".join(lines)}
 
     async with connect_mysql() as conn:
@@ -1256,7 +1256,7 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None):
             if not result:
                 lines = []
                 lines.append("没有正在进行的副本，请输入发送挑战副本[副本ID]开始挑战吧！")
-                lines.append("<qqbot-cmd-enter text='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' /> | <qqbot-cmd-input text='挑战副本' show='挑战副本 1' />")
+                lines.append("<qqbot-cmd-input text='副本列表' show='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' /> | <qqbot-cmd-input text='挑战副本' show='挑战副本 1' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             dungeon_id = result[0]
@@ -1274,13 +1274,13 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None):
     if not target_monster:
         lines = []
         lines.append("怪物编号不存在，请输入发送正确的怪物编号")
-        lines.append("<qqbot-cmd-enter text='查看怪物' /> | <qqbot-cmd-enter text='挑战怪物 1' />")
+        lines.append("<qqbot-cmd-input text='查看怪物' show='查看怪物' /> | <qqbot-cmd-input text='挑战怪物 1' show='挑战怪物 1' />")
         return {"type": "markdown", "content": "\n".join(lines)}
 
     if target_monster['defeated']:
         lines = []
         lines.append("该怪物已被击败，请挑战其他怪物吧")
-        lines.append("<qqbot-cmd-enter text='查看怪物' /> | <qqbot-cmd-input text='挑战怪物' show='挑战怪物' />")
+        lines.append("<qqbot-cmd-input text='查看怪物' show='查看怪物' /> | <qqbot-cmd-input text='挑战怪物' show='挑战怪物' />")
         return {"type": "markdown", "content": "\n".join(lines)}
 
     # 获取玩家角色数据
@@ -1296,7 +1296,7 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None):
             if role_data is None:
                 lines = []
                 lines.append("当前没有出战角色，请先出战[角色ID]")
-                lines.append("<qqbot-cmd-enter text='角色背包' /> | <qqbot-cmd-input text='出战' show='出战' /> | <qqbot-cmd-enter text='收回' />")
+                lines.append("<qqbot-cmd-input text='角色背包' show='角色背包' /> | <qqbot-cmd-input text='出战' show='出战' /> | <qqbot-cmd-input text='收回' show='收回' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             (role_id, role_name, role_level, gongji, fangyu, qixue, sudu, baoji, baoshang,
@@ -1685,7 +1685,7 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None):
             item_name = item_names.get(item_id, f"物品#{item_id}")
             spec['item_name'] = item_name
             if spec.get('render') == 'scroll':
-                rewards['drops'].append(f"<qqbot-cmd-enter text='卷轴信息 {item_name}' />")
+                rewards['drops'].append(f"<qqbot-cmd-input text='卷轴信息 {item_name}' show='卷轴信息 {item_name}' />")
             elif spec.get('render') == 'count':
                 rewards['drops'].append(f"{item_name}×{spec['drop_count']}")
             else:
@@ -1727,13 +1727,13 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None):
 
     # 添加快捷按钮
     if rewards.get('dungeon_completed'):
-        markdown_content += "\n\n<qqbot-cmd-enter text='副本列表' /> | <qqbot-cmd-enter text='战斗记录' />"
+        markdown_content += "\n\n<qqbot-cmd-input text='副本列表' show='副本列表' /> | <qqbot-cmd-input text='战斗记录' show='战斗记录' />"
     elif winner == player_entity:
-        markdown_content += "\n\n<qqbot-cmd-enter text='查看怪物' /> | <qqbot-cmd-enter text='放弃副本' />"
+        markdown_content += "\n\n<qqbot-cmd-input text='查看怪物' show='查看怪物' /> | <qqbot-cmd-input text='放弃副本' show='放弃副本' />"
     else:
         # 战败后显示退出副本和重新挑战按钮
         markdown_content += "\n\n挑战失败，已自动退出副本"
-        markdown_content += f"\n<qqbot-cmd-enter text='副本列表' /> | <qqbot-cmd-enter text='挑战副本 {dungeon_id}' />"
+        markdown_content += f"\n<qqbot-cmd-input text='副本列表' show='副本列表' /> | <qqbot-cmd-input text='挑战副本 {dungeon_id}' show='挑战副本 {dungeon_id}' />"
 
     return {"type": "markdown", "content": markdown_content}
 
@@ -1751,7 +1751,7 @@ async def abandon_dungeon_cmd(uid, qz):
             if not result:
                 lines = []
                 lines.append("当前没有正在进行的副本，请点击[挑战副本]开始挑战吧！")
-                lines.append("<qqbot-cmd-enter text='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' /> | <qqbot-cmd-enter text='挑战副本' />")
+                lines.append("<qqbot-cmd-input text='副本列表' show='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' /> | <qqbot-cmd-input text='挑战副本' show='挑战副本' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             dungeon_id = result[0]
@@ -1761,7 +1761,7 @@ async def abandon_dungeon_cmd(uid, qz):
 
             lines = []
             lines.append(f"已放弃**{dungeon['name']}**\n进度已重置")
-            lines.append("<qqbot-cmd-enter text='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' /> | <qqbot-cmd-enter text='挑战副本' />")
+            lines.append("<qqbot-cmd-input text='副本列表' show='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' /> | <qqbot-cmd-input text='挑战副本' show='挑战副本' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
 
@@ -1789,7 +1789,7 @@ async def combat_history(uid, qz, limit=10):
             if not results:
                 lines = []
                 lines.append("暂无记录，快去挑战副本吧！")
-                lines.append("<qqbot-cmd-enter text='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' /> | <qqbot-cmd-enter text='挑战副本' />")
+                lines.append("<qqbot-cmd-input text='副本列表' show='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' /> | <qqbot-cmd-input text='挑战副本' show='挑战副本' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             lines = []
@@ -1803,6 +1803,6 @@ async def combat_history(uid, qz, limit=10):
                 lines.append(f"_{drop_time.strftime('%m-%d %H:%M')}_")
                 lines.append("")
 
-            lines.append("<qqbot-cmd-enter text='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' /> | <qqbot-cmd-enter text='挑战副本' />")
+            lines.append("<qqbot-cmd-input text='副本列表' show='副本列表' /> | <qqbot-cmd-input text='副本信息' show='副本信息' /> | <qqbot-cmd-input text='挑战副本' show='挑战副本' />")
 
             return {"type": "markdown", "content": "\n".join(lines)}

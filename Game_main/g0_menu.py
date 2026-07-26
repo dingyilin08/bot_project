@@ -200,13 +200,13 @@ async def show_main_menu(uid, qz):
     output += "***\n\n"
 
     # 按系统分组显示
-    output += "<qqbot-cmd-enter text='角色菜单' /> | <qqbot-cmd-enter text='参悟菜单' />\n\n"
-    output += "<qqbot-cmd-enter text='本源菜单' /> | <qqbot-cmd-enter text='技能菜单' />\n\n"
-    output += "<qqbot-cmd-enter text='副本菜单' /> | <qqbot-cmd-enter text='装备菜单' />\n\n"
-    output += "<qqbot-cmd-enter text='药园菜单' /> | <qqbot-cmd-enter text='炼丹菜单' />\n\n"
+    output += "<qqbot-cmd-input text='角色菜单' show='角色菜单' /> | <qqbot-cmd-input text='参悟菜单' show='参悟菜单' />\n\n"
+    output += "<qqbot-cmd-input text='本源菜单' show='本源菜单' /> | <qqbot-cmd-input text='技能菜单' show='技能菜单' />\n\n"
+    output += "<qqbot-cmd-input text='副本菜单' show='副本菜单' /> | <qqbot-cmd-input text='装备菜单' show='装备菜单' />\n\n"
+    output += "<qqbot-cmd-input text='药园菜单' show='药园菜单' /> | <qqbot-cmd-input text='炼丹菜单' show='炼丹菜单' />\n\n"
 
-    output += "<qqbot-cmd-enter text='商城' /> | <qqbot-cmd-enter text='物品背包' />\n\n"
-    output += "<qqbot-cmd-enter text='战力菜单' /> | <qqbot-cmd-enter text='玩法介绍' />\n\n"
+    output += "<qqbot-cmd-input text='商城' show='商城' /> | <qqbot-cmd-input text='物品背包' show='物品背包' />\n\n"
+    output += "<qqbot-cmd-input text='战力菜单' show='战力菜单' /> | <qqbot-cmd-input text='玩法介绍' show='玩法介绍' />\n\n"
 
     return {"type": "markdown", "content": output}
 
@@ -240,13 +240,13 @@ async def show_role_menu(uid, qz):
     output += "> 点击蓝字后输入页码可查看角色背包的第X页，如：角色背包1\n\n"
     output += "<qqbot-cmd-input text='角色属性' show='角色属性' />\n"
     output += "> 点击蓝字后输入角色编号可查看背包角色的具体属性，如：角色属性 10001\n\n"
-    output += "<qqbot-cmd-enter text='当前角色' />\n"
+    output += "<qqbot-cmd-input text='当前角色' show='当前角色' />\n"
     output += "> 点击蓝字后发送可查看当前出战角色属性，示例：当前角色\n\n"
-    output += "<qqbot-cmd-enter text='悟道进阶' />\n"
+    output += "<qqbot-cmd-input text='悟道进阶' show='悟道进阶' />\n"
     output += "> 当前角色等级达到境界巅峰时，可发送'悟道进阶'，突破下个境界\n\n"
     output += "<qqbot-cmd-input text='出战' show='出战 角色编号' />\n"
     output += "> 点击蓝字后输入角色编号可出战该角色，示例：出战 10001\n\n"
-    output += "<qqbot-cmd-enter text='收回' />\n"
+    output += "<qqbot-cmd-input text='收回' show='收回' />\n"
     output += "> 点击蓝字后发送可收回已出战角色，示例：收回\n\n"
     output += "<qqbot-cmd-input text='物品背包' show='物品背包 页码' />\n"
     output += "> 点击蓝字后输入页码可查看物品背包的第X页，如：物品背包1\n\n"
@@ -254,7 +254,7 @@ async def show_role_menu(uid, qz):
     output += "> 点击蓝字后输入物品名称可查看物品详细信息，如：物品信息 星辰砂\n\n"
 
     output += "***\n\n"
-    output += "<qqbot-cmd-enter text='主菜单' />"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
 
     return {"type": "markdown", "content": output}
 
@@ -279,15 +279,15 @@ async def show_cultivation_menu(uid, qz):
     output += f"{status_info}\n\n"
     output += "***\n\n"
 
-    output += "<qqbot-cmd-enter text='参悟' />\n\n"
+    output += "<qqbot-cmd-input text='参悟' show='参悟' />\n\n"
     output += "> 点击后发送可开始挂机参悟，攒经验\n"
-    output += "<qqbot-cmd-enter text='参悟状态' />\n\n"
+    output += "<qqbot-cmd-input text='参悟状态' show='参悟状态' />\n\n"
     output += "> 点击后发送可查看当前角色参悟状态\n"
-    output += "<qqbot-cmd-enter text='领取参悟经验' />\n\n"
+    output += "<qqbot-cmd-input text='领取参悟经验' show='领取参悟经验' />\n\n"
     output += "> 点击后发送可领取当前角色参悟所得经验\n"
 
     output += "***\n\n"
-    output += "<qqbot-cmd-enter text='主菜单' />"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
 
     return {"type": "markdown", "content": output}
 
@@ -312,15 +312,15 @@ async def show_benyuan_menu(uid, qz):
     output += f"{status_info}\n\n"
     output += "***\n\n"
 
-    output += "<qqbot-cmd-enter text='查看本源' />\n\n"
+    output += "<qqbot-cmd-input text='查看本源' show='查看本源' />\n\n"
     output += "> 点击后发送可查看当前本源加成以及本源等级、阶段等信息\n\n"
-    output += "<qqbot-cmd-enter text='本源升级' />\n\n"
+    output += "<qqbot-cmd-input text='本源升级' show='本源升级' />\n\n"
     output += "> 点击后发送可升级当前本源等级，记得先查看升级所需材料噢~\n\n"
-    output += "<qqbot-cmd-enter text='本源技能' />\n\n"
+    output += "<qqbot-cmd-input text='本源技能' show='本源技能' />\n\n"
     output += "> 点击后发送可查看当前本源技能、解锁等级与技能特性\n\n"
 
     output += "***\n\n"
-    output += "<qqbot-cmd-enter text='主菜单' />"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
 
     return {"type": "markdown", "content": output}
 
@@ -357,7 +357,7 @@ async def show_skill_menu(uid, qz):
     output += "> 如：技能卸下 1，则是将当前角色的技能槽1中所装备的技能卸下\n"
 
     output += "***\n\n"
-    output += "<qqbot-cmd-enter text='主菜单' />"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
 
     return {"type": "markdown", "content": output}
 
@@ -376,7 +376,7 @@ async def show_equipment_menu(uid, qz):
 
     output += "<qqbot-cmd-input text='装备背包 ' show='装备背包 页码' />\n\n"
     output += "> 点击后发送可查看装备背包内容，输入页码可查看指定页，如：装备背包 2\n"
-    output += "<qqbot-cmd-enter text='当前装备' />\n\n"
+    output += "<qqbot-cmd-input text='当前装备' show='当前装备' />\n\n"
     output += "> 点击后发送可查看当前装备信息，查看装备套装加成等\n"
     output += "<qqbot-cmd-input text='穿戴装备 ' show='穿戴装备 装备编号' />\n\n"
     output += "> 点击后输入欲穿戴的装备编号，可将该装备穿戴到相应的部位，如：穿戴装备 10001\n"
@@ -390,7 +390,7 @@ async def show_equipment_menu(uid, qz):
     output += "> 点击后输入欲出售的装备编号，可出售该装备为灵石，如：出售装备 10001\n"
 
     output += "***\n\n"
-    output += "<qqbot-cmd-enter text='主菜单' />"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
 
     return {"type": "markdown", "content": output}
 
@@ -416,23 +416,23 @@ async def show_dungeon_menu(uid, qz):
     output += f"**剩余挑战次数：** {remaining_count}/20\n\n"
     output += "***\n\n"
 
-    output += "<qqbot-cmd-enter text='副本列表' />\n"
+    output += "<qqbot-cmd-input text='副本列表' show='副本列表' />\n"
     output += "> 点击后发送可查看当前可挑战的副本列表\n\n"
     output += "<qqbot-cmd-input text='副本信息 ' show='副本信息 副本编号' />\n"
     output += "> 点击后输入副本编号，可查看该副本的详细信息，如：副本信息 1\n\n"
     output += "<qqbot-cmd-input text='挑战副本 ' show='挑战副本 副本编号' />\n"
     output += "> 点击后输入副本编号，可进入副本进行挑战。如：挑战副本 1\n\n"
-    output += "<qqbot-cmd-enter text='怪物列表' />\n"
+    output += "<qqbot-cmd-input text='怪物列表' show='怪物列表' />\n"
     output += "> 点击后发送可查看当前副本中可挑战的怪物。\n\n"
     output += "<qqbot-cmd-input text='挑战怪物 ' show='挑战怪物 怪物编号' />\n"
     output += "> 点击后输入怪物编号，可指定挑战此怪物。如：挑战怪物 1\n\n"
-    output += "<qqbot-cmd-enter text='战斗状态' />\n"
+    output += "<qqbot-cmd-input text='战斗状态' show='战斗状态' />\n"
     output += "> 查看进行中的回合战斗；每回合可选择普攻、防御、调息、御器或已装备技能。\n\n"
-    output += "<qqbot-cmd-enter text='放弃副本' />\n"
+    output += "<qqbot-cmd-input text='放弃副本' show='放弃副本' />\n"
     output += "> 三十六计跑为上策，保命逃跑，放弃挑战。\n\n"
 
     output += "***\n\n"
-    output += "<qqbot-cmd-enter text='主菜单' />"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
 
     return {"type": "markdown", "content": output}
 
@@ -456,13 +456,13 @@ async def show_yaoyuan_menu(uid, qz):
     output += f"**灵石：** {player_info['lingshi']} | **仙玉：** {player_info['xianyu']}\n\n"
     output += "***\n\n"
 
-    output += "<qqbot-cmd-enter text='药园' />\n\n"
+    output += "<qqbot-cmd-input text='药园' show='药园' />\n\n"
     output += "> 查看药田状态、成熟进度、解锁情况\n\n"
-    output += "<qqbot-cmd-enter text='种子商店' />\n\n"
+    output += "<qqbot-cmd-input text='种子商店' show='种子商店' />\n\n"
     output += "> 购买种子，指令示例：购买种子 冰灵焰草种子-5\n\n"
     output += "<qqbot-cmd-input text='购买种子 ' show='购买种子 种子名-数量' />\n\n"
     output += "> 指令示例：购买种子 冰灵焰草种子-5\n\n"
-    output += "<qqbot-cmd-enter text='种子背包' />\n\n"
+    output += "<qqbot-cmd-input text='种子背包' show='种子背包' />\n\n"
     output += "> 查看您当前持有的种子数量\n\n"
     output += "<qqbot-cmd-input text='播种 ' show='播种 种子名-田号' />\n\n"
     output += "> 指令示例：播种 冰灵焰草种子-1\n\n"
@@ -470,11 +470,11 @@ async def show_yaoyuan_menu(uid, qz):
     output += "> 指令示例：一键播种 冰灵焰草种子\n\n"
     output += "<qqbot-cmd-input text='采摘 ' show='采摘 田号' />\n\n"
     output += "> 指令示例：采摘 1\n\n"
-    output += "<qqbot-cmd-enter text='一键采摘' />\n\n"
+    output += "<qqbot-cmd-input text='一键采摘' show='一键采摘' />\n\n"
     output += "> 一键采摘您当前的所有药田的药材\n\n"
     output += "<qqbot-cmd-input text='施肥 ' show='施肥 田号' />\n\n"
     output += "> 消耗『灵草培育液』（或旧版植物肥料）使药材立即成熟；可在商城购买，示例：施肥 1\n\n"
-    output += "<qqbot-cmd-enter text='商城' />\n\n"
+    output += "<qqbot-cmd-input text='商城' show='商城' />\n\n"
     output += "> 商城出售体力药、灵草培育液与炼丹加速卡等便利道具\n\n"
     output += "<qqbot-cmd-input text='解锁药田 ' show='解锁药田 田号' />\n\n"
     output += "> 消耗仙玉解锁药田，指令示例：解锁药田 1\n\n"
@@ -482,7 +482,7 @@ async def show_yaoyuan_menu(uid, qz):
     output += "> 指令示例：出售药材 冰灵焰草-10\n\n"
 
     output += "***\n\n"
-    output += "<qqbot-cmd-enter text='主菜单' />"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
 
     return {"type": "markdown", "content": output}
 
@@ -506,15 +506,15 @@ async def show_liandan_menu(uid, qz):
     output += f"**灵石：** {player_info['lingshi']} | **仙玉：** {player_info['xianyu']}\n\n"
     output += "***\n\n"
 
-    output += "<qqbot-cmd-enter text='查看丹炉' />\n\n"
+    output += "<qqbot-cmd-input text='查看丹炉' show='查看丹炉' />\n\n"
     output += "> 查看丹炉状态、解锁条件、炼制进度\n\n"
-    output += "<qqbot-cmd-enter text='丹方列表' />\n\n"
+    output += "<qqbot-cmd-input text='丹方列表' show='丹方列表' />\n\n"
     output += "> 查看可炼制丹方（通用 + 当前世界专属）\n\n"
     output += "<qqbot-cmd-input text='炼丹 ' show='炼丹 丹方名-炉号' />\n\n"
     output += "> 指令示例：炼丹 九转丹-1（也支持丹药名）\n\n"
     output += "<qqbot-cmd-input text='收丹 ' show='收丹 炉号' />\n\n"
     output += "> 指令示例：收丹 1\n\n"
-    output += "<qqbot-cmd-enter text='一键收丹' />\n\n"
+    output += "<qqbot-cmd-input text='一键收丹' show='一键收丹' />\n\n"
     output += "> 一键收取您丹炉中炼制好的丹药。\n\n"
     output += "<qqbot-cmd-input text='服丹 ' show='服丹 丹药名-数量' />\n\n"
     output += "> 指令示例：服丹 九转丹-10\n\n"
@@ -522,15 +522,15 @@ async def show_liandan_menu(uid, qz):
     output += "> 消耗仙玉解锁丹炉，指令示例：解锁丹炉 4\n\n"
     output += "<qqbot-cmd-input text='加速炼丹 ' show='加速炼丹 炉号' />\n\n"
     output += "> 消耗物品『炼丹加速卡』用于加速丹药炼制速度，可在商城购买，示例：加速炼丹 1\n\n"
-    output += "<qqbot-cmd-enter text='商城' />\n\n"
+    output += "<qqbot-cmd-input text='商城' show='商城' />\n\n"
     output += "> 商城出售炼丹与突破所需的便利道具\n\n"
-    output += "<qqbot-cmd-enter text='添火次数' />\n\n"
+    output += "<qqbot-cmd-input text='添火次数' show='添火次数' />\n\n"
     output += "> 查看你今日主动添火/被添火次数。\n\n"
     output += "<qqbot-cmd-input text='添火 ' show='添火 目标UID(可选-炉号)' />\n\n"
     output += "> 可用“添火 目标UID”自动选炉，或“添火 目标UID-炉号”指定丹炉；每次减少30分钟\n\n"
 
     output += "***\n\n"
-    output += "<qqbot-cmd-enter text='主菜单' />"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
 
     return {"type": "markdown", "content": output}
 
@@ -555,15 +555,15 @@ async def show_power_menu(uid, qz):
     output += f"**仙玉：** {player_info['xianyu']}\n\n"
     output += "***\n\n"
 
-    output += "<qqbot-cmd-enter text='我的战力' />\n"
+    output += "<qqbot-cmd-input text='我的战力' show='我的战力' />\n"
     output += "> 点击后发送可查看当前您出战角色的战力组成\n\n"
-    output += "<qqbot-cmd-enter text='战力排行' />\n"
+    output += "<qqbot-cmd-input text='战力排行' show='战力排行' />\n"
     output += "> 点击后发送可选择当前全服/各个角色的战力排行榜\n\n"
-    output += "<qqbot-cmd-enter text='战力排行 全服' />\n"
+    output += "<qqbot-cmd-input text='战力排行 全服' show='战力排行 全服' />\n"
     output += "> 点击后发送可查看当前全服战力排行榜\n\n"
 
     output += "***\n\n"
-    output += "<qqbot-cmd-enter text='主菜单' />"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
 
     return {"type": "markdown", "content": output}
 
@@ -660,6 +660,6 @@ async def show_game_guide(uid):
     output += "> `我的战力` - 查看战力详情\n\n"
 
     output += "***\n\n"
-    output += "<qqbot-cmd-enter text='主菜单' /> | <qqbot-cmd-enter text='帮助' />"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' /> | <qqbot-cmd-input text='帮助' show='帮助' />"
 
     return {"type": "markdown", "content": output}

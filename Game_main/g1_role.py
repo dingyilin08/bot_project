@@ -19,11 +19,11 @@ async def user_zhuce(openid, player_name):
                 return {"type": "markdown", "content": "\n".join(line)}
             if player_name == "":
                 line.append(f"指令错误，正确指令：注册游戏 苍穹")
-                line.append("<qqbot-cmd-input text='注册游戏' show='注册游戏' /> | <qqbot-cmd-enter text='主菜单' />")
+                line.append("<qqbot-cmd-input text='注册游戏' show='注册游戏' /> | <qqbot-cmd-input text='主菜单' show='主菜单' />")
                 return {"type": "markdown", "content": "\n".join(line)}
             if len(player_name) > 8 or len(player_name) < 1:
                 line.append(f"注意！！玩家名称长度需要在1-8个字符之间噢~")
-                line.append('<qqbot-cmd-input text="注册游戏" show="注册游戏" /> | <qqbot-cmd-enter text="主菜单" />')
+                line.append('<qqbot-cmd-input text="注册游戏" show="注册游戏" /> | <qqbot-cmd-input text="主菜单" show="主菜单" />')
                 return {"type": "markdown", "content": "\n".join(line)}
             sql = "SELECT COUNT(*) FROM user_zt"
             await cursor.execute(sql)
@@ -35,12 +35,12 @@ async def user_zhuce(openid, player_name):
             line.append("##### 注册成功！")
             line.append(f"**您的UID：** {uid}")
             line.append(f"**待选角色：**")
-            line.append("◇ <qqbot-cmd-enter text='角色介绍 萧炎' />：异火焚天/斗帝传承")
-            line.append("◇ <qqbot-cmd-enter text='角色介绍 王林' />：禁制大师/生死轮回")
-            line.append("◇ <qqbot-cmd-enter text='角色介绍 韩立' />：掌天瓶主/遁术无双")
-            line.append("◇ <qqbot-cmd-enter text='角色介绍 石昊' />：独断万古/至尊骨")
-            line.append("◇ <qqbot-cmd-enter text='角色介绍 叶凡' />：圣体无双/九秘传承")
-            line.append("◇ <qqbot-cmd-enter text='角色介绍 孟川' />：刀意通神/雷霆灭世")
+            line.append("◇ <qqbot-cmd-input text='角色介绍 萧炎' show='角色介绍 萧炎' />：异火焚天/斗帝传承")
+            line.append("◇ <qqbot-cmd-input text='角色介绍 王林' show='角色介绍 王林' />：禁制大师/生死轮回")
+            line.append("◇ <qqbot-cmd-input text='角色介绍 韩立' show='角色介绍 韩立' />：掌天瓶主/遁术无双")
+            line.append("◇ <qqbot-cmd-input text='角色介绍 石昊' show='角色介绍 石昊' />：独断万古/至尊骨")
+            line.append("◇ <qqbot-cmd-input text='角色介绍 叶凡' show='角色介绍 叶凡' />：圣体无双/九秘传承")
+            line.append("◇ <qqbot-cmd-input text='角色介绍 孟川' show='角色介绍 孟川' />：刀意通神/雷霆灭世")
             line.append("> 点击蓝字可查看详细的角色介绍噢~")
             line.append("")
             line.append("> Tips：角色选择后不可更换，后期可通过碎片合成其他待选角色")
@@ -62,12 +62,12 @@ async def select_role(uid, qz, role_name):
             if result is None:
                 line.append(f"你想选择的角色不存在！如果没有自己喜欢的角色，可以私信群主后续可能会一一添加噢~")
                 line.append(f"当前可选择的角色有：")
-                line.append("◇ <qqbot-cmd-enter text='角色介绍 萧炎' />：异火焚天/斗帝传承")
-                line.append("◇ <qqbot-cmd-enter text='角色介绍 王林' />：禁制大师/生死轮回")
-                line.append("◇ <qqbot-cmd-enter text='角色介绍 韩立' />：掌天瓶主/遁术无双")
-                line.append("◇ <qqbot-cmd-enter text='角色介绍 石昊' />：独断万古/至尊骨")
-                line.append("◇ <qqbot-cmd-enter text='角色介绍 叶凡' />：圣体无双/九秘传承")
-                line.append("◇ <qqbot-cmd-enter text='角色介绍 孟川' />：刀意通神/雷霆灭世")
+                line.append("◇ <qqbot-cmd-input text='角色介绍 萧炎' show='角色介绍 萧炎' />：异火焚天/斗帝传承")
+                line.append("◇ <qqbot-cmd-input text='角色介绍 王林' show='角色介绍 王林' />：禁制大师/生死轮回")
+                line.append("◇ <qqbot-cmd-input text='角色介绍 韩立' show='角色介绍 韩立' />：掌天瓶主/遁术无双")
+                line.append("◇ <qqbot-cmd-input text='角色介绍 石昊' show='角色介绍 石昊' />：独断万古/至尊骨")
+                line.append("◇ <qqbot-cmd-input text='角色介绍 叶凡' show='角色介绍 叶凡' />：圣体无双/九秘传承")
+                line.append("◇ <qqbot-cmd-input text='角色介绍 孟川' show='角色介绍 孟川' />：刀意通神/雷霆灭世")
                 line.append("> 点击蓝字可查看详细的角色介绍噢~")
                 line.append("<qqbot-cmd-input text='选择角色 ' show='选择角色' /> | <qqbot-cmd-input text='角色介绍 ' show='角色介绍*' />")
                 return {"type": "markdown", "content": "\n".join(line)}
@@ -79,8 +79,8 @@ async def select_role(uid, qz, role_name):
             openid, is_chushi = await cursor.fetchone()
             if is_chushi == 1:
                 line.append(f"您已选择过角色啦，请勿重复选择！")
-                line.append(f"不知道怎么玩？可以尝试发送：<qqbot-cmd-enter text='主菜单' />查看可用指令")
-                line.append("<qqbot-cmd-enter text='查看本源' /> | <qqbot-cmd-enter text='副本列表' /> | <qqbot-cmd-enter text='参悟' />")
+                line.append(f"不知道怎么玩？可以尝试发送：<qqbot-cmd-input text='主菜单' show='主菜单' />查看可用指令")
+                line.append("<qqbot-cmd-input text='查看本源' show='查看本源' /> | <qqbot-cmd-input text='副本列表' show='副本列表' /> | <qqbot-cmd-input text='参悟' show='参悟' />")
                 return {"type": "markdown", "content": "\n".join(line)}
             # 获取角色本源编号 并插入数据
             sql = "SELECT COUNT(*) FROM user_benyuan"
@@ -167,7 +167,7 @@ async def role_info(uid, qz, role_name):
             output += f"> 破防：{round((pofang / 100), 1)}% | 吸血：{round((xixue / 100), 1)}%\n"
             output += f"> 法力上限：{max_fali}\n\n"
             output += "***\n"
-            output += f"<qqbot-cmd-enter text='选择角色 {role_name}' />\n"
+            output += f"<qqbot-cmd-input text='选择角色 {role_name}' show='选择角色 {role_name}' />\n"
 
             return {"type": "markdown", "content": output}
 
@@ -549,7 +549,7 @@ async def role_bag(uid, qz, page_num=1):
             for i in result:
                 role_id, role_name, dengji = i
                 stage = await role_stage(role_name, dengji)
-                role_button = f"<qqbot-cmd-enter text='角色属性 {role_id}' />"
+                role_button = f"<qqbot-cmd-input text='角色属性 {role_id}' show='角色属性 {role_id}' />"
                 output += f"「{role_id}」 {role_button} Lv.{dengji}[{stage}]\n"
 
             output += f"***\n"
@@ -561,7 +561,7 @@ async def role_bag(uid, qz, page_num=1):
 
             output += f"***\n"
 
-            output += f"<qqbot-cmd-enter text='角色背包 {page_num - 1}' /> | <qqbot-cmd-input text='角色背包 ' show='跳转【页数】' /> |<qqbot-cmd-enter text='角色背包 {page_num + 1}' />"
+            output += f"<qqbot-cmd-input text='角色背包 {page_num - 1}' show='角色背包 {page_num - 1}' /> | <qqbot-cmd-input text='角色背包 ' show='跳转【页数】' /> |<qqbot-cmd-input text='角色背包 {page_num + 1}' show='角色背包 {page_num + 1}' />"
 
             kj = await all_write_command(uid, (f"出战", "物品背包", "当前角色"))
 
@@ -611,7 +611,7 @@ async def item_bag(uid, qz, page_num=1):
                     item_type = "道具"
                 elif item_type == 4:
                     item_type = "丹药"
-                item_button = f"<qqbot-cmd-enter text='物品信息 {item_name}' />"
+                item_button = f"<qqbot-cmd-input text='物品信息 {item_name}' show='物品信息 {item_name}' />"
                 output += f"〔{item_type}〕{item_button}×{item_num}\n"
 
             output += f"> 点击蓝字可查看物品信息噢~\n"
@@ -622,7 +622,7 @@ async def item_bag(uid, qz, page_num=1):
             lingshi, xianyu = await cursor.fetchone()
             output += f"**灵石：** {lingshi}\n**仙玉：** {xianyu}\n"
 
-            output += f"<qqbot-cmd-enter text='物品背包 {page_num - 1}' /> | <qqbot-cmd-input text='物品背包 ' show='跳转【页数】' /> |<qqbot-cmd-enter text='物品背包 {page_num + 1}' />"
+            output += f"<qqbot-cmd-input text='物品背包 {page_num - 1}' show='物品背包 {page_num - 1}' /> | <qqbot-cmd-input text='物品背包 ' show='跳转【页数】' /> |<qqbot-cmd-input text='物品背包 {page_num + 1}' show='物品背包 {page_num + 1}' />"
 
             kj = await all_write_command(uid, (f"角色背包", f"物品信息 {item_name}"))
 

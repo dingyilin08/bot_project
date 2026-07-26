@@ -519,18 +519,18 @@ def format_equip_bag_markdown(equipments, page, total_pages, role_info):
             lines.append(f"**[{equip['id']}] {equip['template_name']}** {quality_icon}{equip['quality']}+{equip['level']}\n")
 
             if equip['is_equipped']:
-                lines.append(f"> <qqbot-cmd-enter text='卸下装备 {PART_CN.get(equip['part'])}' /> <qqbot-cmd-enter text='装备详情 {equip['id']}' /> <qqbot-cmd-enter text='强化装备 {equip['id']}' />\n")
+                lines.append(f"> <qqbot-cmd-input text='卸下装备 {PART_CN.get(equip['part'])}' show='卸下装备 {PART_CN.get(equip['part'])}' /> <qqbot-cmd-input text='装备详情 {equip['id']}' show='装备详情 {equip['id']}' /> <qqbot-cmd-input text='强化装备 {equip['id']}' show='强化装备 {equip['id']}' />\n")
             else:
-                lines.append(f"> <qqbot-cmd-enter text='穿戴装备 {equip['id']}' /> <qqbot-cmd-enter text='装备详情 {equip['id']}' /> <qqbot-cmd-enter text='强化装备 {equip['id']}' /> <qqbot-cmd-enter text='出售装备 {equip['id']}' />\n")
+                lines.append(f"> <qqbot-cmd-input text='穿戴装备 {equip['id']}' show='穿戴装备 {equip['id']}' /> <qqbot-cmd-input text='装备详情 {equip['id']}' show='装备详情 {equip['id']}' /> <qqbot-cmd-input text='强化装备 {equip['id']}' show='强化装备 {equip['id']}' /> <qqbot-cmd-input text='出售装备 {equip['id']}' show='出售装备 {equip['id']}' />\n")
 
     if total_pages > 1:
         prev_page = page - 1 if page > 1 else 1
         next_page = page + 1 if page < total_pages else page
-        lines.append(f"<qqbot-cmd-enter text='装备背包 {prev_page}' /> | <qqbot-cmd-input text='装备背包' show='跳转[页码]' /> | <qqbot-cmd-enter text='装备背包 {next_page}' />\n")
+        lines.append(f"<qqbot-cmd-input text='装备背包 {prev_page}' show='装备背包 {prev_page}' /> | <qqbot-cmd-input text='装备背包' show='跳转[页码]' /> | <qqbot-cmd-input text='装备背包 {next_page}' show='装备背包 {next_page}' />\n")
 
     lines.append("***")
 
-    lines.append(f"<qqbot-cmd-enter text='当前装备' /> | <qqbot-cmd-enter text='当前角色' /> | <qqbot-cmd-enter text='角色背包' />")
+    lines.append(f"<qqbot-cmd-input text='当前装备' show='当前装备' /> | <qqbot-cmd-input text='当前角色' show='当前角色' /> | <qqbot-cmd-input text='角色背包' show='角色背包' />")
 
     return "\n".join(lines)
 
@@ -612,7 +612,7 @@ def format_current_equip_markdown(role_info, equipped_items, equip_bonus):
         lines.append("无装备加成")
 
     lines.append("***")
-    lines.append("<qqbot-cmd-enter text='装备背包' /> | <qqbot-cmd-enter text='角色背包' /> | <qqbot-cmd-enter text='收回' />")
+    lines.append("<qqbot-cmd-input text='装备背包' show='装备背包' /> | <qqbot-cmd-input text='角色背包' show='角色背包' /> | <qqbot-cmd-input text='收回' show='收回' />")
 
     return "\n".join(lines)
 
@@ -676,7 +676,7 @@ def format_wear_result_markdown(role_info, equip, old_equip=None, attrs_change=N
         lines.append(f"{' | '.join(changes)}")
 
     lines.append("***")
-    lines.append("<qqbot-cmd-enter text='当前装备' /> | <qqbot-cmd-enter text='装备背包' />")
+    lines.append("<qqbot-cmd-input text='当前装备' show='当前装备' /> | <qqbot-cmd-input text='装备背包' show='装备背包' />")
 
     return "\n".join(lines)
 
@@ -726,7 +726,7 @@ def format_remove_result_markdown(role_info, equip, final_bonus):
         lines.append("> 无属性变化")
 
     lines.append("***")
-    lines.append("<qqbot-cmd-enter text='当前装备' /> | <qqbot-cmd-enter text='装备背包' />")
+    lines.append("<qqbot-cmd-input text='当前装备' show='当前装备' /> | <qqbot-cmd-input text='装备背包' show='装备背包' />")
 
     return "\n".join(lines)
 
@@ -784,9 +784,9 @@ def format_enhance_result_markdown(role_info, equip, success, new_level, old_att
 
     lines.append("***")
     if equip['level'] < 10:
-        lines.append("<qqbot-cmd-enter text='强化装备 {}' /> | <qqbot-cmd-enter text='装备详情 {}' />".format(equip['id'], equip['id']))
+        lines.append("<qqbot-cmd-input text='强化装备 {}' show='强化装备 {}' /> | <qqbot-cmd-input text='装备详情 {}' show='装备详情 {}' />".format(equip['id'], equip['id']))
     else:
-        lines.append("<qqbot-cmd-enter text='装备详情 {}' /> | <qqbot-cmd-enter text='当前装备' />".format(equip['id']))
+        lines.append("<qqbot-cmd-input text='装备详情 {}' show='装备详情 {}' /> | <qqbot-cmd-input text='当前装备' show='当前装备' />".format(equip['id']))
 
     return "\n".join(lines)
 
@@ -816,7 +816,7 @@ def format_sell_result_markdown(role_info, equip, sell_info, current_lingshi):
     lines.append("")
     lines.append(f"**当前灵石：** {current_lingshi}")
     lines.append("***")
-    lines.append("<qqbot-cmd-enter text='装备背包' /> | <qqbot-cmd-enter text='当前装备' />")
+    lines.append("<qqbot-cmd-input text='装备背包' show='装备背包' /> | <qqbot-cmd-input text='当前装备' show='当前装备' />")
 
     return "\n".join(lines)
 
@@ -888,9 +888,9 @@ def format_equip_detail_markdown(equip, final_attrs, role_info=None, equipped_in
     lines.append("***")
 
     if not equipped_info:
-        lines.append("<qqbot-cmd-enter text='穿戴装备 {}' /> | <qqbot-cmd-enter text='强化装备 {}' /> | <qqbot-cmd-enter text='出售装备 {}' /> | <qqbot-cmd-enter text='装备背包' />".format(equip['id'], equip['id'], equip['id']))
+        lines.append("<qqbot-cmd-input text='穿戴装备 {}' show='穿戴装备 {}' /> | <qqbot-cmd-input text='强化装备 {}' show='强化装备 {}' /> | <qqbot-cmd-input text='出售装备 {}' show='出售装备 {}' /> | <qqbot-cmd-input text='装备背包' show='装备背包' />".format(equip['id'], equip['id'], equip['id']))
     else:
-        lines.append("<qqbot-cmd-enter text='卸下装备 {}' /> | <qqbot-cmd-enter text='强化装备 {}' /> | <qqbot-cmd-enter text='装备背包' />".format(PART_CN.get(equip['part'], equip['part']), equip['id']))
+        lines.append("<qqbot-cmd-input text='卸下装备 {}' show='卸下装备 {}' /> | <qqbot-cmd-input text='强化装备 {}' show='强化装备 {}' /> | <qqbot-cmd-input text='装备背包' show='装备背包' />".format(PART_CN.get(equip['part'], equip['part']), equip['id']))
 
     return "\n".join(lines)
 
@@ -917,7 +917,7 @@ async def equip_bag(uid, qz, page=1):
             if role_result is None:
                 lines = []
                 lines.append("未出战角色，请先出战[角色ID]")
-                lines.append("<qqbot-cmd-enter text='角色背包' /> | <qqbot-cmd-input text='出战' show='出战' /> | <qqbot-cmd-enter text='收回' />")
+                lines.append("<qqbot-cmd-input text='角色背包' show='角色背包' /> | <qqbot-cmd-input text='出战' show='出战' /> | <qqbot-cmd-input text='收回' show='收回' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             role_id, role_name, role_level, role_world = role_result
@@ -935,7 +935,7 @@ async def equip_bag(uid, qz, page=1):
                 lines.append("")
                 lines.append(f"> 页码超出范围，当前只有{total_pages}页")
                 lines.append("***")
-                lines.append(f"<qqbot-cmd-enter text='装备背包' /> | <qqbot-cmd-enter text='装备背包 {total_pages}' />")
+                lines.append(f"<qqbot-cmd-input text='装备背包' show='装备背包' /> | <qqbot-cmd-input text='装备背包 {total_pages}' show='装备背包 {total_pages}' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             role_info = {'id': role_id, 'name': role_name, 'level': role_level, 'world': role_world}
@@ -957,7 +957,7 @@ async def current_equip(uid, qz):
             if role_result is None:
                 lines = []
                 lines.append("未出战角色，请先出战[角色ID]")
-                lines.append("<qqbot-cmd-enter text='角色背包' /> | <qqbot-cmd-input text='出战' show='出战' /> | <qqbot-cmd-enter text='收回' />")
+                lines.append("<qqbot-cmd-input text='角色背包' show='角色背包' /> | <qqbot-cmd-input text='出战' show='出战' /> | <qqbot-cmd-input text='收回' show='收回' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             role_id, role_name, role_level, role_world = role_result
@@ -987,7 +987,7 @@ async def wear_equip(uid, qz, equip_instance_id):
         lines.append("> 正确指令：穿戴装备 装备编号")
         lines.append("> 示例：穿戴装备 1")
         lines.append("***")
-        lines.append("<qqbot-cmd-enter text='装备背包' /> | <qqbot-cmd-enter text='帮助' />")
+        lines.append("<qqbot-cmd-input text='装备背包' show='装备背包' /> | <qqbot-cmd-input text='帮助' show='帮助' />")
         return {"type": "markdown", "content": "\n".join(lines)}
 
     async with connect_mysql() as conn:
@@ -1009,7 +1009,7 @@ async def wear_equip(uid, qz, equip_instance_id):
                 lines.append("> 装备不存在或不属于你")
                 lines.append("> 请检查装备编号是否正确")
                 lines.append("***")
-                lines.append("<qqbot-cmd-enter text='装备背包' /> | <qqbot-cmd-input text='装备详情' show='装备详情' />")
+                lines.append("<qqbot-cmd-input text='装备背包' show='装备背包' /> | <qqbot-cmd-input text='装备详情' show='装备详情' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             equip = {
@@ -1030,7 +1030,7 @@ async def wear_equip(uid, qz, equip_instance_id):
                 lines.append("> 装备不存在或不属于你")
                 lines.append("> 请检查装备编号是否正确")
                 lines.append("***")
-                lines.append("<qqbot-cmd-enter text='装备背包' /> | <qqbot-cmd-input text='装备详情' show='装备详情' />")
+                lines.append("<qqbot-cmd-input text='装备背包' show='装备背包' /> | <qqbot-cmd-input text='装备详情' show='装备详情' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             if equip['is_equipped'] and equip['equipped_role_id']:
@@ -1045,7 +1045,7 @@ async def wear_equip(uid, qz, equip_instance_id):
                     lines.append(f"> 该装备已被角色[{equip['equipped_role_id']}]{other_role[0]} Lv.{other_role[1]}穿戴")
                     lines.append("> 请先让该角色卸下此装备")
                     lines.append("***")
-                    lines.append("<qqbot-cmd-enter text='装备背包' /> | <qqbot-cmd-enter text='角色背包' />")
+                    lines.append("<qqbot-cmd-input text='装备背包' show='装备背包' /> | <qqbot-cmd-input text='角色背包' show='角色背包' />")
                     return {"type": "markdown", "content": "\n".join(lines)}
 
             sql = "SELECT id, `name`, dengji, world FROM user_role WHERE uid = %s AND is_chuzhan = 1 LIMIT 1"
@@ -1058,7 +1058,7 @@ async def wear_equip(uid, qz, equip_instance_id):
                 lines.append("")
                 lines.append("> 未出战角色，请先出战一个角色！")
                 lines.append("***")
-                lines.append("<qqbot-cmd-enter text='角色背包' /> | <qqbot-cmd-input text='出战' show='出战角色' />")
+                lines.append("<qqbot-cmd-input text='角色背包' show='角色背包' /> | <qqbot-cmd-input text='出战' show='出战角色' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             role_id, role_name, role_level, role_world = role_result
@@ -1072,7 +1072,7 @@ async def wear_equip(uid, qz, equip_instance_id):
                 lines.append(f"> 需要等级：Lv.{equip['min_level']}")
                 lines.append(f"> 当前等级：Lv.{role_level}")
                 lines.append("***")
-                lines.append("<qqbot-cmd-enter text='当前角色' /> | <qqbot-cmd-enter text='装备背包' />")
+                lines.append("<qqbot-cmd-input text='当前角色' show='当前角色' /> | <qqbot-cmd-input text='装备背包' show='装备背包' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             old_bonus = await calc_role_equip_bonus(role_id)
@@ -1147,7 +1147,7 @@ async def remove_equip(uid, qz, part_name):
         lines.append("> 可选部位：武器、头盔、铠甲、护腿、鞋子、饰品")
         lines.append("> 示例：卸下装备 武器")
         lines.append("***")
-        lines.append("<qqbot-cmd-enter text='卸下装备 武器' /> | <qqbot-cmd-enter text='当前装备' />")
+        lines.append("<qqbot-cmd-input text='卸下装备 武器' show='卸下装备 武器' /> | <qqbot-cmd-input text='当前装备' show='当前装备' />")
         return {"type": "markdown", "content": "\n".join(lines)}
 
     # 获取当前出战角色
@@ -1163,7 +1163,7 @@ async def remove_equip(uid, qz, part_name):
                 lines.append("")
                 lines.append("> 未出战角色，请先出战一个角色！")
                 lines.append("***")
-                lines.append("<qqbot-cmd-enter text='角色背包' /> | <qqbot-cmd-input text='出战' show='出战角色' />")
+                lines.append("<qqbot-cmd-input text='角色背包' show='角色背包' /> | <qqbot-cmd-input text='出战' show='出战角色' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             role_id, role_name, role_level, role_world = role_result
@@ -1184,7 +1184,7 @@ async def remove_equip(uid, qz, part_name):
                 lines.append(f"> 该部位没有装备")
                 lines.append(f"> 当前{part_cn}槽为空")
                 lines.append("***")
-                lines.append("<qqbot-cmd-enter text='当前装备' /> | <qqbot-cmd-enter text='装备背包' />")
+                lines.append("<qqbot-cmd-input text='当前装备' show='当前装备' /> | <qqbot-cmd-input text='装备背包' show='装备背包' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             equip = await get_user_equip(current_equip_id, cursor)
@@ -1195,7 +1195,7 @@ async def remove_equip(uid, qz, part_name):
                 lines.append("")
                 lines.append("> 装备不存在")
                 lines.append("***")
-                lines.append("<qqbot-cmd-enter text='当前装备' /> | <qqbot-cmd-enter text='装备背包' />")
+                lines.append("<qqbot-cmd-input text='当前装备' show='当前装备' /> | <qqbot-cmd-input text='装备背包' show='装备背包' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             # 计算卸下前后属性变化
@@ -1245,7 +1245,7 @@ async def enhance_equip(uid, qz, equip_instance_id):
         lines.append("> 正确指令：强化装备 装备编号")
         lines.append("> 示例：强化装备 1")
         lines.append("***")
-        lines.append("<qqbot-cmd-enter text='强化装备 1' /> | <qqbot-cmd-enter text='装备背包' /> | <qqbot-cmd-enter text='帮助' />")
+        lines.append("<qqbot-cmd-input text='强化装备 1' show='强化装备 1' /> | <qqbot-cmd-input text='装备背包' show='装备背包' /> | <qqbot-cmd-input text='帮助' show='帮助' />")
         return {"type": "markdown", "content": "\n".join(lines)}
 
     async with connect_mysql() as conn:
@@ -1267,7 +1267,7 @@ async def enhance_equip(uid, qz, equip_instance_id):
                 lines.append("> 装备不存在或不属于你")
                 lines.append("> 请检查装备编号是否正确")
                 lines.append("***")
-                lines.append("<qqbot-cmd-enter text='装备背包' />")
+                lines.append("<qqbot-cmd-input text='装备背包' show='装备背包' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             equip = {
@@ -1288,7 +1288,7 @@ async def enhance_equip(uid, qz, equip_instance_id):
                 lines.append("> 装备不存在或不属于你")
                 lines.append("> 请检查装备编号是否正确")
                 lines.append("***")
-                lines.append("<qqbot-cmd-enter text='装备背包' />")
+                lines.append("<qqbot-cmd-input text='装备背包' show='装备背包' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             if equip['level'] >= 10:
@@ -1298,7 +1298,7 @@ async def enhance_equip(uid, qz, equip_instance_id):
                 lines.append("> 该装备已达最高强化等级")
                 lines.append(f"> 当前等级：+10 (MAX)")
                 lines.append("***")
-                lines.append(f"<qqbot-cmd-enter text='装备详情 {equip_instance_id}' /> | <qqbot-cmd-enter text='当前装备' />")
+                lines.append(f"<qqbot-cmd-input text='装备详情 {equip_instance_id}' show='装备详情 {equip_instance_id}' /> | <qqbot-cmd-input text='当前装备' show='当前装备' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             await cursor.execute("SELECT lingshi FROM user_zt WHERE id = %s FOR UPDATE", (uid,))
@@ -1316,7 +1316,7 @@ async def enhance_equip(uid, qz, equip_instance_id):
                 lines.append(f"> 需要灵石：{cost_lingshi}")
                 lines.append(f"> 当前灵石：{current_lingshi}")
                 lines.append("***")
-                lines.append("<qqbot-cmd-enter text='副本列表' /> | <qqbot-cmd-enter text='装备详情 {}' />".format(equip_instance_id))
+                lines.append("<qqbot-cmd-input text='副本列表' show='副本列表' /> | <qqbot-cmd-input text='装备详情 {}' show='装备详情 {}' />".format(equip_instance_id))
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             target_level = current_level + 1
@@ -1376,15 +1376,15 @@ async def enhance_equip(uid, qz, equip_instance_id):
             if not success and pity_threshold > 0:
                 pity_line = f"\n> 保底进度：{new_fail_count}/{pity_threshold}"
                 markdown_content = markdown_content.replace(
-                    "\n***\n<qqbot-cmd-enter",
-                    f"{pity_line}\n***\n<qqbot-cmd-enter",
+                "\n***\n<qqbot-cmd-input",
+                f"{pity_line}\n***\n<qqbot-cmd-input",
                     1
                 )
             if success and is_pity:
                 pity_line = "\n> 🎉 保底触发！天道酬勤！"
                 markdown_content = markdown_content.replace(
-                    "\n***\n<qqbot-cmd-enter",
-                    f"{pity_line}\n***\n<qqbot-cmd-enter",
+                "\n***\n<qqbot-cmd-input",
+                f"{pity_line}\n***\n<qqbot-cmd-input",
                     1
                 )
 
@@ -1404,7 +1404,7 @@ async def equip_detail(uid, qz, equip_instance_id):
         lines.append("> 正确指令：装备详情 装备编号")
         lines.append("> 示例：装备详情 1")
         lines.append("***")
-        lines.append("<qqbot-cmd-enter text='装备背包' /> | <qqbot-cmd-enter text='装备详情 1' /> | <qqbot-cmd-enter text='帮助' />")
+        lines.append("<qqbot-cmd-input text='装备背包' show='装备背包' /> | <qqbot-cmd-input text='装备详情 1' show='装备详情 1' /> | <qqbot-cmd-input text='帮助' show='帮助' />")
         return {"type": "markdown", "content": "\n".join(lines)}
 
     # 获取装备信息
@@ -1417,7 +1417,7 @@ async def equip_detail(uid, qz, equip_instance_id):
         lines.append("> 装备不存在或不属于你")
         lines.append("> 请检查装备编号是否正确")
         lines.append("***")
-        lines.append("<qqbot-cmd-enter text='装备背包' /> | <qqbot-cmd-input text='装备详情' show='装备详情' />")
+        lines.append("<qqbot-cmd-input text='装备背包' show='装备背包' /> | <qqbot-cmd-input text='装备详情' show='装备详情' />")
         return {"type": "markdown", "content": "\n".join(lines)}
 
     final_attrs = calc_equip_final_attrs(equip)
@@ -1452,7 +1452,7 @@ async def sell_equip(uid, qz, equip_instance_id):
         lines.append("> 正确指令：出售装备 装备编号")
         lines.append("> 示例：出售装备 1")
         lines.append("***")
-        lines.append("<qqbot-cmd-enter text='装备背包' />")
+        lines.append("<qqbot-cmd-input text='装备背包' show='装备背包' />")
         return {"type": "markdown", "content": "\n".join(lines)}
 
     async with connect_mysql() as conn:
@@ -1474,7 +1474,7 @@ async def sell_equip(uid, qz, equip_instance_id):
                 lines.append("> 装备不存在或不属于你")
                 lines.append("> 请检查装备编号是否正确")
                 lines.append("***")
-                lines.append("<qqbot-cmd-enter text='装备背包' />")
+                lines.append("<qqbot-cmd-input text='装备背包' show='装备背包' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             equip = {
@@ -1495,7 +1495,7 @@ async def sell_equip(uid, qz, equip_instance_id):
                 lines.append("> 装备不存在或不属于你")
                 lines.append("> 请检查装备编号是否正确")
                 lines.append("***")
-                lines.append("<qqbot-cmd-enter text='装备背包' />")
+                lines.append("<qqbot-cmd-input text='装备背包' show='装备背包' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             if equip['is_equipped']:
@@ -1505,7 +1505,7 @@ async def sell_equip(uid, qz, equip_instance_id):
                 lines.append("> 该装备当前处于穿戴状态，无法直接出售")
                 lines.append("> 请先卸下装备后再出售")
                 lines.append("***")
-                lines.append("<qqbot-cmd-enter text='卸下装备 {}' /> | <qqbot-cmd-enter text='装备详情 {}' />".format(PART_CN.get(equip['part'], equip['part']), equip_instance_id))
+                lines.append("<qqbot-cmd-input text='卸下装备 {}' show='卸下装备 {}' /> | <qqbot-cmd-input text='装备详情 {}' show='装备详情 {}' />".format(PART_CN.get(equip['part'], equip['part']), equip_instance_id))
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             sell_info = calc_equip_sell_info(equip['min_level'], equip['quality'], equip['level'])

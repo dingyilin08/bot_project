@@ -944,14 +944,14 @@ async def ck_yaotian(uid, qz):
                 remain = FARM_MATURE_SECONDS - (now - int(slot.get("time", 0)))
                 if remain <= 0:
                     mature_count += 1
-                    lines.append(f"**药田{idx}** | {seed_name} | <qqbot-cmd-enter text='采摘 {idx}' />")
+                    lines.append(f"**药田{idx}** | {seed_name} | <qqbot-cmd-input text='采摘 {idx}' show='采摘：{seed_name}' />")
                 else:
-                    lines.append(f"**药田{idx}** | {seed_name} | ⏳ 剩余 {_format_seconds(remain)} <qqbot-cmd-enter text='施肥 {idx}' />")
+                    lines.append(f"**药田{idx}** | {seed_name} | ⏳ 剩余 {_format_seconds(remain)} <qqbot-cmd-input text='施肥 {idx}' show='培育：{seed_name}' />")
 
             lines.append("***")
             lines.append(f"> 已成熟药田：{mature_count} 块")
-            lines.append("<qqbot-cmd-enter text='一键采摘' /> | <qqbot-cmd-enter text='种子背包' />")
-            lines.append("<qqbot-cmd-enter text='种子商店' /> | <qqbot-cmd-input text='播种 ' show='播种*' />")
+            lines.append("<qqbot-cmd-input text='一键采摘' show='一键采摘' /> | <qqbot-cmd-input text='种子背包' show='种子背包' />")
+            lines.append("<qqbot-cmd-input text='种子商店' show='种子商店' /> | <qqbot-cmd-input text='播种 ' show='播种*' />")
             lines.append("<qqbot-cmd-input text='解锁药田 ' show='解锁药田*' /> | <qqbot-cmd-input text='施肥 ' show='施肥*' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
@@ -1010,14 +1010,14 @@ async def zz_shangdian(uid, qz, param):
             for row in seeds:
                 seed_id, seed_name, _, _, price, tier, _ = row
                 lines.append(f"[{seed_id}] {seed_name} | {TIER_NAME.get(tier, f'品阶{tier}')} | {price}灵石")
-                lines.append(f"> <qqbot-cmd-enter text='购买种子 {seed_name}-1' /> | <qqbot-cmd-enter text='购买种子 {seed_name}-5' />")
+                lines.append(f"> <qqbot-cmd-input text='购买种子 {seed_name}-1' show='购买×1' /> | <qqbot-cmd-input text='购买种子 {seed_name}-5' show='购买×5' />")
 
             lines.append("***")
             prev_page = max(1, page - 1)
             next_page = min(total_pages, page + 1)
-            lines.append(f"<qqbot-cmd-enter text='种子商店 {prev_page}' /> | <qqbot-cmd-enter text='种子商店 {next_page}' />")
-            lines.append("<qqbot-cmd-input text='丹方列表 ' show='丹方列表' /> | <qqbot-cmd-enter text='种子背包' />")
-            lines.append("<qqbot-cmd-enter text='种子商店 斗破苍穹' /> | <qqbot-cmd-enter text='种子商店 仙逆' />")
+            lines.append(f"<qqbot-cmd-input text='种子商店 {prev_page}' show='种子商店 {prev_page}' /> | <qqbot-cmd-input text='种子商店 {next_page}' show='种子商店 {next_page}' />")
+            lines.append("<qqbot-cmd-input text='丹方列表 ' show='丹方列表' /> | <qqbot-cmd-input text='种子背包' show='种子背包' />")
+            lines.append("<qqbot-cmd-input text='种子商店 斗破苍穹' show='种子商店 斗破苍穹' /> | <qqbot-cmd-input text='种子商店 仙逆' show='种子商店 仙逆' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
 # 种子背包
@@ -1044,7 +1044,7 @@ async def zz_beibao(uid, qz):
                 lines.append("##### 种子背包")
                 lines.append("> 你的种子背包为空。")
                 lines.append("***")
-                lines.append("<qqbot-cmd-enter text='种子商店' />")
+                lines.append("<qqbot-cmd-input text='种子商店' show='种子商店' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             lines = []
@@ -1054,7 +1054,7 @@ async def zz_beibao(uid, qz):
                 _, zz_num, seed_name, tier, world = row
                 lines.append(f"{seed_name} | {world}·{TIER_NAME.get(tier, f'品阶{tier}')} | 数量 {zz_num}")
             lines.append("***")
-            lines.append("<qqbot-cmd-enter text='种子商店' /> | <qqbot-cmd-input text='一键播种 ' show='一键播种*' />")
+            lines.append("<qqbot-cmd-input text='种子商店' show='种子商店' /> | <qqbot-cmd-input text='一键播种 ' show='一键播种*' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
 # 出售药材
@@ -1103,7 +1103,7 @@ async def sell_herb(uid, qz, param):
             lines.append(f"获得灵石：{gain_lingshi}")
             lines.append(f"当前灵石：{now_lingshi}")
             lines.append("***")
-            lines.append("<qqbot-cmd-enter text='物品背包' /> | <qqbot-cmd-input text='出售药材 ' show='继续出售*' />")
+            lines.append("<qqbot-cmd-input text='物品背包' show='物品背包' /> | <qqbot-cmd-input text='出售药材 ' show='继续出售*' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
 # 购买种子
@@ -1160,7 +1160,7 @@ async def gm_zhongzi(uid, qz, param):
             lines.append(f"消耗灵石：{total_cost}")
             lines.append(f"剩余灵石：{left_lingshi}")
             lines.append("***")
-            lines.append("<qqbot-cmd-enter text='种子背包' /> | <qqbot-cmd-input text='播种 ' show='播种*' />")
+            lines.append("<qqbot-cmd-input text='种子背包' show='种子背包' /> | <qqbot-cmd-input text='播种 ' show='播种*' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
 # 播种
@@ -1219,7 +1219,7 @@ async def bo_zhong(uid, qz, param):
             lines.append(f"药田{plot_no} 已播种：{seed['name']}")
             lines.append(f"预计成熟：{_format_seconds(FARM_MATURE_SECONDS)}")
             lines.append("***")
-            lines.append("<qqbot-cmd-enter text='药园' /> | <qqbot-cmd-input text='一键播种 ' show='一键播种*' />")
+            lines.append("<qqbot-cmd-input text='药园' show='药园' /> | <qqbot-cmd-input text='一键播种 ' show='一键播种*' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
 # 一键播种
@@ -1282,7 +1282,7 @@ async def yj_bozhong(uid, qz, seed_name):
             lines.append(f"播种药田数量：{plant_num}")
             lines.append(f"预计成熟：{_format_seconds(FARM_MATURE_SECONDS)}")
             lines.append("***")
-            lines.append("<qqbot-cmd-enter text='药园' /> | <qqbot-cmd-enter text='种子背包' />")
+            lines.append("<qqbot-cmd-input text='药园' show='药园' /> | <qqbot-cmd-input text='种子背包' show='种子背包' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
 # 采摘
@@ -1334,7 +1334,7 @@ async def cai_zhai(uid, qz, param):
             lines.append(f"药田{plot_no}：{seed['name']}")
             lines.append(f"获得药材：{herb_name} x {drop_num}")
             lines.append("***")
-            lines.append("<qqbot-cmd-enter text='药园' /> | <qqbot-cmd-input text='播种 ' show='继续播种*' />")
+            lines.append("<qqbot-cmd-input text='药园' show='药园' /> | <qqbot-cmd-input text='播种 ' show='继续播种*' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
 # 一键采摘
@@ -1399,7 +1399,7 @@ async def yj_caizhai(uid, qz):
             for idx, herb_name, drop_num in drops:
                 lines.append(f"药田{idx}：{herb_name} x {drop_num}")
             lines.append("***")
-            lines.append("<qqbot-cmd-enter text='药园' /> | <qqbot-cmd-input text='一键播种 ' show='一键播种*' />")
+            lines.append("<qqbot-cmd-input text='药园' show='药园' /> | <qqbot-cmd-input text='一键播种 ' show='一键播种*' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
 # 解锁药田
@@ -1446,7 +1446,7 @@ async def js_yaotian(uid, qz, param):
             lines.append(f"已解锁药田{plot_no}")
             lines.append(f"消耗仙玉：{cost}")
             lines.append("***")
-            lines.append("<qqbot-cmd-enter text='药园' />")
+            lines.append("<qqbot-cmd-input text='药园' show='药园' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
 # 施肥
@@ -1493,7 +1493,7 @@ async def shi_fei(uid, qz, param):
             lines.append(f"药田{plot_no}已立即成熟，可直接采摘。")
             lines.append(f"消耗：{used_item_name} x1")
             lines.append("***")
-            lines.append(f"<qqbot-cmd-enter text='采摘 {plot_no}' /> | <qqbot-cmd-enter text='药园' />")
+            lines.append(f"<qqbot-cmd-input text='采摘 {plot_no}' show='采摘 {plot_no}' /> | <qqbot-cmd-input text='药园' show='药园' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
 # 查看丹炉
@@ -1539,16 +1539,16 @@ async def ck_danlu(uid, qz):
                 fire_count = int(slot.get("fire_count", 0))
                 if remain <= 0:
                     lines.append(f"**丹炉{idx}** | {recipe_name}")
-                    lines.append(f"> ✅ 炼制完成 <qqbot-cmd-enter text='收丹 {idx}' />")
+                    lines.append(f"> ✅ 炼制完成 <qqbot-cmd-input text='收丹 {idx}' show='收取：{recipe_name}' />")
                 else:
                     lines.append(f"**丹炉{idx}** | {recipe_name}")
-                    lines.append(f"> ⏳ 剩余 {_format_seconds(remain)} | <qqbot-cmd-enter text='加速炼丹 {idx}' /> | 帮其丹炉 <qqbot-cmd-enter text='添火 {uid}-{idx}' />")
+                    lines.append(f"> ⏳ 剩余 {_format_seconds(remain)} | <qqbot-cmd-input text='加速炼丹 {idx}' show='加速：{recipe_name}' /> | 帮其丹炉 <qqbot-cmd-input text='添火 {uid}-{idx}' show='添火助炼' />")
 
             lines.append("***")
-            lines.append("<qqbot-cmd-enter text='一键收丹' /> | <qqbot-cmd-enter text='丹方列表' />")
+            lines.append("<qqbot-cmd-input text='一键收丹' show='一键收丹' /> | <qqbot-cmd-input text='丹方列表' show='丹方列表' />")
             lines.append("<qqbot-cmd-input text='炼丹 ' show='炼丹*' /> | <qqbot-cmd-input text='收丹 ' show='收丹*' />")
             lines.append("<qqbot-cmd-input text='解锁丹炉 ' show='解锁丹炉*' /> | <qqbot-cmd-input text='加速炼丹 ' show='加速炼丹*' />")
-            lines.append("<qqbot-cmd-enter text='添火次数' /> | <qqbot-cmd-input text='添火 ' show='添火 目标UID-炉号' />")
+            lines.append("<qqbot-cmd-input text='添火次数' show='添火次数' /> | <qqbot-cmd-input text='添火 ' show='添火 目标UID-炉号' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
 # 丹方列表
@@ -1613,8 +1613,8 @@ async def df_liebiao(uid, qz, param):
             lines.append("***")
             prev_page = max(1, page - 1)
             next_page = min(total_pages, page + 1)
-            lines.append(f"<qqbot-cmd-enter text='丹方列表 {prev_page}' /> | <qqbot-cmd-enter text='丹方列表 {next_page}' />")
-            lines.append("<qqbot-cmd-input text='炼丹 ' show='炼丹*' /> | <qqbot-cmd-enter text='查看丹炉' />")
+            lines.append(f"<qqbot-cmd-input text='丹方列表 {prev_page}' show='丹方列表 {prev_page}' /> | <qqbot-cmd-input text='丹方列表 {next_page}' show='丹方列表 {next_page}' />")
+            lines.append("<qqbot-cmd-input text='炼丹 ' show='炼丹*' /> | <qqbot-cmd-input text='查看丹炉' show='查看丹炉' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
 # 炼丹
@@ -1709,7 +1709,7 @@ async def lian_dan(uid, qz, param):
             lines.append(f"炼制时长：{_format_seconds(ALCHEMY_SECONDS)}")
             lines.append("成功率：90%（10%炸炉）")
             lines.append("***")
-            lines.append("<qqbot-cmd-enter text='查看丹炉' /> | <qqbot-cmd-input text='加速炼丹 ' show='加速炼丹*' />")
+            lines.append("<qqbot-cmd-input text='查看丹炉' show='查看丹炉' /> | <qqbot-cmd-input text='加速炼丹 ' show='加速炼丹*' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
 # 收丹
@@ -1765,7 +1765,7 @@ async def shou_dan(uid, qz, param):
             await conn.commit()
 
             lines.append("***")
-            lines.append("<qqbot-cmd-enter text='查看丹炉' /> | <qqbot-cmd-enter text='一键收丹' />")
+            lines.append("<qqbot-cmd-input text='查看丹炉' show='查看丹炉' /> | <qqbot-cmd-input text='一键收丹' show='一键收丹' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
 # 一键收丹
@@ -1838,7 +1838,7 @@ async def yj_shoudan(uid, qz):
                 else:
                     lines.append(f"丹炉{idx} | {recipe_name} | ❌ {extra}")
             lines.append("***")
-            lines.append("<qqbot-cmd-enter text='查看丹炉' /> | <qqbot-cmd-input text='炼丹 ' show='炼丹*' />")
+            lines.append("<qqbot-cmd-input text='查看丹炉' show='查看丹炉' /> | <qqbot-cmd-input text='炼丹 ' show='炼丹*' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
 # 服丹
@@ -1981,7 +1981,7 @@ async def fu_dan(uid, qz, param):
                 lines.append(f"> 灵石 + {lingshi_add}")
 
             lines.append("***")
-            lines.append("<qqbot-cmd-enter text='当前角色' /> | <qqbot-cmd-enter text='物品背包' />")
+            lines.append("<qqbot-cmd-input text='当前角色' show='当前角色' /> | <qqbot-cmd-input text='物品背包' show='物品背包' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
 # 解锁丹炉
@@ -2045,7 +2045,7 @@ async def js_danlu(uid, qz, param):
             lines.append(f"已解锁丹炉{furnace_no}")
             lines.append(f"消耗仙玉：{cost}")
             lines.append("***")
-            lines.append("<qqbot-cmd-enter text='查看丹炉' />")
+            lines.append("<qqbot-cmd-input text='查看丹炉' show='查看丹炉' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
 # 添火次数
@@ -2231,7 +2231,7 @@ async def th_liandan(uid, qz, param):
             else:
                 lines.append(f"当前剩余：{_format_seconds(remain_after)}")
             lines.append("***")
-            lines.append("<qqbot-cmd-enter text='添火次数' />")
+            lines.append("<qqbot-cmd-input text='添火次数' show='添火次数' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
 
@@ -2271,5 +2271,5 @@ async def js_liandan(uid, qz, param):
             lines.append(f"丹炉{furnace_no}已立即完成炼制，可直接收丹。")
             lines.append("消耗：炼丹加速卡 x1")
             lines.append("***")
-            lines.append(f"<qqbot-cmd-enter text='收丹 {furnace_no}' /> | <qqbot-cmd-enter text='查看丹炉' />")
+            lines.append(f"<qqbot-cmd-input text='收丹 {furnace_no}' show='收丹 {furnace_no}' /> | <qqbot-cmd-input text='查看丹炉' show='查看丹炉' />")
             return {"type": "markdown", "content": "\n".join(lines)}

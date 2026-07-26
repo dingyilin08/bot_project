@@ -217,7 +217,7 @@ async def show_shop(uid, qz, page=1):
     lines.extend([
         "***",
         "便捷道具只缩短等待或补充可玩次数，不直接出售装备、技能与副本稀有材料。",
-        f"<qqbot-cmd-enter text='商城 {max(1, page - 1)}' /> | <qqbot-cmd-enter text='商城 {min(total_pages, page + 1)}' />",
+        f"<qqbot-cmd-input text='商城 {max(1, page - 1)}' show='商城 {max(1, page - 1)}' /> | <qqbot-cmd-input text='商城 {min(total_pages, page + 1)}' show='商城 {min(total_pages, page + 1)}' />",
         "<qqbot-cmd-input text='购买商品 ' show='购买商品 名称-数量' /> | <qqbot-cmd-input text='使用体力药 ' show='使用体力药 数量' />",
     ])
     return {"type": "markdown", "content": "\n".join(lines)}
@@ -287,7 +287,7 @@ async def buy_shop_item(uid, qz, param):
         "content": "\n".join((
             "##### 购买成功", f"获得：{item['name']} x {count}", f"消耗灵石：{total_price}",
             f"剩余灵石：{balance}", "***",
-            "<qqbot-cmd-enter text='商城' /> | <qqbot-cmd-enter text='物品背包' />",
+            "<qqbot-cmd-input text='商城' show='商城' /> | <qqbot-cmd-input text='物品背包' show='物品背包' />",
         )),
     }
 
@@ -341,6 +341,6 @@ async def use_stamina_potion(uid, qz, param):
         "content": "\n".join((
             "##### 体力恢复成功", f"使用体力药：x {count}", f"恢复历练次数：+{restore}",
             f"当前副本历练次数：{new_remaining}/{DAILY_CHALLENGE_CAP}", "***",
-            "<qqbot-cmd-enter text='副本菜单' /> | <qqbot-cmd-enter text='副本列表' />",
+            "<qqbot-cmd-input text='副本菜单' show='副本菜单' /> | <qqbot-cmd-input text='副本列表' show='副本列表' />",
         )),
     }
