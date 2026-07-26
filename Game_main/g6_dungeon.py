@@ -1495,6 +1495,9 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None):
 
     # 创建战斗实体（不占用数据库连接）
     player_entity = CombatEntity(role_name, player_role_data, player_skills)
+    # P1：出战灵兽以可序列化 Buff 注入战斗快照，重启后不会丢失效果。
+    from Game_main.g12_spirit_beast import apply_active_beast_to_entity
+    active_beast = await apply_active_beast_to_entity(uid, player_entity)
     monster_attr['entity_type'] = target_monster.get('type', 'normal')  # 'normal' 或 'boss'
     monster_entity = CombatEntity(target_monster['name'], monster_attr, monster_skills)
 
@@ -1507,6 +1510,12 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None):
         if active_session:
             return render_battle_panel(active_session, "你已有进行中的战斗，请先完成该回合。")
         combat_manager = CombatManager(player_entity, monster_entity, max_rounds=50)
+        if active_beast:
+            combat_manager._log(
+                "spirit_beast",
+                f"🐾 出战灵兽「{active_beast['name']}」发动{active_beast['combat_bonus']['label']}，"
+                f"获得{active_beast['combat_bonus']['value']}%灵契加成！"
+            )
         session = await service.create_battle(
             uid=uid,
             manager=combat_manager,

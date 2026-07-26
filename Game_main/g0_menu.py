@@ -58,6 +58,12 @@ MENU_CONFIG = {
         "icon": "🏪",
         "description": "购买体力、药园与炼丹便利道具",
         "commands": ["商城"]
+    },
+    "spirit_beast": {
+        "name": "灵兽园",
+        "icon": "🐾",
+        "description": "寻访、出战与本源协同",
+        "commands": ["灵兽", "灵兽寻访"]
     }
 }
 
@@ -206,6 +212,7 @@ async def show_main_menu(uid, qz):
     output += "<qqbot-cmd-input text='药园菜单' show='药园菜单' /> | <qqbot-cmd-input text='炼丹菜单' show='炼丹菜单' />\n\n"
 
     output += "<qqbot-cmd-input text='商城' show='商城' /> | <qqbot-cmd-input text='物品背包' show='物品背包' />\n\n"
+    output += "<qqbot-cmd-input text='灵兽' show='灵兽园' /> | <qqbot-cmd-input text='灵兽寻访' show='灵兽寻访' />\n\n"
     output += "<qqbot-cmd-input text='战力菜单' show='战力菜单' /> | <qqbot-cmd-input text='玩法介绍' show='玩法介绍' />\n\n"
 
     return {"type": "markdown", "content": output}
