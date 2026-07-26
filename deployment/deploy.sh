@@ -49,7 +49,7 @@ if ! sudo systemctl restart "$SERVICE_NAME"; then
     exit 1
 fi
 
-if ! curl --fail --silent --show-error --retry 10 --retry-delay 1 http://127.0.0.1:8000/health >/dev/null; then
+if ! curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8000/health >/dev/null; then
     echo "Health check failed; restoring the previous release." >&2
     [[ -n "$PREVIOUS_RELEASE" ]] && ln -sfn "$PREVIOUS_RELEASE" "$CURRENT_LINK"
     sudo systemctl restart "$SERVICE_NAME" || true
