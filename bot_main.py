@@ -50,7 +50,7 @@ async def output_content(user_content, user_openid, qun_openid=None):
             return "该快捷指令不存在！"
 
     con_arr0, con_arr1 = await jiance(user_content)
-    send_content = await content(con_arr0, con_arr1, user_openid)
+    send_content = await content(con_arr0, con_arr1, user_openid, qun_openid)
     send_content = apply_image_mode(send_content)
 
     send_content += "\n点击快捷指令按钮可自动执行此命令，如带有*则需输入相应后缀"

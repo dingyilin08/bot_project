@@ -60,7 +60,7 @@ async def output_content(user_content, user_openid, qun_openid=None):
     # 内测群：1341185812BBA8426C8E1AD1BB254DAF
 
     con_arr0, con_arr1 = await jiance(user_content)
-    send_content = await content(con_arr0, con_arr1, user_openid)
+    send_content = await content(con_arr0, con_arr1, user_openid, qun_openid)
     send_content = apply_image_mode(send_content)
     end_time = time.perf_counter()
 

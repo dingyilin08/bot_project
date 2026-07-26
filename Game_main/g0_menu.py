@@ -213,6 +213,7 @@ async def show_main_menu(uid, qz):
 
     output += "<qqbot-cmd-input text='商城' show='商城' /> | <qqbot-cmd-input text='物品背包' show='物品背包' />\n\n"
     output += "<qqbot-cmd-input text='灵兽' show='灵兽园' /> | <qqbot-cmd-input text='灵兽寻访' show='灵兽寻访' />\n\n"
+    output += "<qqbot-cmd-input text='队伍创建' show='群内创建队伍' /> | <qqbot-cmd-input text='队伍' show='查看队伍' />\n\n"
     output += "<qqbot-cmd-input text='战力菜单' show='战力菜单' /> | <qqbot-cmd-input text='玩法介绍' show='玩法介绍' />\n\n"
 
     return {"type": "markdown", "content": output}
