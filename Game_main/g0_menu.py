@@ -213,7 +213,8 @@ async def show_main_menu(uid, qz):
 
     output += "<qqbot-cmd-input text='商城' show='商城' /> | <qqbot-cmd-input text='物品背包' show='物品背包' />\n\n"
     output += "<qqbot-cmd-input text='灵兽菜单' show='灵兽菜单' /> | <qqbot-cmd-input text='洞府菜单' show='洞府菜单' />\n\n"
-    output += "<qqbot-cmd-input text='队伍菜单' show='队伍菜单' /> | <qqbot-cmd-input text='更新日志' show='更新日志 v1.22' />\n\n"
+    output += "<qqbot-cmd-input text='队伍菜单' show='队伍菜单' /> | <qqbot-cmd-input text='宗门菜单' show='宗门菜单' />\n\n"
+    output += "<qqbot-cmd-input text='更新日志' show='更新日志 v1.22' />\n\n"
     output += "<qqbot-cmd-input text='问道札记' show='新手引导' /> | <qqbot-cmd-input text='玩法介绍' show='玩法介绍' />\n\n"
     output += "<qqbot-cmd-input text='战力菜单' show='战力菜单' />\n\n"
 
@@ -256,6 +257,18 @@ async def show_party_menu(uid, qz):
     output += "<qqbot-cmd-input text='布阵 ' show='布阵 阵法-位置*' /> | <qqbot-cmd-input text='队伍离开' show='离开队伍' />\n\n"
     output += "<qqbot-cmd-input text='道途' show='三千道途' /> | <qqbot-cmd-input text='道途开启' show='队长开启道途' />\n\n"
     output += "<qqbot-cmd-input text='队伍战斗' show='开启队伍战斗' /> | <qqbot-cmd-input text='队伍战斗状态' show='队伍战斗状态' />\n\n"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
+    return {"type": "markdown", "content": output}
+
+
+@reg_xz_func
+async def show_sect_menu(uid, qz):
+    """宗门与师徒的聚合入口。"""
+    output = "##### 🏯 宗门菜单\n\n"
+    output += "完成每日委托获得贡献，投票决定下周 PVE 便利研究；师徒之间不转移任何装备或货币。\n\n"
+    output += "<qqbot-cmd-input text='宗门' show='我的宗门' /> | <qqbot-cmd-input text='宗门列表' show='宗门列表' />\n\n"
+    output += "<qqbot-cmd-input text='宗门创建 ' show='创建宗门*' /> | <qqbot-cmd-input text='宗门委托' show='宗门委托' />\n\n"
+    output += "<qqbot-cmd-input text='师徒进度' show='师徒进度' /> | <qqbot-cmd-input text='师徒修行' show='师徒修行' />\n\n"
     output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
     return {"type": "markdown", "content": output}
 
