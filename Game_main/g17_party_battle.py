@@ -2,6 +2,7 @@
 """P1 群队伍统一回合结算：所有成员提交后按同一快照结算。"""
 
 from hashlib import sha256
+import json
 from random import Random
 from uuid import uuid4
 
@@ -14,6 +15,11 @@ ACTION_LABELS = {"普攻": "ATTACK", "防御": "DEFEND", "调息": "MEDITATE"}
 
 def normalize_action(value):
     return ACTION_LABELS.get(str(value or "").strip())
+
+
+def round_should_resolve(actions, alive_members, deadline_expired=False):
+    """全员行动或回合超时均可结算；超时成员会由系统防御。"""
+    return bool(deadline_expired) or len(actions) >= len(alive_members)
 
 
 def resolve_party_round(members, actions, enemy, seed):
@@ -64,11 +70,48 @@ async def _active_party(uid, group_openid, cursor, lock=False):
 async def _load_session(uid, cursor, lock=False):
     suffix = " FOR UPDATE" if lock else ""
     await cursor.execute(f"""
-        SELECT b.id, b.party_id, b.round_no, b.state, b.snapshot_json
+        SELECT b.id, b.party_id, b.round_no, b.state, b.snapshot_json,
+               b.deadline_at, b.deadline_at <= NOW() AS deadline_expired
         FROM party_battle_session b JOIN party_battle_member bm ON bm.session_id = b.id
         WHERE bm.uid = %s AND b.state = 'ACTIVE' LIMIT 1{suffix}
     """, (uid,))
     return await cursor.fetchone()
+
+
+async def _resolve_round_if_ready(conn, cursor, session, actions):
+    """在锁内推进一回合；回合超时时未提交成员默认防御。"""
+    session_id, _, round_no, _, raw, _, deadline_expired = session
+    snapshot = json.loads(raw)
+    alive = [member for member in snapshot["members"] if member["hp"] > 0]
+    if not round_should_resolve(actions, alive, deadline_expired):
+        return None
+
+    missing = [member["name"] for member in alive if str(member["uid"]) not in actions]
+    members, enemy, logs = resolve_party_round(
+        snapshot["members"], actions, snapshot["enemy"], f"{session_id}:{round_no}"
+    )
+    snapshot.update({"members": members, "enemy": enemy})
+    if missing:
+        logs.insert(0, f"回合超时，{'、'.join(missing)}由系统托管为防御。")
+    if enemy["hp"] <= 0:
+        await cursor.execute(
+            "UPDATE party_battle_session SET state = 'COMPLETED', snapshot_json = %s WHERE id = %s",
+            (json.dumps(snapshot, ensure_ascii=False), session_id),
+        )
+        for member in members:
+            await cursor.execute("UPDATE user_zt SET lingshi = lingshi + 60 WHERE id = %s", (member["uid"],))
+        return {"type": "markdown", "content": "##### 🏆 队伍战斗胜利\n\n" + "\n".join(f"> {line}" for line in logs) + "\n\n每位参战道友获得 **60 灵石**。"}
+    if not any(member["hp"] > 0 for member in members):
+        await cursor.execute(
+            "UPDATE party_battle_session SET state = 'FAILED', snapshot_json = %s WHERE id = %s",
+            (json.dumps(snapshot, ensure_ascii=False), session_id),
+        )
+        return {"type": "markdown", "content": "##### 队伍战斗结束\n\n全员力竭，本次未获得胜利奖励。"}
+    await cursor.execute(
+        "UPDATE party_battle_session SET round_no = round_no + 1, snapshot_json = %s, deadline_at = DATE_ADD(NOW(), INTERVAL 90 SECOND) WHERE id = %s",
+        (json.dumps(snapshot, ensure_ascii=False), session_id),
+    )
+    return _render(session_id, round_no + 1, snapshot, set(), "\n".join(logs))
 
 
 def _render(session_id, round_no, snapshot, submitted, notice=""):
@@ -113,8 +156,7 @@ async def party_battle_start(uid, qz, group_openid):
             total_atk = sum(item["attack"] for item in members)
             snapshot = {"members": members, "enemy": {"name": "道途守关者", "hp": int(total_hp * 0.75), "max_hp": int(total_hp * 0.75), "attack": max(1, int(total_atk / len(members) * 0.55)), "formation": formation}}
             session_id = uuid4().hex
-            import json
-            await cursor.execute("INSERT INTO party_battle_session (id, party_id, round_no, state, snapshot_json) VALUES (%s, %s, 1, 'ACTIVE', %s)", (session_id, party_id, json.dumps(snapshot, ensure_ascii=False)))
+            await cursor.execute("INSERT INTO party_battle_session (id, party_id, round_no, state, snapshot_json, deadline_at) VALUES (%s, %s, 1, 'ACTIVE', %s, DATE_ADD(NOW(), INTERVAL 90 SECOND))", (session_id, party_id, json.dumps(snapshot, ensure_ascii=False)))
             for member in members:
                 await cursor.execute("INSERT INTO party_battle_member (session_id, uid) VALUES (%s, %s)", (session_id, member["uid"]))
             await conn.commit()
@@ -123,14 +165,18 @@ async def party_battle_start(uid, qz, group_openid):
 
 @reg_xz_func
 async def party_battle_status(uid, qz, group_openid):
-    import json
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            session = await _load_session(uid, cursor)
+            session = await _load_session(uid, cursor, lock=True)
             if not session:
                 return {"type": "markdown", "content": "当前没有进行中的队伍战斗。"}
-            await cursor.execute("SELECT uid FROM party_battle_action WHERE session_id = %s AND round_no = %s", (session[0], session[2]))
-            submitted = {str(row[0]) for row in await cursor.fetchall()}
+            await cursor.execute("SELECT uid, action_type FROM party_battle_action WHERE session_id = %s AND round_no = %s", (session[0], session[2]))
+            actions = {str(row[0]): row[1] for row in await cursor.fetchall()}
+            submitted = set(actions)
+            result = await _resolve_round_if_ready(conn, cursor, session, actions)
+            if result:
+                await conn.commit()
+                return result
             return _render(session[0], session[2], json.loads(session[4]), submitted)
 
 
@@ -139,7 +185,6 @@ async def party_battle_action(uid, qz, group_openid, action_text):
     action = normalize_action(action_text)
     if not action:
         return {"type": "markdown", "content": "行动错误，请使用：队伍战斗行动 普攻/防御/调息。"}
-    import json
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
             session = await _load_session(uid, cursor, lock=True)
@@ -149,23 +194,9 @@ async def party_battle_action(uid, qz, group_openid, action_text):
             await cursor.execute("INSERT INTO party_battle_action (session_id, round_no, uid, action_type) VALUES (%s, %s, %s, %s) ON DUPLICATE KEY UPDATE action_type = VALUES(action_type)", (session_id, round_no, uid, action))
             await cursor.execute("SELECT uid, action_type FROM party_battle_action WHERE session_id = %s AND round_no = %s", (session_id, round_no))
             actions = {str(row[0]): row[1] for row in await cursor.fetchall()}
-            snapshot = json.loads(raw)
-            alive = [member for member in snapshot["members"] if member["hp"] > 0]
-            if len(actions) < len(alive):
+            result = await _resolve_round_if_ready(conn, cursor, session, actions)
+            if not result:
                 await conn.commit()
-                return _render(session_id, round_no, snapshot, set(actions), "已记录你的行动，等待其他道友。")
-            members, enemy, logs = resolve_party_round(snapshot["members"], actions, snapshot["enemy"], f"{session_id}:{round_no}")
-            snapshot.update({"members": members, "enemy": enemy})
-            if enemy["hp"] <= 0:
-                await cursor.execute("UPDATE party_battle_session SET state = 'COMPLETED', snapshot_json = %s WHERE id = %s", (json.dumps(snapshot, ensure_ascii=False), session_id))
-                for member in members:
-                    await cursor.execute("UPDATE user_zt SET lingshi = lingshi + 60 WHERE id = %s", (member["uid"],))
-                await conn.commit()
-                return {"type": "markdown", "content": "##### 🏆 队伍战斗胜利\n\n" + "\n".join(f"> {line}" for line in logs) + "\n\n每位参战道友获得 **60 灵石**。"}
-            if not any(member["hp"] > 0 for member in members):
-                await cursor.execute("UPDATE party_battle_session SET state = 'FAILED', snapshot_json = %s WHERE id = %s", (json.dumps(snapshot, ensure_ascii=False), session_id))
-                await conn.commit()
-                return {"type": "markdown", "content": "##### 队伍战斗结束\n\n全员力竭，本次未获得胜利奖励。"}
-            await cursor.execute("UPDATE party_battle_session SET round_no = round_no + 1, snapshot_json = %s WHERE id = %s", (json.dumps(snapshot, ensure_ascii=False), session_id))
+                return _render(session_id, round_no, json.loads(raw), set(actions), "已记录你的行动，等待其他道友。")
             await conn.commit()
-            return _render(session_id, round_no + 1, snapshot, set(), "\n".join(logs))
+            return result

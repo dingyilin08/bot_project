@@ -1,5 +1,5 @@
 import unittest
-from Game_main.g17_party_battle import normalize_action, resolve_party_round
+from Game_main.g17_party_battle import normalize_action, resolve_party_round, round_should_resolve
 
 class PartyBattleTests(unittest.TestCase):
     def test_actions_are_limited_to_public_choices(self):
@@ -13,3 +13,8 @@ class PartyBattleTests(unittest.TestCase):
         first = resolve_party_round(members, {"1": "ATTACK", "2": "DEFEND"}, enemy, 'seed')
         second = resolve_party_round(members, {"1": "ATTACK", "2": "DEFEND"}, enemy, 'seed')
         self.assertEqual(first, second)
+
+    def test_round_timeout_uses_default_defense_for_missing_members(self):
+        alive = [{"uid": 1}, {"uid": 2}]
+        self.assertFalse(round_should_resolve({"1": "ATTACK"}, alive, False))
+        self.assertTrue(round_should_resolve({"1": "ATTACK"}, alive, True))
