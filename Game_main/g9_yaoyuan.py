@@ -122,13 +122,13 @@ def _parse_name_slot(param):
 
 
 def _parse_alchemy_param(param):
-    """兼容旧指令，并支持“火候:丹方名-炉号”。"""
+    """兼容旧指令，并支持“火候-丹方名-炉号”。"""
     name, slot = _parse_name_slot(param)
     if not name:
         return None, None, None
     style = "均衡"
-    if ":" in name:
-        candidate, recipe_name = name.split(":", 1)
+    if "-" in name:
+        candidate, recipe_name = name.split("-", 1)
         if candidate in {"保守", "均衡", "冒险"} and recipe_name.strip():
             style, name = candidate, recipe_name.strip()
     return name, slot, style
@@ -1637,7 +1637,7 @@ async def df_liebiao(uid, qz, param):
 async def lian_dan(uid, qz, param):
     recipe_or_pill_name, furnace_no, fire_style = _parse_alchemy_param(param)
     if not recipe_or_pill_name or not furnace_no:
-        return {"type": "markdown", "content": "指令错误，正确指令：炼丹 丹方名-炉号（也支持丹药名）\n可选火候：炼丹 冒险:九转丹-1"}
+        return {"type": "markdown", "content": "指令错误，正确指令：炼丹 丹方名-炉号（也支持丹药名）\n可选火候：炼丹 冒险-九转丹-1"}
     if furnace_no < 1 or furnace_no > FURNACE_SLOT_COUNT:
         return {"type": "markdown", "content": f"炉号错误，仅支持 1-{FURNACE_SLOT_COUNT}。"}
 

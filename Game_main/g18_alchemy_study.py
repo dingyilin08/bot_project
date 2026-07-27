@@ -70,7 +70,7 @@ async def alchemy_study(uid, qz):
     output = "##### 🧪 丹道研习\n\n火候会影响成功率与品质权重；熟练度每 10 点将部分寻常权重转为高品质权重。\n\n"
     for style, (desc, _) in FIRE_STYLES.items(): output += f"**{style}**：{desc}\n> 寻常/小成/大成/圆满：{'/'.join(map(str, quality_weights(style, 0).values()))}%\n"
     output += "\n**已研习丹方**\n" + ("\n".join(f"> {row[0]}：熟练度 {row[1]}" for row in rows) if rows else "> 尚未开始炼丹。")
-    return {"type":"markdown","content":output + "\n\n炼丹时可用：`炼丹 火候:丹方名-炉号`，例如 `炼丹 冒险:九转丹-1`。\n<qqbot-cmd-input text='炼丹菜单' show='前往炼丹' /> | <qqbot-cmd-input text='药性' show='查看药性' />"}
+    return {"type":"markdown","content":output + "\n\n炼丹时可用：`炼丹 火候-丹方名-炉号`，例如 `炼丹 冒险-九转丹-1`。\n<qqbot-cmd-input text='炼丹菜单' show='前往炼丹' /> | <qqbot-cmd-input text='药性' show='查看药性' />"}
 
 @reg_xz_func
 async def pill_property(uid, qz):

@@ -1,5 +1,6 @@
 import unittest
 from Game_main.g18_alchemy_study import quality_weights, tolerance_multiplier, tolerance_factor, roll_alchemy_outcome
+from Game_main.g9_yaoyuan import _parse_alchemy_param
 class AlchemyStudyTests(unittest.TestCase):
  def test_quality_weights_are_public_and_sum_to_100(self):
   self.assertEqual(sum(quality_weights('均衡', 20).values()),100)
@@ -12,3 +13,5 @@ class AlchemyStudyTests(unittest.TestCase):
   self.assertEqual(roll_alchemy_outcome('保守', 0, 96), (False, None, 0))
   self.assertEqual(roll_alchemy_outcome('冒险', 0, 84), (False, None, 0))
   self.assertGreaterEqual(roll_alchemy_outcome('冒险', 30, 50)[2], 1)
+ def test_fire_style_input_survives_command_normalization(self):
+  self.assertEqual(_parse_alchemy_param('冒险-九转丹-1'), ('九转丹', 1, '冒险'))
