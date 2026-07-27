@@ -255,6 +255,7 @@ async def show_party_menu(uid, qz):
     output += "<qqbot-cmd-input text='队伍加入 ' show='加入队伍 队伍码*' /> | <qqbot-cmd-input text='队伍准备' show='确认准备' />\n\n"
     output += "<qqbot-cmd-input text='布阵 ' show='布阵 阵法-位置*' /> | <qqbot-cmd-input text='队伍离开' show='离开队伍' />\n\n"
     output += "<qqbot-cmd-input text='道途' show='三千道途' /> | <qqbot-cmd-input text='道途开启' show='队长开启道途' />\n\n"
+    output += "<qqbot-cmd-input text='队伍战斗' show='开启队伍战斗' /> | <qqbot-cmd-input text='队伍战斗状态' show='队伍战斗状态' />\n\n"
     output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
     return {"type": "markdown", "content": output}
 
