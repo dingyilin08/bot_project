@@ -121,6 +121,19 @@ def _parse_name_slot(param):
     return name, slot
 
 
+def _parse_alchemy_param(param):
+    """兼容旧指令，并支持“火候:丹方名-炉号”。"""
+    name, slot = _parse_name_slot(param)
+    if not name:
+        return None, None, None
+    style = "均衡"
+    if ":" in name:
+        candidate, recipe_name = name.split(":", 1)
+        if candidate in {"保守", "均衡", "冒险"} and recipe_name.strip():
+            style, name = candidate, recipe_name.strip()
+    return name, slot, style
+
+
 def _parse_index(param):
     try:
         return int(str(param).strip())
@@ -1622,9 +1635,9 @@ async def df_liebiao(uid, qz, param):
 # 炼丹
 @reg_xz_func
 async def lian_dan(uid, qz, param):
-    recipe_or_pill_name, furnace_no = _parse_name_slot(param)
+    recipe_or_pill_name, furnace_no, fire_style = _parse_alchemy_param(param)
     if not recipe_or_pill_name or not furnace_no:
-        return {"type": "markdown", "content": "指令错误，正确指令：炼丹 丹方名-炉号（也支持丹药名）\n示例：炼丹 九转丹-1"}
+        return {"type": "markdown", "content": "指令错误，正确指令：炼丹 丹方名-炉号（也支持丹药名）\n可选火候：炼丹 冒险:九转丹-1"}
     if furnace_no < 1 or furnace_no > FURNACE_SLOT_COUNT:
         return {"type": "markdown", "content": f"炉号错误，仅支持 1-{FURNACE_SLOT_COUNT}。"}
 
@@ -1694,12 +1707,16 @@ async def lian_dan(uid, qz, param):
                 return {"type": "markdown", "content": f"炼丹失败，{lack_msg}"}
 
             now_ts = int(time.time())
+            from Game_main.g18_alchemy_study import get_alchemy_mastery
+            mastery = await get_alchemy_mastery(cursor, uid, recipe["name"])
             slots[furnace_no - 1] = {
                 "is_lz": 1,
                 "df_id": int(recipe["id"]),
                 "time": now_ts,
                 "fire_count": 0,
                 "batch_ts": now_ts,
+                "fire_style": fire_style,
+                "mastery": mastery,
             }
             await _save_slots(uid, slots, cursor, "user_danlu", "dl", [furnace_no])
             await conn.commit()
@@ -1713,7 +1730,8 @@ async def lian_dan(uid, qz, param):
             lines.append(f"丹炉{furnace_no}：{recipe['name']}")
             lines.append(f"消耗灵石：{need_lingshi}")
             lines.append(f"炼制时长：{_format_seconds(ALCHEMY_SECONDS)}")
-            lines.append("成功率：90%（10%炸炉）")
+            lines.append(f"火候：{fire_style}｜当前熟练度：{mastery}")
+            lines.append("成功率：保守95% / 均衡90% / 冒险83%")
             lines.append("***")
             lines.append("<qqbot-cmd-input text='查看丹炉' show='查看丹炉' /> | <qqbot-cmd-input text='加速炼丹 ' show='加速炼丹*' />")
             return {"type": "markdown", "content": "\n".join(lines)}
@@ -1753,15 +1771,18 @@ async def shou_dan(uid, qz, param):
             if not pill:
                 return {"type": "markdown", "content": "丹炉数据异常：找不到对应丹药配置。"}
 
-            success = random.randint(1, 100) > 10
+            from Game_main.g18_alchemy_study import roll_alchemy_outcome
+            success, quality, output_num = roll_alchemy_outcome(
+                slot.get("fire_style", "均衡"), slot.get("mastery", 0), random.randint(1, 100)
+            )
             lines = []
             lines.append("##### 收丹结果")
             lines.append(f"丹炉{furnace_no} | {recipe['name']}")
             if success:
                 pill_item_id = _resolve_item_id(pill["id"], pill)
-                await _add_user_item(cursor, uid, pill_item_id, 1)
+                await _add_user_item(cursor, uid, pill_item_id, output_num)
                 lines.append("炼制结果：✅ 成功")
-                lines.append(f"获得：{pill['name']} x 1")
+                lines.append(f"火候品质：{quality}｜获得：{pill['name']} x {output_num}")
             else:
                 lines.append("炼制结果：💥 炸炉")
                 lines.append("材料尽失，无丹药产出")
@@ -1815,11 +1836,14 @@ async def yj_shoudan(uid, qz):
                     continue
 
                 pill = pill_map.get(int(recipe["pill_id"]))
-                success = random.randint(1, 100) > 10
+                from Game_main.g18_alchemy_study import roll_alchemy_outcome
+                success, quality, output_num = roll_alchemy_outcome(
+                    slot.get("fire_style", "均衡"), slot.get("mastery", 0), random.randint(1, 100)
+                )
                 if success and pill:
                     pill_item_id = _resolve_item_id(pill["id"], pill)
-                    await _add_user_item(cursor, uid, pill_item_id, 1)
-                    collected.append((idx, recipe["name"], True, pill["name"]))
+                    await _add_user_item(cursor, uid, pill_item_id, output_num)
+                    collected.append((idx, recipe["name"], True, f"{quality}，{pill['name']} x{output_num}"))
                 elif success:
                     collected.append((idx, recipe["name"], False, "丹药配置缺失"))
                 else:
@@ -1917,6 +1941,8 @@ async def fu_dan(uid, qz, param):
             attr_add = {}
             exp_add = 0
             lingshi_add = 0
+            from Game_main.g18_alchemy_study import tolerance_factor
+            permanent_factor = tolerance_factor(used_times, use_num)
 
             for idx, effect_type in enumerate(effect_types):
                 try:
@@ -1931,7 +1957,7 @@ async def fu_dan(uid, qz, param):
                         effect_val,
                         is_percent
                     )
-                    attr_add[effect_type] = attr_add.get(effect_type, 0) + per_use * use_num
+                    attr_add[effect_type] = attr_add.get(effect_type, 0) + int(per_use * use_num * permanent_factor)
                     continue
 
                 if effect_type == "exp":
@@ -1964,18 +1990,20 @@ async def fu_dan(uid, qz, param):
                 "UPDATE user_role SET pill_usage = %s WHERE id = %s",
                 (_json_dumps(usage_raw), role_id),
             )
-            from Game_main.g18_alchemy_study import record_pill_tolerance
-            await record_pill_tolerance(uid, pill['name'], use_num)
 
             if attr_add:
                 await update_role_power(conn, uid)
             else:
                 await conn.commit()
+            from Game_main.g18_alchemy_study import record_pill_tolerance
+            await record_pill_tolerance(uid, pill['name'], use_num)
 
             lines = []
             lines.append("##### 服丹结果")
             lines.append(f"服用丹药：{pill['name']} x {use_num}")
             lines.append(f"累计服用：{usage_raw[usage_key]}/{max_use if max_use > 0 else '∞'}")
+            if attr_add:
+                lines.append(f"本次永久属性效力：{round(permanent_factor * 100, 1)}%（同类丹药耐药）")
             if attr_add:
                 lines.append("**属性变化：**")
                 for k, v in attr_add.items():
