@@ -109,6 +109,8 @@ async def select_role(uid, qz, role_name):
             sql = "UPDATE user_zt SET is_chushi = 1 WHERE id = %s"
             await cursor.execute(sql, (uid,))
             await conn.commit()
+            from Game_main.g16_onboarding import record_onboarding_event
+            await record_onboarding_event(uid, "ROLE")
 
             need_exp = await up_need_exp(1)
             output = f"##### 选择成功！\n\n"

@@ -51,6 +51,8 @@ async def canwu_role(uid, qz):
             sql = "UPDATE user_zt SET is_canwu = 1, cw_role = %s, cw_timestamp = %s, cw_exp = %s WHERE id = %s"
             await cursor.execute(sql, (id, int(time.time()), add_exp, uid))
             await conn.commit()
+            from Game_main.g16_onboarding import record_onboarding_event
+            await record_onboarding_event(uid, "CULTIVATION")
 
             output = f"##### 开始参悟\n\n"
             output += f"您已选择角色[{id}.{name}]参悟世界法则\n\n"

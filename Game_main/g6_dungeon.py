@@ -312,6 +312,26 @@ async def create_monster_skill(skill_id):
     return None
 
 
+async def get_boss_mechanics(cursor, dungeon_id, boss_name):
+    """读取可覆盖默认天机的副本配置；迁移未部署时安全使用代码默认值。"""
+    try:
+        await cursor.execute("""
+            SELECT trigger_stage, trigger_threshold, mechanic_name, counter_element,
+                   counter_name, fail_effect, fail_value, duration_rounds, break_drop_weight
+            FROM data_boss_mechanic
+            WHERE dungeon_id IN (0, %s) AND (boss_name = '*' OR boss_name = %s)
+            ORDER BY dungeon_id DESC, boss_name DESC, trigger_threshold ASC
+        """, (dungeon_id, boss_name))
+        rows = await cursor.fetchall()
+    except Exception:
+        return []
+    return [{
+        "stage": row[0], "threshold": float(row[1]), "name": row[2],
+        "counter_element": row[3], "counter_name": row[4], "effect": row[5],
+        "value": int(row[6]), "duration": int(row[7]), "drop_weight": int(row[8]),
+    } for row in rows]
+
+
 # ================================
 # 玩家副本进度管理
 # ================================
@@ -1492,6 +1512,7 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None):
                 boss_skill = await create_monster_skill(target_monster['skill_id'])
                 if boss_skill:
                     monster_skills.append(boss_skill)
+            boss_mechanics = await get_boss_mechanics(cursor, dungeon_id, target_monster['name']) if target_monster['type'] == 'boss' else []
 
     # 创建战斗实体（不占用数据库连接）
     player_entity = CombatEntity(role_name, player_role_data, player_skills)
@@ -1499,6 +1520,8 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None):
     from Game_main.g12_spirit_beast import apply_active_beast_to_entity
     active_beast = await apply_active_beast_to_entity(uid, player_entity)
     monster_attr['entity_type'] = target_monster.get('type', 'normal')  # 'normal' 或 'boss'
+    if boss_mechanics:
+        monster_attr['boss_mechanics'] = boss_mechanics
     monster_entity = CombatEntity(target_monster['name'], monster_attr, monster_skills)
 
     # P0：首次挑战只创建可恢复的回合会话；战斗结束后再进入下方既有奖励结算。
@@ -1581,6 +1604,9 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None):
         drop_specs = []
         item_names = {}
         is_boss = target_monster['type'] == 'boss'
+        break_weight = int(combat_manager.boss_tianji.get('reward_weight_bonus', 0)) if is_boss else 0
+        if break_weight:
+            rewards['boss_break_weight'] = break_weight
 
         if is_boss:
             if dungeon.get('reward_benyuan') and dungeon.get('rate_benyuan'):
@@ -1622,6 +1648,13 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None):
                         'drop_count': drop_count,
                         'monster_type': 'boss' if is_boss else 'normal',
                         'render': 'count',
+                    })
+                if is_boss and break_weight and reward_rng.randint(1, 100) <= min(100, break_weight):
+                    bonus_item_id = reward_rng.choice(cl_item_ids)
+                    reward_items.append(RewardItem(bonus_item_id, 1))
+                    drop_specs.append({
+                        'item_id': bonus_item_id, 'item_name': None, 'drop_count': 1,
+                        'monster_type': 'boss_break', 'render': 'count',
                     })
 
         dungeon_completed = progress['wave'] >= progress['total_waves'] and all(
@@ -1716,6 +1749,8 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None):
         if update_result and update_result.get('dungeon_completed'):
             await set_dungeon_status(uid, dungeon_id, 'completed')
             rewards['dungeon_completed'] = True
+        from Game_main.g16_onboarding import record_onboarding_event
+        await record_onboarding_event(uid, "BATTLE")
 
     else:
         # 战败处理 - 删除副本进度，不归还挑战次数

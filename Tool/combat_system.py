@@ -82,6 +82,12 @@ WORLD_BUFF_PREFIX_RULES = [
 ]
 
 
+DEFAULT_BOSS_MECHANICS = (
+    {"stage": "first", "threshold": 0.75, "name": "天机·护体", "counter_element": "METAL", "counter_name": "金行", "effect": "defense_up", "value": 35, "duration": 2, "drop_weight": 15},
+    {"stage": "second", "threshold": 0.40, "name": "天机·蓄力", "counter_element": "WATER", "counter_name": "水行", "effect": "attack_up", "value": 30, "duration": 2, "drop_weight": 20},
+)
+
+
 def _is_code_like_name(name: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9_]+", str(name or "")))
 
@@ -777,7 +783,8 @@ class CombatManager:
         self.initialized = False
         self.combat_ended = False
         # 天机为 Boss 的可读机制预告。每个阶段只触发一次，完整写入快照。
-        self.boss_tianji = {"triggered": [], "intent": None}
+        self.boss_tianji = {"triggered": [], "intent": None, "broken_stages": [], "reward_weight_bonus": 0}
+        self.reaction_targets_this_round = set()
         # 道心由玩家连续施展同系技能积累，作为手动战斗的短回合资源。
         self.dao_heart = {"value": 0, "cap": 5, "last_element": "", "stored": False}
 
@@ -843,6 +850,7 @@ class CombatManager:
 
         before = len(self.combat_log)
         self.round += 1
+        self.reaction_targets_this_round = set()
         self._log("round", f"═══ 第 {self.round} 回合 ═══")
         self._prepare_boss_tianji()
 
@@ -1248,17 +1256,23 @@ class CombatManager:
             target.add_buff(Buff('slow', 15, 2, skill.name, '缠绕减速'))
             self._log('element', f"🌿 {target.name} 被木行缠绕，速度降低！")
         elif element == 'FIRE':
-            if target.has_buff('wet'):
+            target_key = target.name
+            can_react = target_key not in self.reaction_targets_this_round
+            if target.has_buff('wet') and can_react:
                 target.remove_buff('wet')
                 bonus = max(1, int(target.max_hp * 0.04))
                 target.hp -= bonus
+                self.reaction_targets_this_round.add(target_key)
                 self._log('reaction', f"♨️ 水火相激触发「蒸腾」！{target.name} 额外受到{bonus}点伤害。")
-            elif target.has_buff('rooted'):
+            elif target.has_buff('rooted') and can_react:
                 target.remove_buff('rooted')
                 target.add_buff(Buff('burning', 3, 2, skill.name, '焚林'))
+                self.reaction_targets_this_round.add(target_key)
                 self._log('reaction', f"🔥 木火相燃触发「焚林」！{target.name} 获得强化燃烧。")
             else:
                 target.add_buff(Buff('burning', 2, 2, skill.name, '燃烧'))
+                if target.has_buff('wet') or target.has_buff('rooted'):
+                    self._log('reaction_guard', f"🛡️ {target.name} 本回合已触发过元素反应，本次仅施加燃烧。")
                 self._log('element', f"🔥 {target.name} 被火行点燃！")
         elif element == 'METAL':
             target.add_buff(Buff('defense_down', 15, 2, skill.name, '破甲'))
@@ -1288,24 +1302,24 @@ class CombatManager:
         elif value == self.dao_heart['cap']:
             self._log('dao_heart', '🔮 道心圆满：可选择「留存道心」强化下一次五行技能。')
 
+    def _boss_mechanics(self):
+        configured = self.enemy.role_data.get("boss_mechanics") or []
+        valid = [
+            {**item, "threshold": float(item.get("threshold", 0)), "duration": int(item.get("duration", 2)), "drop_weight": int(item.get("drop_weight", 0))}
+            for item in configured if isinstance(item, dict) and item.get("stage")
+        ]
+        return valid or [dict(item) for item in DEFAULT_BOSS_MECHANICS]
+
     def _prepare_boss_tianji(self) -> None:
         """Boss 在血量跨越 75%/40% 时预告一次，玩家可在该回合破局。"""
         if self.enemy.entity_type != 'boss' or self.boss_tianji.get('intent'):
             return
         hp_ratio = self.enemy.hp / max(1, self.enemy.max_hp)
         triggered = self.boss_tianji['triggered']
-        if hp_ratio <= 0.40 and 'second' not in triggered:
-            intent = {
-                'stage': 'second', 'name': '天机·蓄力', 'counter_element': 'WATER',
-                'counter_name': '水行', 'broken': False, 'effect': 'attack_up', 'value': 30,
-            }
-        elif hp_ratio <= 0.75 and 'first' not in triggered:
-            intent = {
-                'stage': 'first', 'name': '天机·护体', 'counter_element': 'METAL',
-                'counter_name': '金行', 'broken': False, 'effect': 'defense_up', 'value': 35,
-            }
-        else:
+        available = [item for item in self._boss_mechanics() if item['stage'] not in triggered and hp_ratio <= item['threshold']]
+        if not available:
             return
+        intent = {**min(available, key=lambda item: item['threshold']), 'broken': False}
         triggered.append(intent['stage'])
         self.boss_tianji['intent'] = intent
         self._log('boss_telegraph', f"☯️ {self.enemy.name} 显化「{intent['name']}」：本回合使用{intent['counter_name']}技能可破局！")
@@ -1315,9 +1329,11 @@ class CombatManager:
         if not intent:
             return
         if intent.get('broken'):
+            self.boss_tianji.setdefault('broken_stages', []).append(intent['stage'])
+            self.boss_tianji['reward_weight_bonus'] = self.boss_tianji.get('reward_weight_bonus', 0) + intent.get('drop_weight', 0)
             self._log('boss_break', f"✅ 「{intent['name']}」已被破局，Boss 未能获得强化。")
         elif not self.enemy.is_dead():
-            self.enemy.add_buff(Buff(intent['effect'], intent['value'], 2, intent['name'], intent['name']))
+            self.enemy.add_buff(Buff(intent['effect'], intent['value'], intent.get('duration', 2), intent['name'], intent['name']))
             effect_name = '防御' if intent['effect'] == 'defense_up' else '攻击'
             self._log('boss_resolve', f"⚠️ 天机未破！{self.enemy.name}{effect_name}提升{intent['value']}%，持续2回合。")
         self.boss_tianji['intent'] = None
@@ -1524,6 +1540,7 @@ class CombatManager:
             'total_skills_used': len(self.skill_history),
             'skill_history': self.skill_history,
             'boss_tianji': copy.deepcopy(self.boss_tianji),
+            'reaction_targets_this_round': list(self.reaction_targets_this_round),
             'dao_heart': copy.deepcopy(self.dao_heart),
         }
 
@@ -1551,6 +1568,7 @@ class CombatManager:
             'initialized': self.initialized,
             'combat_ended': self.combat_ended,
             'boss_tianji': copy.deepcopy(self.boss_tianji),
+            'reaction_targets_this_round': list(self.reaction_targets_this_round),
             'dao_heart': copy.deepcopy(self.dao_heart),
         }
 
@@ -1567,6 +1585,7 @@ class CombatManager:
         manager.initialized = snapshot.get('initialized', False)
         manager.combat_ended = snapshot.get('combat_ended', False)
         manager.boss_tianji = copy.deepcopy(snapshot.get('boss_tianji', manager.boss_tianji))
+        manager.reaction_targets_this_round = set(snapshot.get('reaction_targets_this_round', []))
         manager.dao_heart = copy.deepcopy(snapshot.get('dao_heart', manager.dao_heart))
         first_side = snapshot.get('first_side')
         if first_side == 'player':

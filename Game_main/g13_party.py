@@ -130,6 +130,8 @@ async def party_ready(uid, qz, group_openid):
             await cursor.execute("SELECT COUNT(*), SUM(ready) FROM party_member WHERE party_id = %s AND member_state = 'ACTIVE'", (party["id"],))
             count, ready_count = await cursor.fetchone()
             notice = "全员准备完成，可由队长开启三千道途。" if count >= 2 and count == ready_count else "准备状态已更新，等待其他道友。"
+            from Game_main.g16_onboarding import record_onboarding_event
+            await record_onboarding_event(uid, "TEAM")
             return await _render_party(party["id"], cursor, notice)
 
 

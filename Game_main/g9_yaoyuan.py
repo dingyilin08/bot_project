@@ -1213,6 +1213,8 @@ async def bo_zhong(uid, qz, param):
             slots[plot_no - 1] = slot
             await _save_slots(uid, slots, cursor, "user_yaotian", "yt", [plot_no])
             await conn.commit()
+            from Game_main.g16_onboarding import record_onboarding_event
+            await record_onboarding_event(uid, "FARM")
 
             lines = []
             lines.append("##### 播种成功")
@@ -1701,6 +1703,8 @@ async def lian_dan(uid, qz, param):
             }
             await _save_slots(uid, slots, cursor, "user_danlu", "dl", [furnace_no])
             await conn.commit()
+            from Game_main.g16_onboarding import record_onboarding_event
+            await record_onboarding_event(uid, "ALCHEMY")
 
             lines = []
             lines.append("##### 炼丹开始")

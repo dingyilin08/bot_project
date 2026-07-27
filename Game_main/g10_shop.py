@@ -281,6 +281,8 @@ async def buy_shop_item(uid, qz, param):
             await cursor.execute("SELECT lingshi FROM user_zt WHERE id = %s LIMIT 1", (uid,))
             balance = int((await cursor.fetchone())[0] or 0)
             await conn.commit()
+    from Game_main.g16_onboarding import record_onboarding_event
+    await record_onboarding_event(uid, "SHOP")
 
     return {
         "type": "markdown",

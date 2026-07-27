@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from Tool.combat_system import CombatEntity, CombatManager, Skill
+from Tool.combat_system import Buff, CombatEntity, CombatManager, Skill
 
 
 def entity(name, *, hp=100, attack=20, defense=10, speed=100, entity_type="player", skills=None):
@@ -95,6 +95,30 @@ class P0CombatRulesTests(unittest.TestCase):
         manager.resolve_round({"action_type": "DAO_HEART_BURST"})
         self.assertEqual(manager.dao_heart["value"], 0)
         self.assertTrue(any(log["type"] == "dao_heart" for log in manager.combat_log))
+
+    def test_element_reaction_is_limited_per_target_per_round_and_persists(self):
+        fire = attack_skill(1, "Fire Art", "FIRE")
+        manager = CombatManager(entity("Player", skills=[fire]), entity("Target", hp=1000, entity_type="normal"))
+        manager.enemy.add_buff(Buff("wet", 0, 2))
+        manager.reaction_targets_this_round.add("Target")
+        manager._apply_elemental_effect(manager.player, manager.enemy, fire, {"is_dodge": False})
+        self.assertTrue(manager.enemy.has_buff("wet"))
+        self.assertTrue(any(log["type"] == "reaction_guard" for log in manager.combat_log))
+        self.assertEqual(CombatManager.from_snapshot(manager.to_snapshot()).reaction_targets_this_round, {"Target"})
+
+    def test_custom_boss_mechanic_controls_counter_and_drop_weight(self):
+        water = attack_skill(1, "Water Art", "WATER")
+        boss = entity("Boss", hp=100, speed=1, entity_type="boss")
+        boss.role_data["boss_mechanics"] = [{
+            "stage": "ward", "threshold": 0.8, "name": "自定义护体", "counter_element": "WATER",
+            "counter_name": "水行", "effect": "defense_up", "value": 10, "duration": 1, "drop_weight": 27,
+        }]
+        manager = CombatManager(entity("Player", skills=[water]), boss)
+        manager.enemy.hp = 70
+        with patch("Tool.combat_system.random.random", return_value=0.5):
+            manager.resolve_round({"action_type": "SKILL", "skill_id": 1})
+        self.assertIn("ward", manager.boss_tianji["broken_stages"])
+        self.assertEqual(manager.boss_tianji["reward_weight_bonus"], 27)
 
 
 if __name__ == "__main__":
