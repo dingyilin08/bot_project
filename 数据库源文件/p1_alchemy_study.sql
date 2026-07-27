@@ -1,0 +1,2 @@
+CREATE TABLE IF NOT EXISTS user_alchemy_mastery (id BIGINT NOT NULL AUTO_INCREMENT, uid INT NOT NULL, recipe_name VARCHAR(64) NOT NULL, mastery INT NOT NULL DEFAULT 0, PRIMARY KEY(id), UNIQUE KEY uk_alchemy_mastery(uid, recipe_name)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS user_pill_tolerance (id BIGINT NOT NULL AUTO_INCREMENT, uid INT NOT NULL, pill_name VARCHAR(64) NOT NULL, use_count INT NOT NULL DEFAULT 0, PRIMARY KEY(id), UNIQUE KEY uk_pill_tolerance(uid, pill_name)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

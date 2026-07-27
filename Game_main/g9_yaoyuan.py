@@ -1703,6 +1703,8 @@ async def lian_dan(uid, qz, param):
             }
             await _save_slots(uid, slots, cursor, "user_danlu", "dl", [furnace_no])
             await conn.commit()
+            from Game_main.g18_alchemy_study import record_alchemy_start
+            await record_alchemy_start(uid, recipe['name'])
             from Game_main.g16_onboarding import record_onboarding_event
             await record_onboarding_event(uid, "ALCHEMY")
 
@@ -1962,6 +1964,8 @@ async def fu_dan(uid, qz, param):
                 "UPDATE user_role SET pill_usage = %s WHERE id = %s",
                 (_json_dumps(usage_raw), role_id),
             )
+            from Game_main.g18_alchemy_study import record_pill_tolerance
+            await record_pill_tolerance(uid, pill['name'], use_num)
 
             if attr_add:
                 await update_role_power(conn, uid)
