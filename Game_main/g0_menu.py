@@ -214,7 +214,8 @@ async def show_main_menu(uid, qz):
     output += "<qqbot-cmd-input text='商城' show='商城' /> | <qqbot-cmd-input text='物品背包' show='物品背包' />\n\n"
     output += "<qqbot-cmd-input text='灵兽菜单' show='灵兽菜单' /> | <qqbot-cmd-input text='洞府菜单' show='洞府菜单' />\n\n"
     output += "<qqbot-cmd-input text='队伍菜单' show='队伍菜单' /> | <qqbot-cmd-input text='宗门菜单' show='宗门菜单' />\n\n"
-    output += "<qqbot-cmd-input text='世界BOSS' show='世界Boss' /> | <qqbot-cmd-input text='更新日志' show='更新日志 v1.22' />\n\n"
+    output += "<qqbot-cmd-input text='世界BOSS' show='世界Boss' /> | <qqbot-cmd-input text='赛季' show='赛季' />\n\n"
+    output += "<qqbot-cmd-input text='更新日志' show='更新日志 v1.22' />\n\n"
     output += "<qqbot-cmd-input text='问道札记' show='新手引导' /> | <qqbot-cmd-input text='玩法介绍' show='玩法介绍' />\n\n"
     output += "<qqbot-cmd-input text='战力菜单' show='战力菜单' />\n\n"
 

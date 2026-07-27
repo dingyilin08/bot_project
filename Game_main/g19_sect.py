@@ -150,6 +150,8 @@ async def sect_commission(uid, qz):
             await cursor.execute("UPDATE sect_member SET contribution = contribution + %s WHERE sect_id = %s AND uid = %s", (DAILY_CONTRIBUTION, sect[0], uid))
             await cursor.execute("UPDATE user_zt SET lingshi = lingshi + 30 WHERE id = %s", (uid,))
             await conn.commit()
+            from Game_main.g21_season import record_season_event
+            await record_season_event(uid, "SECT")
             return await _render_sect((sect[0], sect[1], sect[2], sect[3] + DAILY_CONTRIBUTION, sect[4]), cursor, "完成今日委托：贡献 +20，灵石 +30。")
 
 

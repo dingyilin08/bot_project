@@ -106,6 +106,8 @@ async def world_boss_challenge(uid, qz, action_text):
             await cursor.execute("SELECT COALESCE(SUM(damage), 0), COALESCE(SUM(support), 0) FROM world_boss_contribution WHERE run_id = %s AND uid = %s", (run[0], uid))
             personal = await cursor.fetchone()
             await conn.commit()
+    from Game_main.g21_season import record_season_event
+    await record_season_event(uid, "WORLD_BOSS")
     note = f"{action}成功：伤害 +{damage:,}，辅助贡献 +{support:,}。"
     if run[4] <= 0:
         note += " 诸天魔渊主已被讨伐！"

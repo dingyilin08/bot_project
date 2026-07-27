@@ -1751,6 +1751,8 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None):
             rewards['dungeon_completed'] = True
         from Game_main.g16_onboarding import record_onboarding_event
         await record_onboarding_event(uid, "BATTLE")
+        from Game_main.g21_season import record_season_event
+        await record_season_event(uid, "DUNGEON")
 
     else:
         # 战败处理 - 删除副本进度，不归还挑战次数
