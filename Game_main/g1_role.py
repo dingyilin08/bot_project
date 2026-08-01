@@ -9,6 +9,295 @@ from Game_main.g7_equip import calc_role_equip_bonus
 from Game_domain.role_special_intro import render_role_special_intro
 
 
+ITEM_TYPE_NAMES = {
+    1: "药材",
+    2: "材料",
+    3: "道具",
+    4: "丹药",
+    5: "装备材料",
+    6: "宝石",
+    7: "强化材料",
+}
+ITEM_TIER_NAMES = {1: "凡品", 2: "良品", 3: "精品", 4: "仙品"}
+PILL_CATEGORY_NAMES = {1: "加成类", 2: "专属/突破类", 3: "特殊类"}
+PILL_EFFECT_NAMES = {
+    "gongji": "攻击",
+    "fangyu": "防御",
+    "qixue": "气血",
+    "fali": "法力",
+    "sudu": "速度",
+    "baoji": "暴击",
+    "baoshang": "暴伤",
+    "shanbi": "闪避",
+    "mingzhong": "命中",
+    "pofang": "破防",
+    "xixue": "吸血",
+    "exp": "当前等级经验",
+    "sell": "灵石",
+    "breakthrough": "破境",
+}
+PILL_RATE_EFFECTS = {"baoji", "baoshang", "shanbi", "mingzhong", "pofang", "xixue"}
+
+
+def _display_number(value):
+    """将数据库中的数值转成适合玩家阅读的简洁文本。"""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return str(value or 0)
+    if number.is_integer():
+        return str(int(number))
+    return f"{number:.4f}".rstrip("0").rstrip(".")
+
+
+def _format_pill_effect(effect_types, effect_values, is_percent):
+    """格式化 data_pill 中可逗号分隔的一个或多个丹药效果。"""
+    type_list = [part.strip() for part in str(effect_types or "").split(",") if part.strip()]
+    value_list = [part.strip() for part in str(effect_values or "").split(",") if part.strip()]
+    effects = []
+    for index, effect_type in enumerate(type_list):
+        raw_value = value_list[index] if index < len(value_list) else "?"
+        effect_name = PILL_EFFECT_NAMES.get(effect_type, effect_type)
+        if raw_value == "?":
+            effects.append(f"{effect_name}（数值未配置）")
+            continue
+
+        try:
+            number = float(raw_value)
+        except (TypeError, ValueError):
+            effects.append(f"{effect_name} +{raw_value}")
+            continue
+
+        if effect_type == "breakthrough":
+            effects.append("悟道进阶时自动消耗")
+        elif effect_type == "sell":
+            effects.append(f"使用后获得 {_display_number(number)} 灵石")
+        elif effect_type in PILL_RATE_EFFECTS:
+            if is_percent:
+                # 兼容 0.001=0.1% 与 0.1=0.1% 两种历史配置。
+                display_value = number * 100 if abs(number) <= 0.01 else number
+            else:
+                display_value = number / 100
+            effects.append(f"{effect_name} +{_display_number(display_value)}%")
+        elif is_percent:
+            effects.append(f"{effect_name} +{_display_number(number)}%")
+        else:
+            effects.append(f"{effect_name} +{_display_number(number)}")
+    return "、".join(effects) if effects else "效果暂未配置"
+
+
+def _standard_item_record(row):
+    if not row:
+        return None
+    name, item_type, description, access = row
+    return {
+        "name": name,
+        "type_code": item_type,
+        "type": ITEM_TYPE_NAMES.get(item_type, f"其他物品（类型{item_type}）"),
+        "description": description or "暂无详细描述。",
+        "access": access or "暂未配置获取途径。",
+        "details": [],
+        "commands": [],
+    }
+
+
+def _render_item_info(info):
+    lines = [
+        "##### 『物品信息』",
+        "",
+        f"**物品名称：** {info['name']}",
+        f"**物品类型：** {info['type']}",
+    ]
+    for label, value in info.get("details", []):
+        lines.append(f"**{label}：** {value}")
+    lines.extend([
+        "**物品描述：**",
+        f"> {info['description']}",
+        "**获取途径：**",
+        f"> {info['access']}",
+    ])
+    commands = info.get("commands") or []
+    if commands:
+        lines.extend(["***", " | ".join(commands)])
+    return "\n".join(lines) + "\n"
+
+
+async def _query_item_info(cursor, item_name):
+    """按普通物品、种子、药材、丹药目录统一查询物品详情。"""
+    await cursor.execute(
+        "SELECT `name`, `type`, `desc`, access FROM data_item WHERE `name` = %s LIMIT 1",
+        (item_name,),
+    )
+    standard = _standard_item_record(await cursor.fetchone())
+
+    # 普通材料、道具等只存在 data_item，命中后无需继续访问药园目录。
+    if standard and standard["type_code"] not in (1, 4):
+        return standard
+
+    # 兼容尚未启用药园系统的旧数据库；已有的 data_item 物品仍可正常查看。
+    await cursor.execute(
+        """
+        SELECT TABLE_NAME
+        FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME IN ('data_seed', 'data_herb', 'data_pill', 'data_recipe')
+        """
+    )
+    catalog_tables = {row[0] for row in await cursor.fetchall()}
+
+    # 种子不进入 user_item，因此没有 data_item 记录，需直接查询种子目录。
+    if standard is None and "data_seed" in catalog_tables:
+        await cursor.execute(
+            "SELECT name, cl_name, price, tier, world FROM data_seed WHERE name = %s LIMIT 1",
+            (item_name,),
+        )
+        seed = await cursor.fetchone()
+        if seed:
+            name, herb_name, price, tier, world = seed
+            tier_name = ITEM_TIER_NAMES.get(tier, f"品阶{tier}")
+            world_name = world or "诸天通用"
+            shop_command = (
+                f"<qqbot-cmd-input text='种子商店 {world}' show='查看种子商店' />"
+                if world else "<qqbot-cmd-input text='种子商店' show='查看种子商店' />"
+            )
+            return {
+                "name": name,
+                "type": "种子",
+                "description": f"{world_name}的{tier_name}种子，播种后可收获【{herb_name}】。",
+                "access": f"前往种子商店购买，单价 {price} 灵石。",
+                "details": [("所属世界", world_name), ("品阶", tier_name), ("成熟产物", herb_name)],
+                "commands": [
+                    f"<qqbot-cmd-input text='购买种子 {name}-1' show='购买×1' />",
+                    shop_command,
+                ],
+            }
+
+    if (standard is None or standard["type_code"] == 1) and "data_herb" in catalog_tables:
+        await cursor.execute(
+            "SELECT id, name, description, sell_price, tier, world FROM data_herb WHERE name = %s LIMIT 1",
+            (item_name,),
+        )
+        herb = await cursor.fetchone()
+        if herb:
+            herb_id, name, description, sell_price, tier, world = herb
+            seed_row = None
+            if "data_seed" in catalog_tables:
+                await cursor.execute(
+                    "SELECT name FROM data_seed WHERE cl_id = %s OR cl_name = %s "
+                    "ORDER BY (cl_id = %s) DESC, id ASC LIMIT 1",
+                    (herb_id, name, herb_id),
+                )
+                seed_row = await cursor.fetchone()
+            seed_name = seed_row[0] if seed_row else ""
+            tier_name = ITEM_TIER_NAMES.get(tier, f"品阶{tier}")
+            world_name = world or "诸天通用"
+            if seed_name:
+                access = f"在种子商店购买【{seed_name}】，于药园播种，成熟后采摘获得。"
+                commands = [
+                    f"<qqbot-cmd-input text='购买种子 {seed_name}-1' show='购买对应种子' />",
+                    "<qqbot-cmd-input text='药园' show='前往药园' />",
+                ]
+            else:
+                access = standard["access"] if standard else "通过药园种植并采摘获得。"
+                commands = ["<qqbot-cmd-input text='药园' show='前往药园' />"]
+            return {
+                "name": name,
+                "type": "药材",
+                "description": description or (standard["description"] if standard else "暂无详细描述。"),
+                "access": access,
+                "details": [("所属世界", world_name), ("品阶", tier_name), ("出售价格", f"{sell_price} 灵石/株")],
+                "commands": commands,
+            }
+        if standard:
+            return standard
+
+    if (standard is None or standard["type_code"] == 4) and "data_pill" in catalog_tables:
+        await cursor.execute(
+            """
+            SELECT id, name, description, effect_type, effect_value,
+                   is_percent, max_use, category, world
+            FROM data_pill
+            WHERE name = %s
+            LIMIT 1
+            """,
+            (item_name,),
+        )
+        pill = await cursor.fetchone()
+        if pill:
+            pill_id, name, description, effect_type, effect_value, is_percent, max_use, category, world = pill
+            recipes = []
+            if "data_recipe" in catalog_tables:
+                await cursor.execute(
+                    """
+                    SELECT name, ingredients, need_num, cost, world
+                    FROM data_recipe
+                    WHERE pill_id = %s
+                    ORDER BY CASE WHEN world IS NULL OR world = '' THEN 0 ELSE 1 END, id ASC
+                    """,
+                    (pill_id,),
+                )
+                recipes = await cursor.fetchall()
+            herb_ids = []
+            for _, ingredients, _, _, _ in recipes:
+                for raw_id in str(ingredients or "").split("|"):
+                    if raw_id.strip().isdigit():
+                        herb_ids.append(int(raw_id.strip()))
+
+            herb_names = {}
+            if herb_ids and "data_herb" in catalog_tables:
+                unique_ids = list(dict.fromkeys(herb_ids))
+                placeholders = ", ".join(["%s"] * len(unique_ids))
+                await cursor.execute(
+                    f"SELECT id, name FROM data_herb WHERE id IN ({placeholders})",
+                    tuple(unique_ids),
+                )
+                herb_names = {int(row[0]): row[1] for row in await cursor.fetchall()}
+
+            recipe_details = []
+            for recipe_name, ingredients, need_num, cost, recipe_world in recipes:
+                names = []
+                for raw_id in str(ingredients or "").split("|"):
+                    if raw_id.strip().isdigit():
+                        herb_id = int(raw_id.strip())
+                        names.append(herb_names.get(herb_id, f"药材#{herb_id}"))
+                material_text = " + ".join(names) if names else "原料未配置"
+                world_text = recipe_world or "通用"
+                recipe_details.append(
+                    f"【{recipe_name}】（{world_text}）：{material_text}，每种×{need_num}，消耗 {cost} 灵石"
+                )
+
+            if recipe_details:
+                access = "在丹炉按对应丹方炼制获得：" + "；".join(recipe_details)
+                first_recipe = recipes[0][0]
+                commands = [
+                    f"<qqbot-cmd-input text='炼丹 {first_recipe}-' show='炼制丹药' />",
+                    "<qqbot-cmd-input text='丹方列表' show='查看丹方' />",
+                ]
+            else:
+                access = standard["access"] if standard else "暂未配置可查询的获取途径。"
+                commands = ["<qqbot-cmd-input text='丹方列表' show='查看丹方' />"]
+
+            world_name = world or "诸天通用"
+            use_limit = f"每名角色最多 {max_use} 枚" if max_use else "不限次数"
+            return {
+                "name": name,
+                "type": "丹药",
+                "description": description or (standard["description"] if standard else "暂无详细描述。"),
+                "access": access,
+                "details": [
+                    ("所属世界", world_name),
+                    ("丹药类别", PILL_CATEGORY_NAMES.get(category, f"类别{category}")),
+                    ("服用效果", _format_pill_effect(effect_type, effect_value, bool(is_percent))),
+                    ("服用上限", use_limit),
+                ],
+                "commands": commands,
+            }
+        if standard:
+            return standard
+
+    return standard
+
+
 # 注册游戏
 async def user_zhuce(openid, player_name):
     async with connect_mysql() as conn:
@@ -651,30 +940,16 @@ async def item_bag(uid, qz, page_num=1):
 # 物品信息
 @reg_xz_func
 async def item_info(uid, qz, item_name):
+    item_name = str(item_name).strip()
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            sql = "SELECT `name`, `type`, `desc`, access FROM data_item WHERE `name` = %s LIMIT 1"
-            await cursor.execute(sql, (item_name,))
-            result = await cursor.fetchone()
-            if result is None:
-                return {"type": "markdown", "content": qz + "未找到该物品！"}
-            item_name, item_type, desc, access = result
-            if item_type == 1:
-                item_type = "药材"
-            elif item_type == 2:
-                item_type = "材料"
-            elif item_type == 3:
-                item_type = "道具"
-            elif item_type == 4:
-                item_type = "丹药"
+            info = await _query_item_info(cursor, item_name)
+            if info is None:
+                return {
+                    "type": "markdown",
+                    "content": qz + f"未找到【{item_name}】！请检查名称是否完整，可从物品背包、种子商店或丹方列表点击名称查询。",
+                }
 
-            output = f"##### 『物品信息』\n\n"
-            output += f"**物品名称：** {item_name}\n"
-            output += f"**物品类型：** {item_type}\n"
-            output += f"**物品描述：**\n"
-            output += f"> {desc}\n"
-            output += f"**获取途径：**\n"
-            output += f"> {access}\n"
-
+            output = _render_item_info(info)
             kj = await all_write_command(uid, ("物品背包", "角色背包", "当前角色"))
             return {"type": "markdown", "content": output + kj}

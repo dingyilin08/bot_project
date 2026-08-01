@@ -141,6 +141,10 @@ def _parse_index(param):
         return None
 
 
+def _is_breakthrough_pill_name(pill_name):
+    return str(pill_name or "").strip().endswith("破境丹")
+
+
 def _parse_uid_slot(param):
     txt = str(param).strip()
     if not txt:
@@ -1884,6 +1888,11 @@ async def fu_dan(uid, qz, param):
             pill = await _get_pill_by_name(cursor, pill_name)
             if pill is None:
                 return {"type": "markdown", "content": f"未找到丹药：{pill_name}"}
+            if _is_breakthrough_pill_name(pill["name"]):
+                return {
+                    "type": "markdown",
+                    "content": f"【{pill['name']}】是破境凭证，无需直接服用；角色达到境界巅峰后发送“悟道进阶”，系统会自动消耗。",
+                }
 
             await cursor.execute(
                 """

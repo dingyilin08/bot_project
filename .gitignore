@@ -17,6 +17,7 @@ logs/
 
 # Database exports may contain player data
 *.sql
+!数据库源文件/p*.sql
 
 # IDE and assistant state
 .idea/
