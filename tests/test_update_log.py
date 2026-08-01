@@ -13,5 +13,11 @@ class UpdateLogTests(unittest.TestCase):
         response = asyncio.run(show_update_log(1))
         content = response["content"]
         self.assertIn("v1.22", content)
+        self.assertIn("角色专属战斗养成", content)
         self.assertIn("灵兽园", content)
         self.assertIn("队伍", content)
+
+    def test_update_log_does_not_expose_implementation_or_deployment_details(self):
+        content = asyncio.run(show_update_log(1))["content"]
+        for term in ("数据库", "迁移", "部署", "快照", "幂等", "接口", "后端"):
+            self.assertNotIn(term, content)
