@@ -56,6 +56,11 @@ def _display_number(value):
     return f"{number:.4f}".rstrip("0").rstrip(".")
 
 
+def _display_rate_bonus(points):
+    """概率属性以万分制存储；100 点等于面板上的 1%。"""
+    return f"{_display_number(float(points) / 100)}%"
+
+
 def _format_pill_effect(effect_types, effect_values, is_percent):
     """格式化 data_pill 中可逗号分隔的一个或多个丹药效果。"""
     type_list = [part.strip() for part in str(effect_types or "").split(",") if part.strip()]
@@ -812,7 +817,7 @@ async def jinjie_role(uid, qz):
             output += "**属性提升：**\n"
             output += f"> 攻击+{add_gongji} | 防御+{add_fangyu}\n"
             output += f"> 气血+{add_qixue}\n"
-            output += f"> 暴击率+{add_baoji}% | 暴击伤害+{add_baoshang}%\n\n"
+            output += f"> 暴击率+{_display_rate_bonus(add_baoji)} | 暴击伤害+{_display_rate_bonus(add_baoshang)}\n\n"
             output += "**Tips：** 悟道概率随等级提升而变化。[悟道天书]可助你提升悟道概率！"
 
             kj = await all_write_command(uid, ("当前角色", "角色背包", "行囊"))
