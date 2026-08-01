@@ -7,6 +7,7 @@
 from sql.mysql import *
 from Tool.tool_user import *
 from Tool.tool_command import *
+from Tool.tool_canwu import canwu_remaining_seconds, ensure_canwu_duration_column
 from func.pd_func import *
 import time
 
@@ -180,11 +181,12 @@ async def get_cultivation_status(uid):
     """获取参悟状态信息"""
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            sql = "SELECT is_canwu, cw_role, cw_timestamp, cw_exp FROM user_zt WHERE id = %s"
+            await ensure_canwu_duration_column(cursor)
+            sql = "SELECT is_canwu, cw_role, cw_timestamp, cw_duration, cw_exp FROM user_zt WHERE id = %s"
             await cursor.execute(sql, (uid,))
             result = await cursor.fetchone()
             if result:
-                is_canwu, cw_role, cw_timestamp, cw_exp = result
+                is_canwu, cw_role, cw_timestamp, cw_duration, cw_exp = result
 
                 if is_canwu == 0:
                     return {
@@ -195,9 +197,7 @@ async def get_cultivation_status(uid):
                     }
 
                 current_time = int(time.time())
-                remaining_time = 1200 - (current_time - cw_timestamp)
-                if remaining_time < 0:
-                    remaining_time = 0
+                remaining_time = canwu_remaining_seconds(cw_timestamp, cw_duration, current_time)
 
                 role_name = await role_id_to_name(cw_role)
 

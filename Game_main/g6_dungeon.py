@@ -32,6 +32,15 @@ from Game_main.g4_benyuan import get_role_benyuan_skills_for_battle
 from Game_domain.reward_service import MySQLRewardService, RewardEquipment, RewardItem
 from Game_domain.role_special_service import DAILY_DROP_LIMIT, grant_battle_drop, load_battle_special
 
+
+def _dungeon_reward_battle_id(uid, dungeon_id, progress, monster_index, settlement_battle_id=None):
+    """优先使用真实战斗会话 ID，旧调用则生成稳定的兼容 ID。"""
+    if settlement_battle_id:
+        return str(settlement_battle_id)
+    progress_instance = str(progress.get('start_time') or 'unknown')
+    reward_key = f"legacy-dungeon:{uid}:{dungeon_id}:{progress_instance}:{progress['wave']}:{monster_index}"
+    return str(uuid5(NAMESPACE_URL, reward_key))
+
 # ================================
 # 配置参数
 # ================================
@@ -428,12 +437,18 @@ async def create_dungeon_progress(uid, dungeon_id, wave=1):
 
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            sql = """
+            duplicate_reset_sql = """
+                wave = %s, monsters = %s, defeated_count = %s, player_hp_ratio = %s,
+                kill_streak = 0, total_kills = 0, start_time = CURRENT_TIMESTAMP, status = %s
+            """ if wave == 1 else """
+                wave = %s, monsters = %s, defeated_count = %s, player_hp_ratio = %s, status = %s
+            """
+            sql = f"""
                 INSERT INTO user_dungeon_progress
                 (uid, dungeon_id, wave, monsters, defeated_count, player_hp_ratio, kill_streak, total_kills, status)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
-                wave = %s, monsters = %s, defeated_count = %s, player_hp_ratio = %s, status = %s
+                {duplicate_reset_sql}
             """
             monsters_json = json.dumps(monsters, ensure_ascii=False)
             await cursor.execute(sql, (
@@ -1270,7 +1285,7 @@ async def show_monster_list(uid, qz):
 
 # 挑战怪物
 @reg_xz_func
-async def fight_monster(uid, qz, monster_index, combat_manager=None):
+async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_battle_id=None):
     try:
         monster_index = int(monster_index)
     except (ValueError, TypeError):
@@ -1609,9 +1624,9 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None):
 
     # 第二步：根据战斗结果更新数据库
     if winner == player_entity:
-        progress_instance = str(progress.get('start_time') or 'unknown')
-        reward_battle_key = f"legacy-dungeon:{uid}:{dungeon_id}:{progress_instance}:{progress['wave']}:{monster_index}"
-        reward_battle_id = str(uuid5(NAMESPACE_URL, reward_battle_key))
+        reward_battle_id = _dungeon_reward_battle_id(
+            uid, dungeon_id, progress, monster_index, settlement_battle_id
+        )
         reward_rng = random.Random(reward_battle_id)
         reward_service = MySQLRewardService()
         reward_items = []

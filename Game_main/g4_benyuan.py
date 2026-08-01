@@ -4,6 +4,10 @@ from Tool.tool_user import *
 from func.pd_func import *
 import time
 import random
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 BENYUAN_SKILL_SEED = [
@@ -39,6 +43,67 @@ BENYUAN_SKILL_SEED = [
 ]
 
 _BENYUAN_SKILL_SCHEMA_READY = False
+
+
+def _benyuan_material_requirements(level, stage_item_ids, common_item_ids):
+    """返回本次升级所需材料及是否进阶；合并重复物品避免少扣。"""
+    if level == 19:
+        raw_requirements = [(stage_item_ids[0], 1)]
+        is_stage = True
+    elif level == 39:
+        raw_requirements = [(stage_item_ids[0], 2), (stage_item_ids[1], 1)]
+        is_stage = True
+    elif level == 59:
+        raw_requirements = [
+            (stage_item_ids[0], 3),
+            (stage_item_ids[1], 2),
+            (stage_item_ids[2], 1),
+        ]
+        is_stage = True
+    else:
+        raw_requirements = [
+            (common_item_ids[0], level * 5),
+            (common_item_ids[1], level * 3),
+            (common_item_ids[2], level * 2),
+        ]
+        is_stage = False
+
+    merged = {}
+    for item_id, amount in raw_requirements:
+        if item_id and amount > 0:
+            merged[item_id] = merged.get(item_id, 0) + amount
+    return list(merged.items()), is_stage
+
+
+async def _lock_and_consume_benyuan_materials(cursor, uid, requirements):
+    """先锁定并完整校验材料，再在当前事务中统一扣除。"""
+    missing = []
+    for item_id, amount in requirements:
+        await cursor.execute(
+            "SELECT item_num FROM user_item WHERE uid = %s AND item_id = %s LIMIT 1 FOR UPDATE",
+            (uid, item_id),
+        )
+        row = await cursor.fetchone()
+        current_amount = int(row[0]) if row else 0
+        if current_amount < amount:
+            missing.append((item_id, amount, current_amount))
+
+    if missing:
+        return missing
+
+    for item_id, amount in requirements:
+        await cursor.execute(
+            "UPDATE user_item SET item_num = item_num - %s "
+            "WHERE uid = %s AND item_id = %s AND item_num >= %s",
+            (amount, uid, item_id, amount),
+        )
+        if cursor.rowcount != 1:
+            raise RuntimeError("本源升级材料并发扣除失败")
+        await cursor.execute(
+            "DELETE FROM user_item WHERE uid = %s AND item_id = %s AND item_num = 0",
+            (uid, item_id),
+        )
+    return []
 
 
 def _skill_type_name(skill_type):
@@ -294,6 +359,8 @@ async def ck_benyuan(uid, qz):
             sql = "SELECT `name`, need_item_1, need_item_2, need_item_3, need_cl_1, need_cl_2, need_cl_3 FROM data_benyuan WHERE role_name = %s LIMIT 1"
             await cursor.execute(sql, (role_name,))
             result = await cursor.fetchone()
+            if result is None:
+                return {"type": "markdown", "content": qz + "当前角色缺少本源配置，无法查看。\n"}
             by_name, item_1_id, item_2_id, item_3_id, cl_1_id, cl_2_id, cl_3_id = result
             sql = "SELECT `name`, dengji, qx_jc, gj_jc, fy_jc, bj_jc, bs_jc, sb_jc, mz_jc, pf_jc, xx_jc FROM user_benyuan WHERE id = %s and uid = %s LIMIT 1"
             await cursor.execute(sql, (by_id, uid,))
@@ -361,7 +428,10 @@ async def ck_benyuan(uid, qz):
 async def up_benyuan(uid, qz):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            sql = "SELECT id, `name`, dengji, by_id, gongji, fangyu, qixue, baoji, baoshang FROM user_role WHERE uid = %s and is_chuzhan = 1 limit 1"
+            # 表结构/技能种子初始化可能触发 DDL 隐式提交，必须在升级事务开始前完成。
+            await ensure_benyuan_skill_schema(cursor)
+            await conn.commit()
+            sql = "SELECT id, `name`, dengji, by_id, gongji, fangyu, qixue, baoji, baoshang FROM user_role WHERE uid = %s and is_chuzhan = 1 limit 1 FOR UPDATE"
             await cursor.execute(sql, (uid,))
             result = await cursor.fetchone()
             if result is None:
@@ -370,64 +440,44 @@ async def up_benyuan(uid, qz):
             sql = "SELECT `name`, need_item_1, need_item_2, need_item_3, need_cl_1, need_cl_2, need_cl_3 FROM data_benyuan WHERE role_name = %s LIMIT 1"
             await cursor.execute(sql, (role_name,))
             result = await cursor.fetchone()
+            if result is None:
+                return {"type": "markdown", "content": qz + "当前角色缺少本源配置，无法升级。\n"}
             by_name, item_1_id, item_2_id, item_3_id, cl_1_id, cl_2_id, cl_3_id = result
-            sql = "SELECT `name`, dengji, qx_jc, gj_jc, fy_jc, bj_jc, bs_jc, sb_jc, mz_jc, pf_jc, xx_jc FROM user_benyuan WHERE id = %s and uid = %s LIMIT 1"
+            sql = "SELECT `name`, dengji, qx_jc, gj_jc, fy_jc, bj_jc, bs_jc, sb_jc, mz_jc, pf_jc, xx_jc FROM user_benyuan WHERE id = %s and uid = %s LIMIT 1 FOR UPDATE"
             await cursor.execute(sql, (by_id, uid,))
             result = await cursor.fetchone()
+            if result is None:
+                return {"type": "markdown", "content": qz + "当前角色本源数据异常，无法升级。\n"}
             by_name, benyuan_dengji, qx_jc, gj_jc, fy_jc, bj_jc, bs_jc, sb_jc, mz_jc, pf_jc, xx_jc = result
-
-            is_up_stage = 0
 
             if benyuan_dengji >= 60:
                 return {"type": "markdown", "content": qz + "本源已达到等级上限，无法升级。\n"}
 
-            if benyuan_dengji == 19:
-                item_1_name = await get_item_name(cursor, item_1_id)
-                item_1_num = 1
-                if await cut_bag_item(uid, item_1_id, item_1_num) is False:
-                    return {"type": "markdown", "content": qz + f"您当前缺少进阶材料：{item_1_name}×{item_1_num}，无法升级本源。\n"}
-                is_up_stage = 1
-            elif benyuan_dengji == 39:
-                item_1_name = await get_item_name(cursor, item_1_id)
-                item_2_name = await get_item_name(cursor, item_2_id)
-                item_1_num = 2
-                item_2_num = 1
-                if await cut_bag_item(uid, item_1_id, item_1_num) is False:
-                    return {"type": "markdown", "content": qz + f"您当前缺少进阶材料：{item_1_name}×{item_1_num}，无法升级本源。\n"}
-                if await cut_bag_item(uid, item_2_id, item_2_num) is False:
-                    return {"type": "markdown", "content": qz + f"您当前缺少进阶材料：{item_2_name}×{item_1_num}，无法升级本源。\n"}
-                is_up_stage = 1
-            elif benyuan_dengji == 59:
-                item_1_name = await get_item_name(cursor, item_1_id)
-                item_2_name = await get_item_name(cursor, item_2_id)
-                item_3_name = await get_item_name(cursor, item_3_id)
-                item_1_num = 3
-                item_2_num = 2
-                item_3_num = 1
-                if await cut_bag_item(uid, item_1_id, item_1_num) is False:
-                    return {"type": "markdown", "content": qz + f"您当前缺少进阶材料：{item_1_name}×{item_1_num}，无法升级本源。\n"}
-                if await cut_bag_item(uid, item_2_id, item_2_num) is False:
-                    return {"type": "markdown", "content": qz + f"您当前缺少进阶材料：{item_2_name}×{item_1_num}，无法升级本源。\n"}
-                if await cut_bag_item(uid, item_2_id, item_3_num) is False:
-                    return {"type": "markdown", "content": qz + f"您当前缺少进阶材料：{item_3_name}×{item_3_num}，无法升级本源。\n"}
-                is_up_stage = 1
-            else:
-                cl_1_name = await get_item_name(cursor, cl_1_id)
-                cl_2_name = await get_item_name(cursor, cl_2_id)
-                cl_3_name = await get_item_name(cursor, cl_3_id)
-                cl_1_num = benyuan_dengji * 5
-                cl_2_num = benyuan_dengji * 3
-                cl_3_num = benyuan_dengji * 2
-
-                if await cut_bag_item(uid, cl_1_id, cl_1_num) is False:
-                    op = f"当前本源升级所需升级材料：{cl_1_name}×{cl_1_num}，{cl_2_name}×{cl_2_num}，{cl_3_name}×{cl_3_num}\n"
-                    return {"type": "markdown", "content": qz + f"您当前缺少升级材料：{cl_1_name}×{cl_1_num}，无法升级本源。\n" + op}
-                if await cut_bag_item(uid, cl_2_id, cl_2_num) is False:
-                    op = f"当前本源升级所需升级材料：{cl_1_name}×{cl_1_num}，{cl_2_name}×{cl_2_num}，{cl_3_name}×{cl_3_num}\n"
-                    return {"type": "markdown", "content": qz + f"您当前缺少进阶材料：{cl_2_name}×{cl_2_num}，无法升级本源。\n" + op}
-                if await cut_bag_item(uid, cl_3_id, cl_3_num) is False:
-                    op = f"当前本源升级所需升级材料：{cl_1_name}×{cl_1_num}，{cl_2_name}×{cl_2_num}，{cl_3_name}×{cl_3_num}\n"
-                    return {"type": "markdown", "content": qz + f"您当前缺少进阶材料：{cl_3_name}×{cl_3_num}，无法升级本源。\n" + op}
+            requirements, is_up_stage = _benyuan_material_requirements(
+                benyuan_dengji,
+                (item_1_id, item_2_id, item_3_id),
+                (cl_1_id, cl_2_id, cl_3_id),
+            )
+            item_names = {
+                item_id: (await get_item_name(cursor, item_id) or f"物品#{item_id}")
+                for item_id, _ in requirements
+            }
+            missing = await _lock_and_consume_benyuan_materials(cursor, uid, requirements)
+            if missing:
+                await conn.rollback()
+                missing_text = "，".join(
+                    f"{item_names[item_id]}×{need}（现有{current}）"
+                    for item_id, need, current in missing
+                )
+                all_text = "，".join(
+                    f"{item_names[item_id]}×{amount}" for item_id, amount in requirements
+                )
+                material_type = "进阶" if is_up_stage else "升级"
+                return {
+                    "type": "markdown",
+                    "content": qz + f"您当前缺少{material_type}材料：{missing_text}，无法升级本源。\n"
+                    f"本次所需材料：{all_text}\n",
+                }
 
             r = random.randint(1, 9)
             ATTR_CONFIG = {
@@ -449,16 +499,24 @@ async def up_benyuan(uid, qz):
             # 更新角色表
             role_sql = f"UPDATE user_role SET {config['role_field']} = {config['role_field']} + %s WHERE uid = %s AND id = %s LIMIT 1"
             await cursor.execute(role_sql, (inc_value, uid, role_id))
+            if cursor.rowcount != 1:
+                raise RuntimeError("本源升级角色属性更新失败")
             # 更新本源表
-            by_sql = f"UPDATE user_benyuan SET {config['by_field']} = {config['by_field']} + %s, dengji = dengji + 1 WHERE id = %s LIMIT 1"
-            await cursor.execute(by_sql, (inc_value, by_id))
+            by_sql = f"UPDATE user_benyuan SET {config['by_field']} = {config['by_field']} + %s, dengji = dengji + 1 WHERE id = %s AND uid = %s AND dengji = %s LIMIT 1"
+            await cursor.execute(by_sql, (inc_value, by_id, uid, benyuan_dengji))
+            if cursor.rowcount != 1:
+                raise RuntimeError("本源等级更新失败")
 
             by_dengji = benyuan_dengji + 1
             unlocked_skills = await sync_unlock_benyuan_skills(uid, role_id, by_id, role_name, by_dengji, cursor)
             await conn.commit()
 
-            from Tool.tool_power import update_role_power
-            await update_role_power(conn, uid)
+            try:
+                from Tool.tool_power import update_role_power
+                await update_role_power(conn, uid)
+            except Exception:
+                await conn.rollback()
+                logger.exception("本源升级后的战力刷新失败 uid=%s role_id=%s", uid, role_id)
 
             # 设置显示文本
             up_attr = f"{config['role_field'].split('_')[0].capitalize()}+{display_value}{config['percent']}"

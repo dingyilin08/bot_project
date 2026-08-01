@@ -101,7 +101,12 @@ async def _settle_finished_battle(uid, session):
     from Game_main.g6_dungeon import fight_monster
 
     manager = CombatManager.from_snapshot(session.snapshot)
-    return await fight_monster(uid, monster_index, combat_manager=manager)
+    return await fight_monster(
+        uid,
+        monster_index,
+        combat_manager=manager,
+        settlement_battle_id=session.battle_id,
+    )
 
 
 async def _resolve_expired_or_render(uid, session, service):

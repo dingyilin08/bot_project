@@ -39,6 +39,11 @@ PILL_EFFECT_NAMES = {
 PILL_RATE_EFFECTS = {"baoji", "baoshang", "shanbi", "mingzhong", "pofang", "xixue"}
 
 
+def _breakthrough_succeeds(roll, success_rate):
+    """1-100 掷点不高于成功率时，判定悟道进阶成功。"""
+    return int(roll) <= max(0, min(100, int(success_rate)))
+
+
 def _display_number(value):
     """将数据库中的数值转成适合玩家阅读的简洁文本。"""
     try:
@@ -781,7 +786,7 @@ async def jinjie_role(uid, qz):
             base_prob = min(base_prob, 100)
             r = random.randint(1, 100)
 
-            if r <= base_prob:
+            if not _breakthrough_succeeds(r, base_prob):
                 output = "##### 悟道失败\n\n"
                 output += "一阵雷云环绕周身，只见你孱弱的身影浮现，本次悟道失败\n\n"
                 output += aaa
@@ -876,6 +881,10 @@ async def role_bag(uid, qz, page_num=1):
             return {"type": "markdown", "content": output + kj}
 
 
+def _item_info_button(item_name):
+    return f"<qqbot-cmd-input text='物品信息 {item_name}' show='{item_name}' />"
+
+
 # 物品背包
 @reg_xz_func
 async def item_bag(uid, qz, page_num=1):
@@ -919,7 +928,7 @@ async def item_bag(uid, qz, page_num=1):
                     item_type = "道具"
                 elif item_type == 4:
                     item_type = "丹药"
-                item_button = f"<qqbot-cmd-input text='物品信息 {item_name}' show='物品信息 {item_name}' />"
+                item_button = _item_info_button(item_name)
                 output += f"〔{item_type}〕{item_button}×{item_num}\n"
 
             output += f"> 点击蓝字可查看物品信息噢~\n"
