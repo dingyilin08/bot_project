@@ -71,7 +71,8 @@ def render_battle_panel(session, notice="", events=None):
         if used:
             output += f"> 专属能力「{escape(special['name'])}」本场已施放。\n"
         else:
-            output += f"<qqbot-cmd-input text='战斗行动 专属' show='专属·{escape(special['name'][:6], quote=True)}' />\n"
+            display_name = "藏锋后手" if manager.role_special.get("role_name") == "韩立" else special['name'][:6]
+            output += f"<qqbot-cmd-input text='战斗行动 专属' show='专属·{escape(display_name, quote=True)}' />\n"
     if dao_heart["value"] >= 3:
         output += "<qqbot-cmd-input text='战斗行动 道心爆发' show='道心爆发' /> | <qqbot-cmd-input text='战斗行动 道心延势' show='道心延势' />\n"
     if dao_heart["value"] >= dao_heart["cap"]:

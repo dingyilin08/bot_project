@@ -1526,6 +1526,10 @@ class CombatManager:
                 self.enemy._reset_modifiers()
                 self.enemy._apply_buff_modifiers()
                 self._log('role_special_effect', f"✨ 「{active.get('name')}」净化了敌方一项增益。")
+        if effect.get('shield_percent'):
+            value = min(10, int(effect['shield_percent']))
+            self.player.add_buff(Buff('shield', value, 2, active.get('name', ''), '专属护盾'))
+            self._log('role_special_effect', f"🛡️ {self.player.name}获得{value}%专属护盾。")
         if effect_type == 'DAMAGE_HEAL':
             if effect.get('heal_damage_percent'):
                 heal = int(damage * min(5, int(effect['heal_damage_percent'])) / 100)

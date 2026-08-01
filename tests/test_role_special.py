@@ -34,6 +34,13 @@ class RoleSpecialCatalogTests(unittest.TestCase):
         self.assertEqual(8, len(spec["stages"]))
         self.assertIn("轮回本源", {item["name"] for item in spec["abilities"]})
 
+    def test_han_li_reaches_seventy_two_swords_and_unlocks_combo_at_thirty_six(self):
+        spec = get_role_spec("韩立")
+        validate_role_spec(spec)
+        self.assertEqual(4, spec["combo_min_stage"])
+        self.assertEqual("七十二口飞剑", spec["stages"][-1]["name"])
+        self.assertIn("大庚剑阵", {item["name"] for item in spec["abilities"]})
+
 
 class RoleSpecialCombatTests(unittest.TestCase):
     def test_special_active_is_once_per_battle_and_boss_capped(self):

@@ -424,8 +424,9 @@ async def combine(uid: int, ids: Sequence[int], custom_name: str) -> Dict:
                 "SELECT growth_stage FROM user_role_special_progress WHERE uid=%s AND role_id=%s FOR UPDATE",
                 (uid, role_id),
             )
-            if int((await cursor.fetchone())[0]) < 3:
-                raise RoleSpecialError(f"{spec['growth_name']}达到第三阶段后才可进行{spec['combo']['type']}。")
+            combo_min_stage = int(spec.get("combo_min_stage", 3))
+            if int((await cursor.fetchone())[0]) < combo_min_stage:
+                raise RoleSpecialError(f"{spec['growth_name']}达到第{combo_min_stage}阶段后才可进行{spec['combo']['type']}。")
             placeholders = ",".join(["%s"] * 3)
             await cursor.execute(
                 f"""SELECT c.id,c.name,c.skill_multiplier,c.effect_json
@@ -560,10 +561,14 @@ async def grant_battle_drop(*, battle_id: str, uid: int, role_id: int, role_name
                 cursor, request_id=request_id, battle_id=battle_id, uid=uid, role_id=role_id,
                 collection_id=int(chosen[0]), fragment_code=chosen[2], amount=1, source="BOSS_DROP" if is_boss else "BATTLE_DROP",
             )
-            if is_boss:
-                codes = _material_codes(spec)
+            codes = _material_codes(spec)
+            if spec.get("growth_on_drop"):
+                await _change_material(cursor, request_id=request_id, battle_id=battle_id, uid=uid, role_id=role_id,
+                                       code=codes["growth"], amount=1, source="BATTLE_GROWTH")
+            elif is_boss:
                 await _change_material(cursor, request_id=request_id, battle_id=battle_id, uid=uid, role_id=role_id,
                                        code=codes["growth"], amount=1, source="BOSS_GROWTH")
+            if is_boss:
                 if rng.random() < .20:
                     await _change_material(cursor, request_id=request_id, battle_id=battle_id, uid=uid, role_id=role_id,
                                            code=codes["core"], amount=1, source="BOSS_CORE")
