@@ -9,9 +9,27 @@ from pathlib import Path
 import yaml
 
 
-STATE_PATH = Path(
-    os.getenv("GM_STATE_FILE", Path(__file__).resolve().parents[1] / "gm_state.yaml")
-)
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PRODUCTION_SHARED_LOG_DIR = Path("/opt/qq-rpg/shared/logs")
+
+
+def _default_state_path() -> Path:
+    """生产环境放入跨发布共享目录，本地开发则放在项目根目录。"""
+    configured = os.getenv("GM_STATE_FILE")
+    if configured:
+        configured_path = Path(configured)
+        if configured_path.is_absolute():
+            return configured_path
+        # 兼容早期配置的相对路径，避免它在 /releases/<版本> 下失去写权限。
+        if PRODUCTION_SHARED_LOG_DIR.is_dir():
+            return PRODUCTION_SHARED_LOG_DIR / configured_path.name
+        return PROJECT_ROOT / configured_path
+    if PRODUCTION_SHARED_LOG_DIR.is_dir():
+        return PRODUCTION_SHARED_LOG_DIR / "gm_state.yaml"
+    return PROJECT_ROOT / "gm_state.yaml"
+
+
+STATE_PATH = _default_state_path()
 _LOCK = threading.RLock()
 _DEFAULT_STATE = {"version": 1, "admins": [], "image_mode_enabled": True}
 

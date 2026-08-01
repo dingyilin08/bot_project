@@ -33,6 +33,10 @@ Copy `qq-rpg.service` to `/etc/systemd/system/qq-rpg.service`, then create
 `/etc/qq-rpg/qq-rpg.env` from `.env.example`. It must contain the real QQ,
 database, and administrator values and be protected with `chmod 600`.
 
+Keep `GM_STATE_FILE=/opt/qq-rpg/shared/logs/gm_state.yaml` (or set another
+absolute path writable by `qqbot`). This YAML preserves verified GM UIDs and
+the global image mode across service restarts and release switches.
+
 ```bash
 install -d -m 700 /etc/qq-rpg
 install -m 600 /dev/null /etc/qq-rpg/qq-rpg.env

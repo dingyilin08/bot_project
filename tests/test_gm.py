@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import asyncio
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -50,6 +51,27 @@ class GMStateTests(unittest.TestCase):
     def test_empty_server_password_never_authenticates(self):
         with self.assertRaises(GMError):
             authenticate_admin(10001, "", "")
+
+    def test_production_default_uses_shared_directory_not_release_directory(self):
+        original_shared = gm_state.PRODUCTION_SHARED_LOG_DIR
+        original_path = os.environ.pop("GM_STATE_FILE", None)
+        try:
+            gm_state.PRODUCTION_SHARED_LOG_DIR = Path(self.temp_dir.name)
+            self.assertEqual(
+                Path(self.temp_dir.name) / "gm_state.yaml",
+                gm_state._default_state_path(),
+            )
+            os.environ["GM_STATE_FILE"] = "gm_state.yaml"
+            self.assertEqual(
+                Path(self.temp_dir.name) / "gm_state.yaml",
+                gm_state._default_state_path(),
+            )
+        finally:
+            gm_state.PRODUCTION_SHARED_LOG_DIR = original_shared
+            if original_path is None:
+                os.environ.pop("GM_STATE_FILE", None)
+            else:
+                os.environ["GM_STATE_FILE"] = original_path
 
 
 class GMCommandTests(unittest.TestCase):
