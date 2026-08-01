@@ -429,7 +429,7 @@ async def combine(uid: int, ids: Sequence[int], custom_name: str) -> Dict:
                 raise RoleSpecialError(f"{spec['growth_name']}达到第{combo_min_stage}阶段后才可进行{spec['combo']['type']}。")
             placeholders = ",".join(["%s"] * 3)
             await cursor.execute(
-                f"""SELECT c.id,c.name,c.skill_multiplier,c.effect_json
+                f"""SELECT c.id,c.collection_code,c.name,c.skill_multiplier,c.effect_json
                     FROM role_special_collection_config c JOIN user_role_special_collection u
                       ON u.collection_id=c.id AND u.uid=%s AND u.role_id=%s AND u.unlocked=1
                     WHERE c.role_template_id=%s AND c.id IN ({placeholders}) ORDER BY FIELD(c.id,{placeholders})""",
@@ -438,6 +438,9 @@ async def combine(uid: int, ids: Sequence[int], custom_name: str) -> Dict:
             materials = await cursor.fetchall()
             if len(materials) != 3:
                 raise RoleSpecialError("组合材料中存在未点亮或不属于当前角色的能力。")
+            forbidden = set(spec.get("non_combinable_codes", []))
+            if any(row[1] in forbidden for row in materials):
+                raise RoleSpecialError("所选能力属于独立终极投影，不能作为三能力组合材料。")
             await cursor.execute("SELECT COUNT(*) FROM user_role_special_combo WHERE uid=%s AND role_id=%s AND status<>'SEALED'", (uid, role_id))
             if int((await cursor.fetchone())[0]) >= int(spec["combo"]["max_saved"]):
                 raise RoleSpecialError("该角色保存的组合能力已达到上限。")
@@ -449,11 +452,11 @@ async def combine(uid: int, ids: Sequence[int], custom_name: str) -> Dict:
                                    code=codes["essence"], amount=-int(spec["combo"]["essence_cost"]), source="COMBO")
             seed = random.SystemRandom().randint(1, 2**63 - 1)
             rng = random.Random(seed)
-            values = [float(row[2]) for row in materials]
+            values = [float(row[3]) for row in materials]
             multiplier = max(sum(values) / 3, rng.uniform(min(values), min(2.0, max(values) * 1.5)))
             effect_source = rng.choice(materials)
-            effect = _json(effect_source[3])
-            effect["inherited_from"] = effect_source[1]
+            effect = _json(effect_source[4])
+            effect["inherited_from"] = effect_source[2]
             await cursor.execute(
                 """INSERT INTO user_role_special_combo
                    (uid,role_id,combo_type,custom_name,normalized_name,material_collection_ids_json,slot_order_json,multiplier,effect_json,seed)
@@ -465,7 +468,7 @@ async def combine(uid: int, ids: Sequence[int], custom_name: str) -> Dict:
             combo_id = cursor.lastrowid
             await conn.commit()
     return {"id": int(combo_id), "name": custom_name, "multiplier": round(multiplier, 3),
-            "effect": effect, "materials": [row[1] for row in materials]}
+            "effect": effect, "materials": [row[2] for row in materials]}
 
 
 async def rank(uid: int) -> Dict:

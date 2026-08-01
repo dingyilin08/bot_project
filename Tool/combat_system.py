@@ -1473,10 +1473,17 @@ class CombatManager:
         if self.player.hp > self.player.max_hp * threshold / 100:
             return
         value = max(1, min(10, int(effect.get('value', 8))))
-        self.player.add_buff(Buff('shield', value, 2, passive['name'], passive['name']))
+        if effect.get('type') == 'PLAYER_HEAL':
+            final_value = min(int(self.player.max_hp * value / 100), self.player.max_hp - self.player.hp)
+            self.player.hp += final_value
+            message = f"💚 专属被动「{passive['name']}」在低血量时恢复{final_value}点生命。"
+        else:
+            self.player.add_buff(Buff('shield', value, 2, passive['name'], passive['name']))
+            final_value = value
+            message = f"🛡️ 专属被动「{passive['name']}」在低血量时生成{value}%护身屏障。"
         self.role_special['passive_triggered'] = True
-        self.role_special['events'].append({'round': self.round, 'type': 'PASSIVE', 'id': passive.get('id'), 'name': passive['name'], 'final_value': value})
-        self._log('role_special_passive', f"🛡️ 专属被动「{passive['name']}」在低血量时生成{value}%护身屏障。")
+        self.role_special['events'].append({'round': self.round, 'type': 'PASSIVE', 'id': passive.get('id'), 'name': passive['name'], 'final_value': final_value})
+        self._log('role_special_passive', message)
 
     def _execute_role_special(self) -> None:
         active = self.role_special.get('active') or {}
@@ -1519,6 +1526,10 @@ class CombatManager:
             value = min(20, int(effect['healing_down']))
             self.enemy.add_buff(Buff('healing_down', value, 2, active.get('name', ''), '治疗压制'))
             self._log('role_special_effect', f"☯️ {self.enemy.name}下一次治疗效果降低{value}%。")
+        if effect.get('speed_down'):
+            value = min(15, int(effect['speed_down']))
+            self.enemy.add_buff(Buff('speed_down', value, 2, active.get('name', ''), '速度压制'))
+            self._log('role_special_effect', f"💨 {self.enemy.name}下一回合速度降低{value}%。")
         if effect_type == 'DAMAGE_DISPEL' and effect.get('dispel'):
             removable = [buff for buff in self.enemy.buffs if buff.buff_type.endswith('_up')]
             if removable:

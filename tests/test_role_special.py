@@ -41,6 +41,13 @@ class RoleSpecialCatalogTests(unittest.TestCase):
         self.assertEqual("七十二口飞剑", spec["stages"][-1]["name"])
         self.assertIn("大庚剑阵", {item["name"] for item in spec["abilities"]})
 
+    def test_shi_hao_requires_unique_cave_and_excludes_final_projection(self):
+        spec = get_role_spec("石昊")
+        validate_role_spec(spec)
+        self.assertEqual("唯一洞天", spec["stages"][-1]["name"])
+        self.assertEqual(12, spec["combo_min_stage"])
+        self.assertIn("SH_ART_09", spec["non_combinable_codes"])
+
 
 class RoleSpecialCombatTests(unittest.TestCase):
     def test_special_active_is_once_per_battle_and_boss_capped(self):
