@@ -10,6 +10,10 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from sql.mysql import connect_mysql
 from Game_domain.role_special_catalog import get_role_spec
+from Game_domain.role_special_asset_service import (
+    RoleSpecialAssetError,
+    add_fragments as add_role_special_fragments,
+)
 
 
 PRAY_COST = 160
@@ -115,35 +119,14 @@ async def _change_material(cursor, *, request_id: str, battle_id: Optional[str],
 
 async def _add_fragments(cursor, *, request_id: str, battle_id: Optional[str], uid: int, role_id: int,
                          collection_id: int, fragment_code: str, amount: int, source: str) -> int:
-    await cursor.execute(
-        """INSERT IGNORE INTO user_role_special_collection
-           (uid,role_id,collection_id,fragment_amount) VALUES (%s,%s,%s,0)""",
-        (uid, role_id, collection_id),
-    )
-    await cursor.execute(
-        """SELECT fragment_amount FROM user_role_special_collection
-           WHERE uid=%s AND role_id=%s AND collection_id=%s FOR UPDATE""",
-        (uid, role_id, collection_id),
-    )
-    before = int((await cursor.fetchone())[0])
-    after = before + int(amount)
-    await cursor.execute(
-        """UPDATE user_role_special_collection SET fragment_amount=%s
-           WHERE uid=%s AND role_id=%s AND collection_id=%s""",
-        (after, uid, role_id, collection_id),
-    )
     try:
-        await cursor.execute(
-            """INSERT INTO role_special_material_ledger
-               (request_id,battle_id,uid,role_id,material_code,change_amount,balance_before,balance_after,source_type)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-            (request_id, battle_id, uid, role_id, fragment_code, amount, before, after, source),
+        return await add_role_special_fragments(
+            cursor, request_id=request_id, battle_id=battle_id, uid=uid,
+            role_id=role_id, collection_id=collection_id,
+            fragment_code=fragment_code, amount=amount, source=source,
         )
-    except Exception as exc:
-        if getattr(exc, "args", [None])[0] == 1062:
-            raise RoleSpecialError("该专属材料已经结算。") from exc
-        raise
-    return after
+    except RoleSpecialAssetError as exc:
+        raise RoleSpecialError(str(exc)) from exc
 
 
 async def home(uid: int) -> Dict:

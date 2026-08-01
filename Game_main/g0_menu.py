@@ -75,7 +75,8 @@ MAIN_MENU_SECTIONS = (
         "🧍 角色养成",
         "角色培养、修行、本源、技能、装备与专属战斗养成。",
         (("角色菜单", "角色菜单"), ("参悟菜单", "参悟菜单"), ("本源菜单", "本源菜单"),
-         ("技能菜单", "技能菜单"), ("装备菜单", "装备菜单"), ("专属养成菜单", "专属养成")),
+         ("技能菜单", "技能菜单"), ("装备菜单", "装备菜单"), ("专属养成菜单", "专属养成"),
+         ("祈愿菜单", "仙玉祈愿")),
     ),
     (
         "⚔️ 战斗与资源",
@@ -314,6 +315,22 @@ async def show_role_special_menu(uid, qz):
     return {"type": "markdown", "content": output}
 
 
+@reg_xz_func
+async def show_wish_menu(uid, qz):
+    """仙玉祈愿、角色碎片与记录入口。"""
+    output = "##### ✨ 仙玉祈愿菜单\n\n"
+    output += "消耗仙玉获取角色碎片、当前出战角色专属养成碎片，并固定获得经验与本源材料。\n\n"
+    output += "<qqbot-cmd-input text='仙玉祈愿' show='祈愿首页' /> | <qqbot-cmd-input text='仙玉祈愿 1次' show='祈愿1次' />\n\n"
+    output += "<qqbot-cmd-input text='仙玉祈愿 10次' show='祈愿10次' /> | <qqbot-cmd-input text='祈愿定向 ' show='设置定向角色*' />\n\n"
+    output += "<qqbot-cmd-input text='角色碎片' show='角色碎片' /> | <qqbot-cmd-input text='祈愿记录' show='祈愿记录' />\n\n"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
+    return {"type": "markdown", "content": output, "keyboard_commands": (
+        ("仙玉祈愿", "祈愿首页"), ("仙玉祈愿 1次", "祈愿1次"),
+        ("仙玉祈愿 10次", "祈愿10次"), ("角色碎片", "角色碎片"),
+        ("祈愿记录", "祈愿记录"), ("主菜单", "主菜单"),
+    )}
+
+
 @pd_reg_func
 async def show_resource_menu(uid, qz):
     """资源、背包、药园和炼丹的聚合入口。"""
@@ -358,6 +375,8 @@ async def show_role_menu(uid, qz):
     output += "> 点击蓝字后输入想了解的角色名称，如：角色介绍 韩立\n\n"
     output += "<qqbot-cmd-input text='玩法介绍' show='玩法介绍 角色名称' />\n"
     output += "> 查看角色专属战斗养成路线，如：玩法介绍 萧炎\n\n"
+    output += "<qqbot-cmd-input text='祈愿菜单' show='仙玉祈愿' />\n"
+    output += "> 定向获取角色碎片，集齐10个可合成新角色\n\n"
     output += "<qqbot-cmd-input text='角色背包' show='角色背包 页码' />\n"
     output += "> 点击蓝字后输入页码可查看角色背包的第X页，如：角色背包1\n\n"
     output += "<qqbot-cmd-input text='角色属性' show='角色属性' />\n"

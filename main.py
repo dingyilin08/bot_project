@@ -19,7 +19,7 @@ from Tool.qq_keyboard import attach_keyboard
 send_content = ''
 user_last_call_time = {}
 
-async def output_content(user_content, user_openid, qun_openid=None):
+async def output_content(user_content, user_openid, qun_openid=None, request_id=None):
     import logging as lg
     lg.basicConfig(
         level=lg.INFO,
@@ -61,7 +61,7 @@ async def output_content(user_content, user_openid, qun_openid=None):
     # 内测群：1341185812BBA8426C8E1AD1BB254DAF
 
     con_arr0, con_arr1 = await jiance(user_content)
-    send_content = await content(con_arr0, con_arr1, user_openid, qun_openid)
+    send_content = await content(con_arr0, con_arr1, user_openid, qun_openid, request_id=request_id)
     send_content = apply_image_mode(send_content)
     send_content = attach_keyboard(send_content, is_group=qun_openid is not None)
     end_time = time.perf_counter()
@@ -500,7 +500,7 @@ async def handle_webhook(request: Request):
                 group_openid = json_data["group_openid"]
                 logging.info(f"群聊【{group_openid}】{user_openid}：{content}")
                 # 发送群聊消息
-                result = await output_content(content, user_openid, group_openid)
+                result = await output_content(content, user_openid, group_openid, request_id=msg_id)
 
                 # 检查返回消息类型
                 if isinstance(result, dict):
@@ -522,7 +522,7 @@ async def handle_webhook(request: Request):
             # 私聊消息处理
             elif payload.t == "C2C_MESSAGE_CREATE":
                 logging.info(f"私聊【{user_openid}】：{content}")
-                result = await output_content(content, user_openid)
+                result = await output_content(content, user_openid, request_id=msg_id)
 
                 # 检查返回消息类型
                 if isinstance(result, dict):

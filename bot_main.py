@@ -24,7 +24,7 @@ user_last_call_time = {}
 event_inbox = MySQLEventInbox()
 
 
-async def output_content(user_content, user_openid, qun_openid=None):
+async def output_content(user_content, user_openid, qun_openid=None, request_id=None):
     user_content = user_content.upper()
 
     # 图片模式密令两步验证（优先于限频与指令解析）
@@ -50,7 +50,7 @@ async def output_content(user_content, user_openid, qun_openid=None):
             return "该快捷指令不存在！"
 
     con_arr0, con_arr1 = await jiance(user_content)
-    send_content = await content(con_arr0, con_arr1, user_openid, qun_openid)
+    send_content = await content(con_arr0, con_arr1, user_openid, qun_openid, request_id=request_id)
     send_content = apply_image_mode(send_content)
     return attach_keyboard(send_content, is_group=qun_openid is not None)
 
@@ -72,7 +72,7 @@ class MyClient(botpy.Client):
         ):
             return
 
-        send_content = await output_content(message.content, user_openid, qun_openid)
+        send_content = await output_content(message.content, user_openid, qun_openid, request_id=message.id)
 
         _log.info(f"群聊玩家消息[{user_openid}]：{message.content.strip()}")
         if isinstance(send_content, dict):
@@ -109,7 +109,7 @@ class MyClient(botpy.Client):
         ):
             return
 
-        send_content = await output_content(message.content, user_openid)
+        send_content = await output_content(message.content, user_openid, request_id=message.id)
 
         _log.info(f"私聊玩家消息[{user_openid}]：{message.content}")
         if isinstance(send_content, dict):

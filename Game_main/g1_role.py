@@ -7,6 +7,7 @@ import random
 from Tool.tool_command import *
 from Game_main.g7_equip import calc_role_equip_bonus
 from Game_domain.role_special_intro import render_role_special_intro
+from Game_domain.role_grant_service import RoleGrantError, grant_role
 
 
 ITEM_TYPE_NAMES = {
@@ -351,7 +352,7 @@ async def select_role(uid, qz, role_name):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
             line = []
-            sql = "SELECT `name`, gongji, fangyu, qixue, sudu, baoji, baoshang, max_fali, shanbi, mingzhong, pofang, xixue, world FROM data_role WHERE `name` = %s limit 1"
+            sql = "SELECT id, `name`, gongji, fangyu, qixue, sudu, baoji, baoshang, max_fali, shanbi, mingzhong, pofang, xixue, world FROM data_role WHERE `name` = %s limit 1"
             await cursor.execute(sql, (role_name,))
             result = await cursor.fetchone()
             if result is None:
@@ -366,7 +367,7 @@ async def select_role(uid, qz, role_name):
                 line.append("> 点击蓝字可查看详细的角色介绍噢~")
                 line.append("<qqbot-cmd-input text='选择角色 ' show='选择角色' /> | <qqbot-cmd-input text='角色介绍 ' show='角色介绍*' />")
                 return {"type": "markdown", "content": "\n".join(line)}
-            role_name, gongji, fangyu, qixue, sudu, baoji, baoshang, max_fali, shanbi, mingzhong, pofang, xixue, world = result
+            role_template_id, role_name, gongji, fangyu, qixue, sudu, baoji, baoshang, max_fali, shanbi, mingzhong, pofang, xixue, world = result
 
             # 判断是否已选择角色
             sql = "SELECT openid, is_chushi FROM user_zt WHERE id = %s limit 1"
@@ -377,33 +378,21 @@ async def select_role(uid, qz, role_name):
                 line.append(f"不知道怎么玩？可以尝试发送：<qqbot-cmd-input text='主菜单' show='主菜单' />查看可用指令")
                 line.append("<qqbot-cmd-input text='查看本源' show='查看本源' /> | <qqbot-cmd-input text='副本列表' show='副本列表' /> | <qqbot-cmd-input text='参悟' show='参悟' />")
                 return {"type": "markdown", "content": "\n".join(line)}
-            # 获取角色本源编号 并插入数据
-            sql = "SELECT COUNT(*) FROM user_benyuan"
-            await cursor.execute(sql)
-            result = await cursor.fetchone()
-            by_id = result[0] + 1
-            sql = "SELECT `name` FROM data_benyuan WHERE role_name = %s LIMIT 1"
-            await cursor.execute(sql, (role_name,))
-            by_name = await cursor.fetchone()
-            by_name = by_name[0]
-            sql = "INSERT INTO user_benyuan (id, uid, `name`, dengji) VALUES (%s, %s, %s, %s)"
-            await cursor.execute(sql, (by_id, uid, by_name, 1))
-            await conn.commit()
-            # 获取角色编号
-            sql = "SELECT COUNT(*) FROM user_role"
-            await cursor.execute(sql)
-            result = await cursor.fetchone()
-            role_id = result[0] + 10000 + 1
-            # 插入角色数据
-            stage = await role_stage(role_name, 1)
-            sql = "INSERT INTO user_role (id, uid, `name`, dengji, exp, stage, gongji, fangyu, qixue, sudu, baoji, baoshang, fali, shanbi, mingzhong, pofang, xixue, world, by_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-            await cursor.execute(sql, (role_id, uid, role_name, 1, 0, stage, gongji, fangyu, qixue, sudu, baoji, baoshang, max_fali, shanbi, mingzhong, pofang, xixue, world, by_id))
-            await conn.commit()
+            try:
+                granted = await grant_role(cursor, uid=uid, role_template_id=role_template_id)
+                role_id = granted["role_id"]
+                stage = granted["stage"]
+                await cursor.execute(
+                    "UPDATE user_zt SET is_chushi = 1 WHERE id = %s AND is_chushi = 0",
+                    (uid,),
+                )
+                if cursor.rowcount != 1:
+                    raise RoleGrantError("初始角色状态已经变更，请勿重复选择。")
+                await conn.commit()
+            except RoleGrantError as exc:
+                await conn.rollback()
+                return {"type": "markdown", "content": f"##### ⚠️ 选择失败\n\n{exc}"}
 
-            # 将是否选择初始角色置1
-            sql = "UPDATE user_zt SET is_chushi = 1 WHERE id = %s"
-            await cursor.execute(sql, (uid,))
-            await conn.commit()
             from Game_main.g16_onboarding import record_onboarding_event
             await record_onboarding_event(uid, "ROLE")
 

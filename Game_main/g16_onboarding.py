@@ -3,6 +3,12 @@
 
 from func.pd_func import reg_xz_func
 from sql.mysql import connect_mysql
+import json
+
+
+ONBOARDING_XIANYU_PER_TASK = 60
+ONBOARDING_ALL_XIANYU = 1600
+ONBOARDING_ALL_BONUS_CODE = "ALL_TASKS_XIANYU"
 
 
 TASKS = (
@@ -62,24 +68,36 @@ async def onboarding_home(uid, qz):
             await _ensure_tasks(uid, cursor)
             await cursor.execute("SELECT task_code, completed_at, claimed_at FROM user_onboarding_progress WHERE uid = %s", (uid,))
             progress = {row[0]: (row[1], row[2]) for row in await cursor.fetchall()}
+            await cursor.execute(
+                "SELECT id FROM user_onboarding_bonus WHERE uid=%s AND bonus_code=%s LIMIT 1",
+                (uid, ONBOARDING_ALL_BONUS_CODE),
+            )
+            all_bonus_claimed = bool(await cursor.fetchone())
             await conn.commit()
     completed = sum(1 for code, *_ in TASKS if progress.get(code, (None,))[0])
     output = "##### 📖 问道札记\n\n"
-    output += f"完成进度：**{completed}/{len(TASKS)}**。札记只记录真实玩法行为；完成后可领取灵石引导奖励。\n\n"
+    output += f"完成进度：**{completed}/{len(TASKS)}**。每项完成后可领取灵石与 **{ONBOARDING_XIANYU_PER_TASK}仙玉**。\n\n"
     for index, (code, title, description, command, reward) in enumerate(TASKS, 1):
         done_at, claimed_at = progress.get(code, (None, None))
         state = "✅ 已领取" if claimed_at else ("🎁 可领取" if done_at else "⬜ 未完成")
-        output += f"**{index}. {title}**　{state}\n> {description}｜奖励 {reward} 灵石\n"
+        output += f"**{index}. {title}**　{state}\n> {description}｜奖励 {reward}灵石 + {ONBOARDING_XIANYU_PER_TASK}仙玉\n"
         if done_at and not claimed_at:
             output += f"> <qqbot-cmd-input text='札记领取 {index}' show='领取奖励' />\n"
         elif not done_at:
             output += f"> <qqbot-cmd-input text='{command}' show='前往完成' />\n"
-    output += "\n<qqbot-cmd-input text='道途建议' show='查看道途建议' /> | <qqbot-cmd-input text='主菜单' show='主菜单' />"
+    if completed == len(TASKS):
+        if all_bonus_claimed:
+            output += f"\n> ✅ 全札记额外奖励已领取：{ONBOARDING_ALL_XIANYU}仙玉。\n"
+        else:
+            output += f"\n> 🎊 全札记完成！<qqbot-cmd-input text='札记领取 全部' show='领取额外{ONBOARDING_ALL_XIANYU}仙玉' />\n"
+    output += "\n<qqbot-cmd-input text='道途建议' show='查看道途建议' /> | <qqbot-cmd-input text='仙玉祈愿' show='仙玉祈愿' /> | <qqbot-cmd-input text='主菜单' show='主菜单' />"
     return {"type": "markdown", "content": output}
 
 
 @reg_xz_func
 async def onboarding_claim(uid, qz, task_key):
+    if str(task_key or "").strip().upper() in ("全部", "ALL"):
+        return await _claim_all_onboarding(uid)
     task = task_by_key(task_key)
     if not task:
         return {"type": "markdown", "content": "任务编号错误，请发送“问道札记”查看可领取奖励。"}
@@ -96,9 +114,53 @@ async def onboarding_claim(uid, qz, task_key):
                 await conn.rollback()
                 return {"type": "markdown", "content": f"「{title}」奖励已领取，请继续完成其他札记。"}
             await cursor.execute("UPDATE user_onboarding_progress SET claimed_at = CURRENT_TIMESTAMP WHERE uid = %s AND task_code = %s AND claimed_at IS NULL", (uid, code))
-            await cursor.execute("UPDATE user_zt SET lingshi = lingshi + %s WHERE id = %s", (reward, uid))
+            await cursor.execute(
+                "UPDATE user_zt SET lingshi=lingshi+%s,xianyu=xianyu+%s WHERE id=%s",
+                (reward, ONBOARDING_XIANYU_PER_TASK, uid),
+            )
             await conn.commit()
-    return {"type": "markdown", "content": f"##### 🎁 札记奖励\n\n完成：{title}\n获得：**{reward} 灵石**\n\n<qqbot-cmd-input text='问道札记' show='继续札记' />"}
+    return {"type": "markdown", "content": f"##### 🎁 札记奖励\n\n完成：{title}\n获得：**{reward}灵石 + {ONBOARDING_XIANYU_PER_TASK}仙玉**\n\n<qqbot-cmd-input text='问道札记' show='继续札记' /> | <qqbot-cmd-input text='仙玉祈愿' show='仙玉祈愿' />"}
+
+
+async def _claim_all_onboarding(uid):
+    async with connect_mysql() as conn:
+        try:
+            async with conn.cursor() as cursor:
+                await cursor.execute("SELECT id FROM user_zt WHERE id=%s FOR UPDATE", (uid,))
+                if not await cursor.fetchone():
+                    return {"type": "markdown", "content": "请先注册游戏。"}
+                await _ensure_tasks(uid, cursor)
+                await cursor.execute(
+                    """SELECT COUNT(*) FROM user_onboarding_progress
+                       WHERE uid=%s AND completed_at IS NOT NULL""",
+                    (uid,),
+                )
+                completed = int((await cursor.fetchone())[0])
+                if completed < len(TASKS):
+                    await conn.rollback()
+                    return {"type": "markdown", "content": f"尚未完成全部新手札记（{completed}/{len(TASKS)}），暂不能领取额外奖励。"}
+                await cursor.execute(
+                    "SELECT id FROM user_onboarding_bonus WHERE uid=%s AND bonus_code=%s FOR UPDATE",
+                    (uid, ONBOARDING_ALL_BONUS_CODE),
+                )
+                if await cursor.fetchone():
+                    await conn.rollback()
+                    return {"type": "markdown", "content": "全部札记的1600仙玉额外奖励已经领取。"}
+                reward_json = json.dumps({"xianyu": ONBOARDING_ALL_XIANYU}, ensure_ascii=False)
+                await cursor.execute(
+                    """INSERT INTO user_onboarding_bonus (uid,bonus_code,reward_json)
+                       VALUES (%s,%s,%s)""",
+                    (uid, ONBOARDING_ALL_BONUS_CODE, reward_json),
+                )
+                await cursor.execute(
+                    "UPDATE user_zt SET xianyu=xianyu+%s WHERE id=%s",
+                    (ONBOARDING_ALL_XIANYU, uid),
+                )
+            await conn.commit()
+        except Exception:
+            await conn.rollback()
+            raise
+    return {"type": "markdown", "content": f"##### 🎊 全札记奖励\n\n获得：**{ONBOARDING_ALL_XIANYU}仙玉**\n\n<qqbot-cmd-input text='仙玉祈愿' show='前往祈愿' /> | <qqbot-cmd-input text='主菜单' show='主菜单' />"}
 
 
 @reg_xz_func
