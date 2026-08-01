@@ -12,7 +12,7 @@ async def connect_mysql():
         user=os.getenv("MYSQL_USER", "bot_project"),
         password=os.getenv("MYSQL_PASSWORD", ""),
         db=os.getenv("MYSQL_DATABASE", "bot_project"),
-        charset='utf8',
+        charset='utf8mb4',
         autocommit=False
     )
     try:

@@ -52,10 +52,7 @@ async def output_content(user_content, user_openid, qun_openid=None):
     con_arr0, con_arr1 = await jiance(user_content)
     send_content = await content(con_arr0, con_arr1, user_openid, qun_openid)
     send_content = apply_image_mode(send_content)
-
-    send_content += "\n点击快捷指令按钮可自动执行此命令，如带有*则需输入相应后缀"
-
-    return send_content
+    return attach_keyboard(send_content, is_group=qun_openid is not None)
 
 
 class MyClient(botpy.Client):
@@ -78,21 +75,24 @@ class MyClient(botpy.Client):
         send_content = await output_content(message.content, user_openid, qun_openid)
 
         _log.info(f"群聊玩家消息[{user_openid}]：{message.content.strip()}")
-        keyboard = KeyboardPayload(id="102135148_1741091090")
-        await message._api.post_group_message(
-            group_openid=message.group_openid,
-            msg_type=0,
-            msg_id=message.id,
-            msg_seq=1,
-            content=f"\n{send_content}"
-        )
-        await message._api.post_group_message(
-            group_openid=message.group_openid,
-            msg_type=2,
-            msg_id=message.id,
-            msg_seq=2,
-            keyboard=keyboard
-        )
+        if isinstance(send_content, dict):
+            await message._api.post_group_message(
+                group_openid=message.group_openid,
+                msg_type=2,
+                msg_id=message.id,
+                msg_seq=1,
+                content="",
+                markdown=MarkdownPayload(content=send_content.get("content", "")),
+                keyboard=send_content.get("keyboard"),
+            )
+        else:
+            await message._api.post_group_message(
+                group_openid=message.group_openid,
+                msg_type=0,
+                msg_id=message.id,
+                msg_seq=1,
+                content=f"\n{send_content}",
+            )
         await event_inbox.mark_processed(message.id)
 
         _log.info(f"机器人回复：{send_content}")
@@ -112,21 +112,24 @@ class MyClient(botpy.Client):
         send_content = await output_content(message.content, user_openid)
 
         _log.info(f"私聊玩家消息[{user_openid}]：{message.content}")
-        keyboard = KeyboardPayload(id="102135148_1741091090")
-        await self.api.post_c2c_message(
-            openid=message.author.user_openid,
-            msg_type=0,
-            msg_id=message.id,
-            msg_seq=1,
-            content=send_content
-        )
-        await self.api.post_c2c_message(
-            openid=message.author.user_openid,
-            msg_type=2,
-            msg_id=message.id,
-            msg_seq=2,
-            keyboard=keyboard
-        )
+        if isinstance(send_content, dict):
+            await self.api.post_c2c_message(
+                openid=message.author.user_openid,
+                msg_type=2,
+                msg_id=message.id,
+                msg_seq=1,
+                content="",
+                markdown=MarkdownPayload(content=send_content.get("content", "")),
+                keyboard=send_content.get("keyboard"),
+            )
+        else:
+            await self.api.post_c2c_message(
+                openid=message.author.user_openid,
+                msg_type=0,
+                msg_id=message.id,
+                msg_seq=1,
+                content=send_content,
+            )
         await event_inbox.mark_processed(message.id)
 
         _log.info(f"机器人回复：{send_content}")

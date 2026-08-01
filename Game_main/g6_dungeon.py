@@ -30,6 +30,7 @@ from Game_main.g7_equip import (
 )
 from Game_main.g4_benyuan import get_role_benyuan_skills_for_battle
 from Game_domain.reward_service import MySQLRewardService, RewardEquipment, RewardItem
+from Game_domain.role_special_service import DAILY_DROP_LIMIT, grant_battle_drop, load_battle_special
 
 # ================================
 # 配置参数
@@ -901,6 +902,17 @@ def format_combat_result_markdown(winner, player_name, monster_name, monster_typ
             for drop in rewards['drops']:
                 lines.append(f"> {drop}")
 
+        special_drop = rewards.get('special_drop')
+        if special_drop:
+            lines.append("")
+            lines.append("🔥 **角色专属养成**")
+            if special_drop.get('dropped'):
+                lines.append(f"> {special_drop['name']}残片 +{special_drop['amount']}（今日 {special_drop['daily_count']}/{special_drop['daily_limit']}）")
+            elif special_drop.get('capped'):
+                lines.append(f"> 今日专属战斗掉落已达上限 {special_drop['daily_count']}/{DAILY_DROP_LIMIT}")
+            elif not special_drop.get('idempotent'):
+                lines.append("> 本次未触发专属残片，可继续使用该角色完成有效战斗。")
+
         if rewards.get('dungeon_completed'):
             lines.append("")
             lines.append(f"🎉 **副本通关** {dungeon['name']}!")
@@ -1361,6 +1373,9 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None):
                 'xixue': final_xixue,
                 'max_fali': fali
             }
+            role_special = await load_battle_special(cursor, uid, role_id, role_name)
+            if role_special:
+                player_role_data['role_special'] = role_special
 
             # 获取玩家技能（从user_skill表获取，然后根据is_data_skill决定查询来源）
             player_skills = []
@@ -1703,6 +1718,14 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None):
             lingshi=total_lingshi,
             items=reward_items,
             equipments=reward_equipments,
+        )
+        rewards['special_drop'] = await grant_battle_drop(
+            battle_id=reward_battle_id,
+            uid=uid,
+            role_id=role_id,
+            role_name=role_name,
+            is_boss=is_boss,
+            special_events=summary.get('role_special', {}).get('events', []),
         )
 
         if reward_result.level_after is not None and reward_result.level_before is not None:

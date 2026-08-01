@@ -65,6 +65,13 @@ def render_battle_panel(session, notice="", events=None):
     output += "***\n\n**选择行动**\n"
     output += "<qqbot-cmd-input text='战斗行动 普攻' show='普攻' /> | <qqbot-cmd-input text='战斗行动 防御' show='防御' />\n"
     output += "<qqbot-cmd-input text='战斗行动 调息' show='调息' /> | <qqbot-cmd-input text='战斗行动 御器' show='御器' />\n"
+    special = manager.role_special.get("active")
+    if special:
+        used = manager.role_special.get("used")
+        if used:
+            output += f"> 专属能力「{escape(special['name'])}」本场已施放。\n"
+        else:
+            output += f"<qqbot-cmd-input text='战斗行动 专属' show='专属·{escape(special['name'][:6], quote=True)}' />\n"
     if dao_heart["value"] >= 3:
         output += "<qqbot-cmd-input text='战斗行动 道心爆发' show='道心爆发' /> | <qqbot-cmd-input text='战斗行动 道心延势' show='道心延势' />\n"
     if dao_heart["value"] >= dao_heart["cap"]:
@@ -114,12 +121,14 @@ def _parse_action(value):
     text = (value or "").strip()
     if text in ACTION_ALIASES:
         return ACTION_ALIASES[text]
+    if text in ("专属", "专属技能"):
+        return "SPECIAL", None
     if text.startswith("技能-"):
         try:
             return "SKILL", int(text[3:])
         except ValueError:
             pass
-    raise BattleError("ACTION_INVALID", "行动格式错误，请使用：普攻、防御、调息、御器或 技能-编号")
+    raise BattleError("ACTION_INVALID", "行动格式错误，请使用：普攻、防御、调息、御器、专属或 技能-编号")
 
 
 @reg_xz_func

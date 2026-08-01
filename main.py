@@ -14,6 +14,7 @@ import os
 from output_main import *
 from config import DOMAIN, IMG_BASE_URL
 from Game_domain.event_inbox import MySQLEventInbox
+from Tool.qq_keyboard import attach_keyboard
 
 send_content = ''
 user_last_call_time = {}
@@ -62,6 +63,7 @@ async def output_content(user_content, user_openid, qun_openid=None):
     con_arr0, con_arr1 = await jiance(user_content)
     send_content = await content(con_arr0, con_arr1, user_openid, qun_openid)
     send_content = apply_image_mode(send_content)
+    send_content = attach_keyboard(send_content, is_group=qun_openid is not None)
     end_time = time.perf_counter()
 
     # send_content += f"\n\n执行耗时：{(end_time - start_time):.2f}s"
@@ -219,7 +221,7 @@ async def send_group_markdown(group_openid, markdown_content, msg_id):
 
         # 构造markdown对象
         json_data = {
-            "content": " ",  # markdown类型时content需要填入空格
+            "content": "",
             "msg_type": 2,   # 2 表示 markdown 消息
             "msg_id": msg_id,
             "markdown": {
@@ -258,7 +260,7 @@ async def send_c2c_markdown(openid, markdown_content, msg_id):
 
         # 构造markdown对象
         json_data = {
-            "content": " ",  # markdown类型时content需要填入空格
+            "content": "",
             "msg_type": 2,   # 2 表示 markdown 消息
             "msg_id": msg_id,
             "markdown": {
@@ -298,7 +300,7 @@ async def send_group_markdown_keyboard(group_openid, markdown_content, keyboard,
 
         # 构造markdown+keyboard对象
         json_data = {
-            "content": " ",
+            "content": "",
             "msg_type": 2,
             "msg_id": msg_id,
             "markdown": {
@@ -339,7 +341,7 @@ async def send_c2c_markdown_keyboard(openid, markdown_content, keyboard, msg_id)
 
         # 构造markdown+keyboard对象
         json_data = {
-            "content": " ",
+            "content": "",
             "msg_type": 2,
             "msg_id": msg_id,
             "markdown": {

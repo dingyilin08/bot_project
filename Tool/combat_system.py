@@ -787,6 +787,11 @@ class CombatManager:
         self.reaction_targets_this_round = set()
         # 道心由玩家连续施展同系技能积累，作为手动战斗的短回合资源。
         self.dao_heart = {"value": 0, "cap": 5, "last_element": "", "stored": False}
+        # 专属能力来自创建战斗时的数据库快照，整场最多使用一次且仅用于 PVE。
+        self.role_special = copy.deepcopy(player.role_data.get("role_special") or {})
+        self.role_special.setdefault("used", False)
+        self.role_special.setdefault("passive_triggered", False)
+        self.role_special.setdefault("events", [])
 
     def initialize(self) -> None:
         """初始化战斗顺序；可单独调用以创建可持久化的待行动战斗。"""
@@ -801,6 +806,7 @@ class CombatManager:
         self._log("status", f"{self.enemy.name}: HP={self.enemy.hp}/{self.enemy.max_hp}")
         self.first, self.second = self._determine_order()
         self._log("order", f"速度判定：{self.first.name} 先手！")
+        self._apply_role_special_passive()
         self.initialized = True
 
     def validate_player_action(self, action: Dict) -> Tuple[bool, str]:
@@ -820,6 +826,13 @@ class CombatManager:
                 return False, '道心不足，需要积累至5层才能留存'
             return True, ''
         if action_type in ('NORMAL_ATTACK', 'DEFEND', 'MEDITATE', 'AUTO'):
+            return True, ''
+        if action_type == 'SPECIAL':
+            active = self.role_special.get('active')
+            if not active:
+                return False, '当前角色尚未装备专属主动能力'
+            if self.role_special.get('used'):
+                return False, '本场战斗已经施放过专属主动能力'
             return True, ''
         if action_type != 'SKILL':
             return False, '不支持的行动类型'
@@ -922,6 +935,9 @@ class CombatManager:
             return
         if action_type == 'NORMAL_ATTACK':
             self._execute_normal_attack(self.player, self.enemy)
+            return
+        if action_type == 'SPECIAL':
+            self._execute_role_special()
             return
 
         skill_id = int(action.get('skill_id'))
@@ -1420,6 +1436,77 @@ class CombatManager:
 
         self._log_damage_result(attacker, defender, result)
 
+    def _apply_role_special_passive(self) -> None:
+        passive = self.role_special.get('passive')
+        if not passive or self.role_special.get('passive_triggered'):
+            return
+        effect = passive.get('effect') or {}
+        if effect.get('trigger', 'BATTLE_START') != 'BATTLE_START':
+            return
+        effect_type = effect.get('type')
+        value = max(0, min(15, int(effect.get('value', 0))))
+        duration = max(1, int(effect.get('duration', 1)))
+        if effect_type == 'ENEMY_ATTACK_DOWN':
+            self.enemy.add_buff(Buff('attack_down', value, duration, passive['name'], passive['name']))
+            message = f"🔥 专属被动「{passive['name']}」压制敌方攻击{value}%，持续{duration}回合。"
+        elif effect_type == 'PLAYER_DEFENSE_UP':
+            self.player.add_buff(Buff('defense_up', value, duration, passive['name'], passive['name']))
+            message = f"🛡️ 专属被动「{passive['name']}」提升自身防御{value}%，持续{duration}回合。"
+        elif effect_type == 'PLAYER_SPEED_UP':
+            self.player.add_buff(Buff('speed_up', value, duration, passive['name'], passive['name']))
+            message = f"⚡ 专属被动「{passive['name']}」提升自身速度{value}%，持续{duration}回合。"
+        else:
+            message = f"🔎 专属被动「{passive['name']}」已记录本场敌方威胁与破局信息。"
+        self.role_special['passive_triggered'] = True
+        self.role_special['events'].append({'round': self.round, 'type': 'PASSIVE', 'id': passive.get('id'), 'name': passive['name'], 'final_value': 0})
+        self._log('role_special_passive', message)
+
+    def _execute_role_special(self) -> None:
+        active = self.role_special.get('active') or {}
+        effect = active.get('effect') or {}
+        multiplier = max(0.0, min(2.0, float(active.get('multiplier', 0))))
+        base_value = max(1, int(self.player.get_effective_attack() * max(1.0, self.player.crit_dmg)))
+        raw_damage = int(base_value * (1 + multiplier))
+        defense_ignore = max(0, min(15, int(effect.get('defense_ignore', 0)))) / 100
+        defense = max(0, self.enemy.get_effective_defense() * (1 - defense_ignore))
+        damage = max(1, int(raw_damage * (1 - defense / (defense + 800))))
+        if self.enemy.entity_type == 'boss':
+            damage = min(damage, max(1, int(self.enemy.max_hp * .03)))
+        self.enemy.hp -= damage
+        self.role_special['used'] = True
+        event = {
+            'round': self.round, 'type': 'ACTIVE', 'id': active.get('id'), 'name': active.get('name'),
+            'base_value': base_value, 'multiplier': multiplier, 'final_value': damage, 'effect': effect,
+        }
+        self.role_special['events'].append(event)
+        self._log('role_special', f"🌟 {self.player.name}施展专属能力「{active.get('name', '未名之力')}」，造成{damage}点伤害！")
+
+        effect_type = effect.get('type', 'DAMAGE')
+        if effect.get('burn'):
+            self.enemy.add_buff(Buff('burning', 2, min(2, int(effect['burn'])), active.get('name', ''), '专属灼烧'))
+            self._log('role_special_effect', f"🔥 {self.enemy.name}受到专属灼烧；该效果不触发五行反应。")
+        if effect.get('resilience_down'):
+            value = min(15, int(effect['resilience_down']))
+            self.enemy.add_buff(Buff('defense_down', value, 2, active.get('name', ''), '韧性削减'))
+            self._log('role_special_effect', f"⚔️ {self.enemy.name}韧性降低{value}%。")
+        if effect_type == 'DAMAGE_DISPEL' and effect.get('dispel'):
+            removable = [buff for buff in self.enemy.buffs if buff.buff_type.endswith('_up')]
+            if removable:
+                self.enemy.buffs.remove(removable[0])
+                self.enemy._reset_modifiers()
+                self.enemy._apply_buff_modifiers()
+                self._log('role_special_effect', f"✨ 「{active.get('name')}」净化了敌方一项增益。")
+        if effect_type == 'DAMAGE_HEAL':
+            if effect.get('heal_damage_percent'):
+                heal = int(damage * min(5, int(effect['heal_damage_percent'])) / 100)
+            else:
+                heal = int(self.player.max_hp * min(10, int(effect.get('heal_percent', 0))) / 100)
+            cap = int(self.player.max_hp * min(10, int(effect.get('heal_percent_cap', 10))) / 100)
+            heal = max(0, min(heal, cap, self.player.max_hp - self.player.hp))
+            if heal:
+                self.player.hp += heal
+                self._log('role_special_effect', f"💚 专属能力为{self.player.name}恢复{heal}点生命。")
+
     def _log_skill_result(self, actor: CombatEntity, target: CombatEntity, skill: Skill, result: Dict):
         """记录技能结果"""
         if result['is_dodge']:
@@ -1542,6 +1629,7 @@ class CombatManager:
             'boss_tianji': copy.deepcopy(self.boss_tianji),
             'reaction_targets_this_round': list(self.reaction_targets_this_round),
             'dao_heart': copy.deepcopy(self.dao_heart),
+            'role_special': copy.deepcopy(self.role_special),
         }
 
     def to_snapshot(self) -> Dict:
@@ -1570,6 +1658,7 @@ class CombatManager:
             'boss_tianji': copy.deepcopy(self.boss_tianji),
             'reaction_targets_this_round': list(self.reaction_targets_this_round),
             'dao_heart': copy.deepcopy(self.dao_heart),
+            'role_special': copy.deepcopy(self.role_special),
         }
 
     @classmethod
@@ -1587,6 +1676,7 @@ class CombatManager:
         manager.boss_tianji = copy.deepcopy(snapshot.get('boss_tianji', manager.boss_tianji))
         manager.reaction_targets_this_round = set(snapshot.get('reaction_targets_this_round', []))
         manager.dao_heart = copy.deepcopy(snapshot.get('dao_heart', manager.dao_heart))
+        manager.role_special = copy.deepcopy(snapshot.get('role_special', manager.role_special))
         first_side = snapshot.get('first_side')
         if first_side == 'player':
             manager.first, manager.second = manager.player, manager.enemy

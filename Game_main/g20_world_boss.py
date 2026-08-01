@@ -4,11 +4,17 @@ from datetime import date
 
 from func.pd_func import reg_xz_func
 from sql.mysql import connect_mysql
+from Game_domain.role_special_service import (
+    RoleSpecialError,
+    grant_world_insight,
+    world_boss_contribution,
+    world_boss_loadout,
+)
 
 
 MAX_CHALLENGES = 3
 BOSS_HP = 1_000_000
-ACTIONS = {"挑战": "伤害", "辅助": "辅助", "净化": "净化"}
+ACTIONS = {"挑战": "伤害", "辅助": "辅助", "净化": "净化", "专属": "专属"}
 
 
 def run_key(today=None):
@@ -66,7 +72,8 @@ def _render(run, remain, personal=None, notice=""):
     if notice:
         output += f"\n> {notice}\n"
     output += "\n<qqbot-cmd-input text='世界挑战 挑战' show='发起挑战' /> | <qqbot-cmd-input text='世界挑战 辅助' show='施放辅助' />\n"
-    output += "<qqbot-cmd-input text='世界挑战 净化' show='净化法则' /> | <qqbot-cmd-input text='世界排行' show='世界排行' /> | <qqbot-cmd-input text='世界奖励' show='领取奖励' />"
+    output += "<qqbot-cmd-input text='世界挑战 净化' show='净化法则' /> | <qqbot-cmd-input text='世界挑战 专属' show='专属一击' />\n"
+    output += "<qqbot-cmd-input text='世界排行' show='世界排行' /> | <qqbot-cmd-input text='世界奖励' show='领取奖励' />"
     return {"type": "markdown", "content": output}
 
 
@@ -85,7 +92,7 @@ async def world_boss_home(uid, qz):
 async def world_boss_challenge(uid, qz, action_text):
     action = parse_action(action_text)
     if not action:
-        return {"type": "markdown", "content": "请选择：世界挑战 挑战/辅助/净化。"}
+        return {"type": "markdown", "content": "请选择：世界挑战 挑战/辅助/净化/专属。"}
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
             run = await _active_run(cursor, True)
@@ -93,7 +100,16 @@ async def world_boss_challenge(uid, qz, action_text):
             if remain <= 0:
                 return {"type": "markdown", "content": "本周世界 Boss 挑战次数已用完。"}
             power = await _combat_power(cursor, uid)
-            damage, support = contribution_for(action, power)
+            special_note = ""
+            if action == "专属":
+                try:
+                    loadout = await world_boss_loadout(cursor, uid)
+                    damage, special_note = world_boss_contribution(loadout, power, run[3])
+                    support = 0
+                except RoleSpecialError as error:
+                    return {"type": "markdown", "content": f"专属挑战未生效：{error}"}
+            else:
+                damage, support = contribution_for(action, power)
             phase = boss_phase(run[4], run[3])
             if action == "净化" and phase >= 2:
                 support += 800
@@ -108,7 +124,7 @@ async def world_boss_challenge(uid, qz, action_text):
             await conn.commit()
     from Game_main.g21_season import record_season_event
     await record_season_event(uid, "WORLD_BOSS")
-    note = f"{action}成功：伤害 +{damage:,}，辅助贡献 +{support:,}。"
+    note = f"{special_note or action}成功：伤害 +{damage:,}，辅助贡献 +{support:,}。"
     if run[4] <= 0:
         note += " 诸天魔渊主已被讨伐！"
     return _render(run, remain - 1, personal, note)
@@ -129,6 +145,7 @@ async def world_boss_rank(uid, qz):
 
 @reg_xz_func
 async def world_boss_reward(uid, qz):
+    insight = None
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
             run = await _active_run(cursor, True)
@@ -144,4 +161,8 @@ async def world_boss_reward(uid, qz):
                 return {"type": "markdown", "content": "本周期该档世界 Boss 奖励已领取。"}
             await cursor.execute("UPDATE user_zt SET lingshi = lingshi + %s WHERE id = %s", (reward, uid))
             await conn.commit()
-    return {"type": "markdown", "content": f"领取世界 Boss「{tier}」奖励成功：灵石 +{reward}。"}
+    insight = await grant_world_insight(run_key=run[1], uid=uid)
+    content = f"领取世界 Boss「{tier}」奖励成功：灵石 +{reward}。"
+    if insight:
+        content += f"\n获得{insight['role_name']}角色感悟：本体感悟 +2、感悟精华 +10、组合核心 +1。"
+    return {"type": "markdown", "content": content}
