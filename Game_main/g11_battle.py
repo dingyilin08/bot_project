@@ -63,8 +63,7 @@ def render_battle_panel(session, notice="", events=None):
         output += "**本回合战报**\n> " + "\n> ".join(messages) + "\n\n"
 
     output += "***\n\n**选择行动**\n"
-    output += "<qqbot-cmd-input text='战斗行动 普攻' show='普攻' /> | <qqbot-cmd-input text='战斗行动 防御' show='防御' />\n"
-    output += "<qqbot-cmd-input text='战斗行动 调息' show='调息' /> | <qqbot-cmd-input text='战斗行动 御器' show='御器' />\n"
+    output += "> 常规行动使用消息下方按钮；专属能力、道心与技能保留在对应战斗信息中。\n\n"
     special = manager.role_special.get("active")
     if special:
         used = manager.role_special.get("used")
@@ -82,7 +81,16 @@ def render_battle_panel(session, notice="", events=None):
         suffix = f"（冷却{cooldown}）" if cooldown else ""
         output += f"<qqbot-cmd-input text='战斗行动 技能-{skill.id}' show='{escape(skill.name + suffix, quote=True)}' />\n"
     output += "\n<qqbot-cmd-input text='战斗状态' show='战斗状态' />"
-    return {"type": "markdown", "content": output}
+    return {
+        "type": "markdown",
+        "content": output,
+        "keyboard_commands": [
+            {"command": "战斗行动 普攻", "label": "普通攻击", "style": 1},
+            {"command": "战斗行动 防御", "label": "防御", "style": 1},
+            {"command": "战斗行动 调息", "label": "调息", "style": 1},
+            {"command": "战斗行动 御器", "label": "御器", "style": 1},
+        ],
+    }
 
 
 async def _settle_finished_battle(uid, session):

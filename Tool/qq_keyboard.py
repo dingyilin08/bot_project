@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""QQ Markdown 自定义 keyboard 构建与旧指令标签兼容层。"""
+"""QQ Markdown 文本交互与自定义 Keyboard 的混合排版支持。"""
 
 import html
 import re
@@ -62,6 +62,37 @@ def build_keyboard(buttons: Iterable[Dict]) -> Dict:
     return {"content": {"rows": rows}}
 
 
+def build_command_keyboard(commands: Iterable, *, is_group: bool) -> Optional[Dict]:
+    """从业务显式声明的主操作构建 Keyboard，不改动 Markdown 正文。"""
+    buttons: List[Dict] = []
+    for index, item in enumerate(list(commands)[: MAX_ROWS * MAX_BUTTONS_PER_ROW], 1):
+        if isinstance(item, dict):
+            command = str(item.get("command", item.get("data", "")))
+            label = str(item.get("label", command))
+            complete = item.get("complete")
+            style = item.get("style", 1)
+        elif isinstance(item, (tuple, list)) and item:
+            command = str(item[0])
+            label = str(item[1]) if len(item) > 1 else command
+            complete = None
+            style = 1
+        else:
+            command = label = str(item or "")
+            complete = None
+            style = 1
+        if not command.strip():
+            continue
+        buttons.append(command_button(
+            label,
+            command,
+            complete=_is_complete_command(command, label) if complete is None else bool(complete),
+            is_group=is_group,
+            button_id=f"cmd_{index}",
+            style=style,
+        ))
+    return build_keyboard(buttons) if buttons else None
+
+
 def _is_complete_command(command: str, label: str) -> bool:
     """含占位符或刻意保留尾部空格的指令需要玩家继续输入参数。"""
     raw = html.unescape(command or "")
@@ -72,7 +103,7 @@ def _is_complete_command(command: str, label: str) -> bool:
 
 
 def extract_keyboard(markdown: str, *, is_group: bool) -> Tuple[str, Optional[Dict]]:
-    """把一条 Markdown 中最多十个旧指令标签升级为 custom keyboard。"""
+    """显式迁移工具：把正文标签抽取为 Keyboard；全局回复不再自动调用。"""
     if not isinstance(markdown, str) or "<qqbot-cmd-input" not in markdown.lower():
         return markdown, None
 
@@ -112,18 +143,24 @@ def extract_keyboard(markdown: str, *, is_group: bool) -> Tuple[str, Optional[Di
 
 
 def attach_keyboard(result, *, is_group: bool):
-    """统一升级业务返回值；无旧标签时保持原类型不变。"""
-    if isinstance(result, dict):
-        if result.get("type") == "markdown_keyboard" or not isinstance(result.get("content"), str):
-            return result
-        content, keyboard = extract_keyboard(result["content"], is_group=is_group)
-        if not keyboard:
-            return result
-        upgraded = dict(result)
-        upgraded.update({"type": "markdown_keyboard", "content": content, "keyboard": keyboard})
-        return upgraded
+    """仅处理业务显式声明的 Keyboard；正文蓝字标签始终留在原排版位置。"""
     if isinstance(result, str):
-        content, keyboard = extract_keyboard(result, is_group=is_group)
-        if keyboard:
-            return {"type": "markdown_keyboard", "content": content, "keyboard": keyboard}
-    return result
+        if "<qqbot-cmd-input" in result.lower():
+            return {"type": "markdown", "content": result}
+        return result
+    if not isinstance(result, dict):
+        return result
+    if result.get("type") == "markdown_keyboard" or not isinstance(result.get("content"), str):
+        return result
+
+    commands = result.get("keyboard_commands")
+    if not commands:
+        return result
+    keyboard = build_command_keyboard(commands, is_group=is_group)
+    if not keyboard:
+        return result
+
+    upgraded = dict(result)
+    upgraded.pop("keyboard_commands", None)
+    upgraded.update({"type": "markdown_keyboard", "keyboard": keyboard})
+    return upgraded

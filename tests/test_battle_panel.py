@@ -31,8 +31,11 @@ class BattlePanelTests(unittest.TestCase):
         manager.dao_heart["value"] = 3
         session = BattleSession.new(owner_uid=1, battle_type="SOLO_DUNGEON", snapshot=manager.to_snapshot())
 
-        panel = render_battle_panel(session)["content"]
-        self.assertIn("战斗行动 调息", panel)
+        result = render_battle_panel(session)
+        panel = result["content"]
+        keyboard_commands = [item["command"] for item in result["keyboard_commands"]]
+        self.assertIn("战斗行动 调息", keyboard_commands)
+        self.assertNotIn("text='战斗行动 调息'", panel)
         self.assertIn("战斗行动 技能-12", panel)
         self.assertIn("战斗行动 道心爆发", panel)
         self.assertIn("Boss 天机", panel)

@@ -137,10 +137,30 @@ class QQKeyboardTests(unittest.TestCase):
         self.assertTrue(buttons[0]["action"]["enter"])
         self.assertFalse(buttons[1]["action"]["enter"])
 
-    def test_markdown_result_is_upgraded(self):
+    def test_inline_markup_stays_in_original_position_by_default(self):
         result = attach_keyboard({"type": "markdown", "content": self.MARKDOWN}, is_group=True)
+        self.assertEqual("markdown", result["type"])
+        self.assertEqual(self.MARKDOWN, result["content"])
+        self.assertNotIn("keyboard", result)
+
+    def test_plain_string_with_inline_markup_is_sent_as_markdown(self):
+        result = attach_keyboard(self.MARKDOWN, is_group=True)
+        self.assertEqual("markdown", result["type"])
+        self.assertEqual(self.MARKDOWN, result["content"])
+
+    def test_explicit_primary_actions_add_keyboard_without_removing_inline_markup(self):
+        result = attach_keyboard({
+            "type": "markdown",
+            "content": self.MARKDOWN,
+            "keyboard_commands": [
+                ("战斗行动 普攻", "普通攻击"),
+                ("战斗行动 防御", "防御"),
+            ],
+        }, is_group=True)
         self.assertEqual("markdown_keyboard", result["type"])
         self.assertIn("keyboard", result)
+        self.assertEqual(self.MARKDOWN, result["content"])
+        self.assertNotIn("keyboard_commands", result)
 
 
 if __name__ == "__main__":

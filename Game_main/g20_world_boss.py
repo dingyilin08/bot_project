@@ -71,10 +71,18 @@ def _render(run, remain, personal=None, notice=""):
     output += "\n> 低战力可选择辅助或净化，达到参与档即可获得完整基础奖励。"
     if notice:
         output += f"\n> {notice}\n"
-    output += "\n<qqbot-cmd-input text='世界挑战 挑战' show='发起挑战' /> | <qqbot-cmd-input text='世界挑战 辅助' show='施放辅助' />\n"
-    output += "<qqbot-cmd-input text='世界挑战 净化' show='净化法则' /> | <qqbot-cmd-input text='世界挑战 专属' show='专属一击' />\n"
+    output += "\n> 贡献操作使用消息下方按钮；排行与奖励入口保留在正文中。\n"
     output += "<qqbot-cmd-input text='世界排行' show='世界排行' /> | <qqbot-cmd-input text='世界奖励' show='领取奖励' />"
-    return {"type": "markdown", "content": output}
+    return {
+        "type": "markdown",
+        "content": output,
+        "keyboard_commands": [
+            {"command": "世界挑战 挑战", "label": "发起挑战", "style": 1},
+            {"command": "世界挑战 辅助", "label": "施放辅助", "style": 1},
+            {"command": "世界挑战 净化", "label": "净化法则", "style": 1},
+            {"command": "世界挑战 专属", "label": "专属一击", "style": 1},
+        ],
+    }
 
 
 @reg_xz_func
