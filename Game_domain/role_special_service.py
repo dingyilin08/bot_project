@@ -39,7 +39,11 @@ def _growth_code(spec: Dict) -> str:
 
 def _material_codes(spec: Dict) -> Dict[str, str]:
     prefix = f"ROLE_{spec['template_id']}"
-    return {"growth": f"{prefix}_GROWTH", "essence": f"{prefix}_ESSENCE", "core": f"{prefix}_CORE"}
+    return {
+        "growth": spec.get("growth_material_code", f"{prefix}_GROWTH"),
+        "essence": spec.get("essence_material_code", f"{prefix}_ESSENCE"),
+        "core": spec.get("core_material_code", f"{prefix}_CORE"),
+    }
 
 
 async def _active_role(cursor, uid: int, lock: bool = False) -> Tuple[int, int, str]:
@@ -432,7 +436,7 @@ def _normalize_name(value: str) -> str:
     return value.casefold()
 
 
-async def combine(uid: int, ids: Sequence[int], custom_name: str) -> Dict:
+async def combine(uid: int, ids: Sequence[int], custom_name: str, scroll_id: Optional[int] = None) -> Dict:
     if len(ids) != 3 or len(set(ids)) != 3:
         raise RoleSpecialError("必须选择三种不同且已点亮的能力。")
     normalized = _normalize_name(custom_name)
@@ -441,6 +445,19 @@ async def combine(uid: int, ids: Sequence[int], custom_name: str) -> Dict:
             role_id, template_id, role_name = await _active_role(cursor, uid, True)
             await _ensure_progress(cursor, uid, role_id, template_id, role_name)
             spec = get_role_spec(role_name)
+            scroll = None
+            if spec.get("requires_scroll"):
+                if scroll_id is None:
+                    raise RoleSpecialError("该角色必须选择一幅佳作以上且未用于推演的真实战斗绘卷。")
+                await cursor.execute(
+                    """SELECT id,quality FROM user_role_special_scroll
+                       WHERE id=%s AND uid=%s AND role_id=%s AND status='READY' FOR UPDATE""",
+                    (scroll_id, uid, role_id),
+                )
+                scroll = await cursor.fetchone()
+                quality_order = {"凡品":1,"佳作":2,"传神":3,"绝响":4}
+                if not scroll or quality_order.get(scroll[1], 0) < 2:
+                    raise RoleSpecialError("刀势推演要求一幅佳作以上且未使用的绘卷。")
             await cursor.execute(
                 "SELECT growth_stage FROM user_role_special_progress WHERE uid=%s AND role_id=%s FOR UPDATE",
                 (uid, role_id),
@@ -494,6 +511,8 @@ async def combine(uid: int, ids: Sequence[int], custom_name: str) -> Dict:
                  json.dumps(effect, ensure_ascii=False), seed),
             )
             combo_id = cursor.lastrowid
+            if scroll:
+                await cursor.execute("UPDATE user_role_special_scroll SET status='USED',used_combo_id=%s WHERE id=%s", (combo_id, scroll[0]))
             await conn.commit()
     return {"id": int(combo_id), "name": custom_name, "multiplier": round(multiplier, 3),
             "effect": effect, "materials": [row[2] for row in materials]}
@@ -511,7 +530,80 @@ async def rank(uid: int) -> Dict:
                    ORDER BY c.multiplier DESC,c.created_at ASC LIMIT 10""", (role_name,),
             )
             rows = await cursor.fetchall()
-    return {"role_name": role_name, "spec": get_role_spec(role_name), "rows": rows}
+    normalized_rows = []
+    for row in rows:
+        normalized_rows.append((row[0], row[1], row[2], _json(row[3]), row[4]))
+    return {"role_name": role_name, "spec": get_role_spec(role_name), "rows": normalized_rows}
+
+
+async def create_scroll(uid: int, battle_id: str) -> Dict:
+    battle_id = str(battle_id or "").strip()
+    if not battle_id:
+        raise RoleSpecialError("请提供已完成战斗的 battle_id。")
+    async with connect_mysql() as conn:
+        async with conn.cursor() as cursor:
+            role_id, template_id, role_name = await _active_role(cursor, uid, True)
+            spec = get_role_spec(role_name)
+            if not spec.get("requires_scroll"):
+                raise RoleSpecialError("当前角色没有真实战斗绘卷系统。")
+            await _ensure_progress(cursor, uid, role_id, template_id, role_name)
+            await cursor.execute(
+                """SELECT battle_uuid,battle_type,state,snapshot_json,result_json,metadata_json
+                   FROM battle_session WHERE battle_uuid=%s AND owner_uid=%s LIMIT 1 FOR UPDATE""",
+                (battle_id, uid),
+            )
+            row = await cursor.fetchone()
+            if not row or row[2] != "FINISHED" or row[1] not in ("SOLO_DUNGEON", "WORLD_BOSS"):
+                raise RoleSpecialError("只能使用本人已完成结算的PVE战斗记录。")
+            snapshot, result, metadata = _json(row[3]), _json(row[4]), _json(row[5])
+            if snapshot.get("player", {}).get("name") != role_name or result.get("winner") != role_name:
+                raise RoleSpecialError("该战斗不是由当前孟川出战并获胜的有效记录。")
+            broken = len(result.get("boss_tianji", {}).get("broken_stages", []))
+            rounds = int(result.get("total_rounds", 0))
+            if broken >= 2 and rounds >= 5:
+                quality = "绝响"
+            elif broken >= 1 and int(result.get("player_hp", 0)) > 0:
+                quality = "传神"
+            elif broken >= 1:
+                quality = "佳作"
+            else:
+                quality = "凡品"
+            request_id = f"scroll:{battle_id}:{uid}:{role_id}"
+            ink_code = spec.get("world_material_code", f"ROLE_{template_id}_INK")
+            await _change_material(cursor, request_id=request_id, battle_id=battle_id, uid=uid, role_id=role_id,
+                                   code=ink_code, amount=-1, source="CREATE_SCROLL")
+            detail = {
+                "rounds": rounds, "broken_stages": broken, "monster": metadata.get("monster_name"),
+                "special_events": result.get("role_special", {}).get("events", []),
+            }
+            try:
+                await cursor.execute(
+                    """INSERT INTO user_role_special_scroll
+                       (uid,role_id,battle_id,quality,detail_json,status) VALUES (%s,%s,%s,%s,%s,'READY')""",
+                    (uid, role_id, battle_id, quality, json.dumps(detail, ensure_ascii=False)),
+                )
+            except Exception as exc:
+                if getattr(exc, "args", [None])[0] == 1062:
+                    raise RoleSpecialError("该 battle_id 已经生成过绘卷。") from exc
+                raise
+            scroll_id = int(cursor.lastrowid)
+            await conn.commit()
+    return {"id": scroll_id, "quality": quality, "battle_id": battle_id, "detail": detail}
+
+
+async def list_scrolls(uid: int) -> List[Dict]:
+    async with connect_mysql() as conn:
+        async with conn.cursor() as cursor:
+            role_id, _, role_name = await _active_role(cursor, uid)
+            if role_name != "孟川":
+                return []
+            await cursor.execute(
+                """SELECT id,battle_id,quality,detail_json,status,created_at
+                   FROM user_role_special_scroll WHERE uid=%s AND role_id=%s ORDER BY id DESC LIMIT 10""",
+                (uid, role_id),
+            )
+            rows = await cursor.fetchall()
+    return [{"id":int(r[0]),"battle_id":r[1],"quality":r[2],"detail":_json(r[3]),"status":r[4],"created_at":r[5]} for r in rows]
 
 
 async def load_battle_special(cursor, uid: int, role_id: int, role_name: str) -> Optional[Dict]:
@@ -607,6 +699,13 @@ async def grant_battle_drop(*, battle_id: str, uid: int, role_id: int, role_name
                 if rng.random() < .20:
                     await _change_material(cursor, request_id=request_id, battle_id=battle_id, uid=uid, role_id=role_id,
                                            code=codes["core"], amount=1, source="BOSS_CORE")
+            for code, amount in spec.get("drop_extra_materials", {}).items():
+                await _change_material(cursor, request_id=request_id, battle_id=battle_id, uid=uid, role_id=role_id,
+                                       code=code, amount=int(amount), source="BATTLE_EXTRA")
+            if is_boss:
+                for code, amount in spec.get("boss_extra_materials", {}).items():
+                    await _change_material(cursor, request_id=request_id, battle_id=battle_id, uid=uid, role_id=role_id,
+                                           code=code, amount=int(amount), source="BOSS_EXTRA")
             await cursor.execute(
                 "UPDATE user_role_special_progress SET daily_drop_date=%s,daily_drop_count=%s WHERE uid=%s AND role_id=%s",
                 (today, daily_count + 1, uid, role_id),

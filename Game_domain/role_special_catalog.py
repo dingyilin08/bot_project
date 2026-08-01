@@ -11,6 +11,7 @@ ROLE_MODULES = {
     "韩立": "Game_domain.role_special_hanli",
     "石昊": "Game_domain.role_special_shihao",
     "叶凡": "Game_domain.role_special_yefan",
+    "孟川": "Game_domain.role_special_mengchuan",
 }
 
 

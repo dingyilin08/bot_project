@@ -9,10 +9,12 @@ from Game_domain.role_special_service import (
     advance,
     collection,
     combine,
+    create_scroll,
     equip,
     home,
     pray,
     rank,
+    list_scrolls,
     set_target,
     select_feature,
     unlock,
@@ -30,9 +32,9 @@ def _button(command, label=None):
 def render_home(data):
     spec = data["spec"]
     codes = {
-        "growth": f"ROLE_{spec['template_id']}_GROWTH",
-        "essence": f"ROLE_{spec['template_id']}_ESSENCE",
-        "core": f"ROLE_{spec['template_id']}_CORE",
+        "growth": spec.get("growth_material_code", f"ROLE_{spec['template_id']}_GROWTH"),
+        "essence": spec.get("essence_material_code", f"ROLE_{spec['template_id']}_ESSENCE"),
+        "core": spec.get("core_material_code", f"ROLE_{spec['template_id']}_CORE"),
     }
     materials = data["materials"]
     output = f"##### ⚔️ {data['role_name']}专属战斗养成｜{spec['growth_name']}\n\n"
@@ -42,6 +44,8 @@ def render_home(data):
     output += f"五星保底：{data['rare_pity']}/10｜定向偏离：{data['target_miss']}/3｜今日祈愿：{data['daily_pray_count']}/{DAILY_PRAY_LIMIT}\n\n"
     output += f"> {spec['growth_material']}：{materials.get(codes['growth'], 0)}｜{spec['essence_name']}：{materials.get(codes['essence'], 0)}｜{spec['core_name']}：{materials.get(codes['core'], 0)}\n"
     for code, name in spec.get("extra_materials", {}).items():
+        if code in codes.values():
+            continue
         output += f"> {name}：{materials.get(code, 0)}\n"
     output += f"> {spec['passive_lore']}\n\n"
     if spec.get("featured_system"):
@@ -196,3 +200,50 @@ async def role_special_feature(uid, qz, value):
         return result
     except (ValueError, RoleSpecialError) as error:
         return {"type": "markdown", "content": f"机制选择失败：{error or '请输入机制编号。'}"}
+
+
+@reg_xz_func
+async def role_special_draw_scroll(uid, qz, value):
+    try:
+        result = await create_scroll(uid, value)
+        output = f"##### 🎨 战斗绘卷｜{result['quality']}\n\n"
+        output += f"绘卷编号：#{result['id']}｜battle_id：{result['battle_id']}\n"
+        output += f"记录回合：{result['detail']['rounds']}｜Boss破局：{result['detail']['broken_stages']}\n\n"
+        output += f"{_button('刀势推演 ', '刀势推演*')} | {_button('战斗绘卷', '绘卷收藏')}"
+        return {"type": "markdown", "content": output}
+    except RoleSpecialError as error:
+        return {"type": "markdown", "content": f"绘卷生成失败：{error}"}
+
+
+@reg_xz_func
+async def role_special_scrolls(uid, qz):
+    try:
+        rows = await list_scrolls(uid)
+        output = "##### 🖼️ 孟川战斗绘卷\n\n"
+        if rows:
+            for item in rows:
+                output += f"> #{item['id']}｜{item['quality']}｜{item['status']}｜破局 {item['detail'].get('broken_stages', 0)}\n"
+        else:
+            output += "> 尚无绘卷，请先使用孟川完成PVE战斗。\n"
+        output += "\n" + _button("绘制绘卷 ", "绘制绘卷*")
+        return {"type": "markdown", "content": output}
+    except RoleSpecialError as error:
+        return {"type": "markdown", "content": str(error)}
+
+
+@reg_xz_func
+async def role_special_scroll_combine(uid, qz, value):
+    try:
+        parts = [item for item in str(value).split("-") if item]
+        if len(parts) < 4:
+            raise RoleSpecialError("格式：刀势推演 绘卷编号-能力1-能力2-能力3-名称")
+        scroll_id = int(parts[0])
+        name = "-".join(parts[4:]) if len(parts) > 4 else f"刀势{scroll_id}"
+        result = await combine(uid, [int(item) for item in parts[1:4]], name, scroll_id=scroll_id)
+        output = f"##### 🗡️ 刀势推演完成｜{result['name']}\n\n"
+        output += f"绘卷：#{scroll_id}｜素材：{'、'.join(result['materials'])}\n最终倍率：{result['multiplier']:.1%}\n"
+        output += f"观察/起刀/收刀的继承来源：{result['effect'].get('inherited_from', '刀势')}\n\n"
+        output += f"{_button('战斗绘卷', '绘卷收藏')} | {_button('专属排行榜', '刀道排行')}"
+        return {"type": "markdown", "content": output}
+    except (ValueError, RoleSpecialError) as error:
+        return {"type": "markdown", "content": f"刀势推演失败：{error}"}

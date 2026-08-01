@@ -1512,6 +1512,8 @@ class CombatManager:
             conditional_bonus += min(15, int(effect['first_round_bonus']))
         if effect.get('boss_bonus') and self.enemy.entity_type == 'boss':
             conditional_bonus += min(15, int(effect['boss_bonus']))
+        if effect.get('round_at_least') and self.round >= int(effect['round_at_least']):
+            conditional_bonus += min(15, int(effect.get('damage_bonus', 0)))
         raw_damage = int(base_value * (1 + multiplier) * (1 + conditional_bonus / 100))
         defense_ignore = max(0, min(15, int(effect.get('defense_ignore', 0)))) / 100
         defense = max(0, self.enemy.get_effective_defense() * (1 - defense_ignore))

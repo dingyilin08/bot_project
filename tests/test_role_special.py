@@ -56,6 +56,13 @@ class RoleSpecialCatalogTests(unittest.TestCase):
         self.assertEqual("四极秘境", spec["stages"][3]["name"])
         self.assertTrue(spec["fixed_combos"])
 
+    def test_meng_chuan_requires_real_scroll_for_blade_inference(self):
+        spec = get_role_spec("孟川")
+        validate_role_spec(spec)
+        self.assertTrue(spec["requires_scroll"])
+        self.assertEqual(8, len(spec["stages"]))
+        self.assertEqual("时空刀印", spec["abilities"][-1]["name"])
+
 
 class RoleSpecialCombatTests(unittest.TestCase):
     def test_special_active_is_once_per_battle_and_boss_capped(self):
