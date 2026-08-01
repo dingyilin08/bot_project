@@ -10,6 +10,7 @@ from Tool.tool_command import *
 from Tool.tool_canwu import canwu_remaining_seconds, ensure_canwu_duration_column
 from func.pd_func import *
 import time
+from Game_domain.gm_state import is_admin as is_gm_admin
 
 
 # ================================
@@ -248,6 +249,10 @@ async def show_main_menu(uid, qz):
     for title, description, entries in MAIN_MENU_SECTIONS:
         output += f"***\n\n**{title}**\n> {description}\n"
         output += _menu_rows(entries) + "\n\n"
+
+    if is_gm_admin(uid):
+        output += "***\n\n**🛠️ 管理功能**\n> 永久管理员专用的资产发放与回复模式控制。\n"
+        output += _menu_rows((("GM菜单", "GM菜单"),)) + "\n\n"
 
     return {"type": "markdown", "content": output}
 

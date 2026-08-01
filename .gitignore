@@ -9,6 +9,7 @@ venv/
 .env.*
 !.env.example
 config.yaml
+gm_state.yaml
 ssl/
 
 # Runtime files

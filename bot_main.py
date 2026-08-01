@@ -74,7 +74,7 @@ class MyClient(botpy.Client):
 
         send_content = await output_content(message.content, user_openid, qun_openid, request_id=message.id)
 
-        _log.info(f"群聊玩家消息[{user_openid}]：{message.content.strip()}")
+        _log.info(f"群聊玩家消息[{user_openid}]：{redact_sensitive_content(message.content.strip())}")
         if isinstance(send_content, dict):
             await message._api.post_group_message(
                 group_openid=message.group_openid,
@@ -111,7 +111,7 @@ class MyClient(botpy.Client):
 
         send_content = await output_content(message.content, user_openid, request_id=message.id)
 
-        _log.info(f"私聊玩家消息[{user_openid}]：{message.content}")
+        _log.info(f"私聊玩家消息[{user_openid}]：{redact_sensitive_content(message.content)}")
         if isinstance(send_content, dict):
             await self.api.post_c2c_message(
                 openid=message.author.user_openid,

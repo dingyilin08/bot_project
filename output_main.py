@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import asyncio
+import hmac
 import os
 import time
 import re
@@ -30,11 +31,14 @@ from Game_main.g20_world_boss import *    # P2 世界 Boss
 from Game_main.g21_season import *        # P2 赛季长期目标
 from Game_main.g22_role_special import *  # P1 角色专属战斗养成
 from Game_main.g23_character_wish import * # P1 仙玉祈愿
+from Game_main.g24_gm import *             # GM 管理
 from Game_main.g0_menu import *          # 菜单系统
 from Tool.qq_keyboard import attach_keyboard
+from Game_domain.gm_service import GMError, authenticate_admin
+from Game_domain.gm_state import is_admin as is_gm_admin
 
-wuhouzhui = '收回|当前角色|参悟|参悟状态|领取参悟经验|悟道进阶|查看本源|本源升级|本源技能|战斗记录|战斗状态|查看怪物|怪物列表|放弃副本|药园|查看药田|种子背包|一键采摘|查看丹炉|一键收丹|添火次数|商城|菜单|MENU|主菜单|帮助|HELP|角色菜单|参悟菜单|装备菜单|本源菜单|技能菜单|副本菜单|药园菜单|炼丹菜单|装备菜单|战力菜单|灵兽菜单|队伍菜单|洞府菜单|宗门菜单|专属养成菜单|祈愿菜单|资源菜单|活动菜单|问道札记|道途建议|丹道研习|药性|玩法介绍|当前装备|我的战力|战力|新手攻略|游戏指南|灵兽|灵兽图鉴|灵兽寻访|队伍|队伍创建|队伍准备|队伍离开|道途|道途状态|道途开启|道途离开|队伍战斗|队伍战斗状态|更新日志|洞府|宗门|宗门列表|宗门委托|师徒进度|师徒修行|世界BOSS|世界排行|世界奖励|赛季|赛季任务|赛季奖励|角色养成|角色碎片|祈愿记录|专属图鉴|专属进阶|专属排行榜|萧炎养成|异火图鉴|异火排行榜|王林养成|意境图鉴|问道排行榜|韩立养成|本命飞剑|法宝图鉴|剑阵排行榜|石昊养成|洞天|宝术图鉴|极境排行榜|开辟洞天|十洞天合一|叶凡养成|圣体秘境|圣体渡劫|九秘图鉴|圣体排行榜|孟川养成|元神修炼|刀法图鉴|战斗绘卷|刀道排行榜'
-youhouzhui = '注册游戏|选择角色|角色介绍|玩法介绍|角色属性|出战|角色背包|物品背包|物品信息|副本信息|副本列表|挑战副本|挑战怪物|战斗行动|激活技能|卷轴信息|技能信息|技能融合|技能装备|技能卸下|穿戴装备|卸下装备|强化装备|装备详情|出售装备|技能背包|装备背包|战力排行|排行榜|商城|购买商品|使用体力药|种子商店|购买种子|播种|一键播种|采摘|解锁药田|施肥|出售药材|丹方列表|炼丹|收丹|服丹|解锁丹炉|加速炼丹|添火|关闭图片模式|开启图片模式|灵兽出战|队伍加入|布阵|洞府升级|洞府收取|道途投票|札记领取|队伍战斗行动|宗门创建|宗门申请|宗门投票|拜师|收徒|世界挑战|仙玉祈愿|祈愿定向|祈愿保底选择|合成角色|专属祈愿|专属定向|点亮能力|装备专属|专属组合|异火祈愿|异火定向|合成异火|装备异火|异火融合|意境祈愿|参悟意境|装备意境|本源合道|法宝祈愿|点亮法宝|法宝协同|炼制飞剑|宝术祈愿|铭刻宝术|六道轮回|九秘祈愿|参悟九秘|九秘连携|选择异象|刀法祈愿|绘制绘卷|刀势推演'
+wuhouzhui = '收回|当前角色|参悟|参悟状态|领取参悟经验|悟道进阶|查看本源|本源升级|本源技能|战斗记录|战斗状态|查看怪物|怪物列表|放弃副本|药园|查看药田|种子背包|一键采摘|查看丹炉|一键收丹|添火次数|商城|菜单|MENU|主菜单|帮助|HELP|GM菜单|角色菜单|参悟菜单|装备菜单|本源菜单|技能菜单|副本菜单|药园菜单|炼丹菜单|装备菜单|战力菜单|灵兽菜单|队伍菜单|洞府菜单|宗门菜单|专属养成菜单|祈愿菜单|资源菜单|活动菜单|问道札记|道途建议|丹道研习|药性|玩法介绍|当前装备|我的战力|战力|新手攻略|游戏指南|灵兽|灵兽图鉴|灵兽寻访|队伍|队伍创建|队伍准备|队伍离开|道途|道途状态|道途开启|道途离开|队伍战斗|队伍战斗状态|更新日志|洞府|宗门|宗门列表|宗门委托|师徒进度|师徒修行|世界BOSS|世界排行|世界奖励|赛季|赛季任务|赛季奖励|角色养成|角色碎片|祈愿记录|专属图鉴|专属进阶|专属排行榜|萧炎养成|异火图鉴|异火排行榜|王林养成|意境图鉴|问道排行榜|韩立养成|本命飞剑|法宝图鉴|剑阵排行榜|石昊养成|洞天|宝术图鉴|极境排行榜|开辟洞天|十洞天合一|叶凡养成|圣体秘境|圣体渡劫|九秘图鉴|圣体排行榜|孟川养成|元神修炼|刀法图鉴|战斗绘卷|刀道排行榜'
+youhouzhui = '注册游戏|选择角色|角色介绍|玩法介绍|角色属性|出战|角色背包|物品背包|物品信息|副本信息|副本列表|挑战副本|挑战怪物|战斗行动|激活技能|卷轴信息|技能信息|技能融合|技能装备|技能卸下|穿戴装备|卸下装备|强化装备|装备详情|出售装备|技能背包|装备背包|战力排行|排行榜|商城|购买商品|使用体力药|种子商店|购买种子|播种|一键播种|采摘|解锁药田|施肥|出售药材|丹方列表|炼丹|收丹|服丹|解锁丹炉|加速炼丹|添火|关闭图片模式|开启图片模式|GM验证|GM发放物品|GM发放仙玉|灵兽出战|队伍加入|布阵|洞府升级|洞府收取|道途投票|札记领取|队伍战斗行动|宗门创建|宗门申请|宗门投票|拜师|收徒|世界挑战|仙玉祈愿|祈愿定向|祈愿保底选择|合成角色|专属祈愿|专属定向|点亮能力|装备专属|专属组合|异火祈愿|异火定向|合成异火|装备异火|异火融合|意境祈愿|参悟意境|装备意境|本源合道|法宝祈愿|点亮法宝|法宝协同|炼制飞剑|宝术祈愿|铭刻宝术|六道轮回|九秘祈愿|参悟九秘|九秘连携|选择异象|刀法祈愿|绘制绘卷|刀势推演'
 
 user_last_call_time = {}
 
@@ -78,7 +82,7 @@ async def is_txt_exist(file_name):
 
 # ==================== 图片模式（管理员功能） ====================
 
-# 图片模式密令两步验证的待确认状态：{user_openid: 'close' | 'open'}
+# GM 密令两步验证：{user_openid: {"uid": int, "action": "auth"|"close"|"open"}}
 img_mode_pwd_pending = {}
 
 
@@ -86,16 +90,34 @@ def check_img_mode_pending(user_content, user_openid):
     """图片模式密令两步验证：若该用户处于待输入密令状态，校验其本条消息。
     返回处理结果文本；不在待验证状态则返回 None。
     需在限频与指令解析之前调用。"""
-    action = img_mode_pwd_pending.pop(user_openid, None)
-    if action is None:
+    pending = img_mode_pwd_pending.pop(user_openid, None)
+    if pending is None:
         return None
-    if user_content.upper() == ADMIN_PASSWORD.upper():
-        if action == 'close':
+    try:
+        authenticate_admin(pending["uid"], user_content, ADMIN_PASSWORD)
+        if pending["action"] == 'close':
             set_image_mode(False)
-            return "✅ 密令正确，已切换为【纯文字回复模式】\n后续回复将不再加载图片。\n恢复图片模式请发送：开启图片模式"
-        set_image_mode(True)
-        return "✅ 密令正确，已恢复【图片回复模式】。"
-    return "❌ 密令错误，已取消本次切换操作。"
+            return "✅ 密令正确，已永久授予管理员权限并切换为【纯文字回复模式】。"
+        if pending["action"] == 'open':
+            set_image_mode(True)
+            return "✅ 密令正确，已永久授予管理员权限并恢复【图片回复模式】。"
+        return "✅ 密令正确，当前 UID 已永久设为管理员。发送“GM菜单”查看指令。"
+    except GMError as error:
+        return f"❌ {error} 本次验证已取消。"
+
+
+def redact_sensitive_content(content):
+    """避免管理员密令进入普通消息日志。"""
+    text = str(content or "")
+    if ADMIN_PASSWORD and hmac.compare_digest(
+        text.strip().upper().encode("utf-8"), ADMIN_PASSWORD.upper().encode("utf-8")
+    ):
+        return "[GM密令已隐藏]"
+    upper = text.strip().upper()
+    if upper.startswith(("GM验证", "关闭图片模式", "开启图片模式")):
+        command = text.strip().split(maxsplit=1)[0]
+        return f"{command} [密令已隐藏]" if len(text.strip().split(maxsplit=1)) > 1 else command
+    return text
 
 
 def strip_image_tags(text):
@@ -429,26 +451,28 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
     # ==================== 管理员命令 ====================
 
     elif con_arr0 == '关闭图片模式':
-        if con_arr1 == "":
-            # 两步验证：先登记待确认状态，等待玩家下一条消息发送密令
-            img_mode_pwd_pending[openid] = 'close'
+        if not is_gm_admin(uid) and con_arr1 == "":
+            img_mode_pwd_pending[openid] = {"uid": uid, "action": "close"}
             return "🔒 已进入密令验证，请直接发送管理员密令："
-        if con_arr1.upper() == ADMIN_PASSWORD.upper():
-            if not is_image_mode():
-                return "当前已是纯文字回复模式，无需重复切换。"
-            set_image_mode(False)
-            return "✅ 密令正确，已切换为【纯文字回复模式】\n后续回复将不再加载图片。\n恢复图片模式请发送：开启图片模式"
-        return "❌ 密令错误，切换失败！"
+        return await gm_image_mode(uid, False, con_arr1)
     elif con_arr0 == '开启图片模式':
-        if con_arr1 == "":
-            img_mode_pwd_pending[openid] = 'open'
+        if not is_gm_admin(uid) and con_arr1 == "":
+            img_mode_pwd_pending[openid] = {"uid": uid, "action": "open"}
             return "🔒 已进入密令验证，请直接发送管理员密令："
-        if con_arr1.upper() == ADMIN_PASSWORD.upper():
-            if is_image_mode():
-                return "当前已是图片回复模式，无需重复切换。"
-            set_image_mode(True)
-            return "✅ 密令正确，已恢复【图片回复模式】。"
-        return "❌ 密令错误，切换失败！"
+        return await gm_image_mode(uid, True, con_arr1)
+    elif con_arr0 == 'GM验证':
+        if con_arr1 == "":
+            if is_gm_admin(uid):
+                return await gm_menu(uid)
+            img_mode_pwd_pending[openid] = {"uid": uid, "action": "auth"}
+            return "🔒 已进入 GM 密令验证，请直接发送管理员密令："
+        return await gm_auth(uid, con_arr1)
+    elif con_arr0 == 'GM菜单':
+        return await gm_menu(uid)
+    elif con_arr0 == 'GM发放物品':
+        return await gm_grant_item(uid, con_arr1, request_id=request_id)
+    elif con_arr0 == 'GM发放仙玉':
+        return await gm_grant_xianyu(uid, con_arr1, request_id=request_id)
 
     # ==================== 菜单系统命令 ==================== #
 

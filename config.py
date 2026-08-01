@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+from Game_domain.gm_state import get_image_mode, set_image_mode as persist_image_mode
 """
 全局配置文件
 更换域名时只需修改本文件中的 DOMAIN，所有图片URL、外链地址实时生效
@@ -17,18 +18,11 @@ IMG_BASE_URL = f"{DOMAIN}/images"
 # 管理员密令（用于图片模式切换等管理员功能的校验口令）
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 
-# 图片模式开关（运行时可变状态）
-# True = 正常图片模式（回复中加载图片）；False = 纯文字回复模式（不加载图片）
-# 注意：该状态保存在内存中，服务重启后自动恢复为图片模式
-_IMAGE_MODE_ENABLED = True
-
-
 def is_image_mode() -> bool:
-    """当前是否为图片模式（True=加载图片，False=纯文字模式）"""
-    return _IMAGE_MODE_ENABLED
+    """当前是否为图片模式；状态持久化到 gm_state.yaml。"""
+    return get_image_mode()
 
 
 def set_image_mode(enabled: bool):
-    """切换图片/纯文字模式（管理员功能，需密令验证）"""
-    global _IMAGE_MODE_ENABLED
-    _IMAGE_MODE_ENABLED = enabled
+    """切换图片/纯文字模式并永久保存。"""
+    return persist_image_mode(enabled)

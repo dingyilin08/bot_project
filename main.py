@@ -498,7 +498,7 @@ async def handle_webhook(request: Request):
             # 群聊消息处理
             if payload.t == "GROUP_AT_MESSAGE_CREATE":
                 group_openid = json_data["group_openid"]
-                logging.info(f"群聊【{group_openid}】{user_openid}：{content}")
+                logging.info(f"群聊【{group_openid}】{user_openid}：{redact_sensitive_content(content)}")
                 # 发送群聊消息
                 result = await output_content(content, user_openid, group_openid, request_id=msg_id)
 
@@ -521,7 +521,7 @@ async def handle_webhook(request: Request):
 
             # 私聊消息处理
             elif payload.t == "C2C_MESSAGE_CREATE":
-                logging.info(f"私聊【{user_openid}】：{content}")
+                logging.info(f"私聊【{user_openid}】：{redact_sensitive_content(content)}")
                 result = await output_content(content, user_openid, request_id=msg_id)
 
                 # 检查返回消息类型
