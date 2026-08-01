@@ -68,6 +68,46 @@ MENU_CONFIG = {
 }
 
 
+# 主菜单只放“xx菜单”级入口。新增功能优先归入已有分区；独立系统需新增子菜单后在此登记。
+MAIN_MENU_SECTIONS = (
+    (
+        "🧍 角色养成",
+        "角色培养、修行、本源、技能、装备与专属战斗养成。",
+        (("角色菜单", "角色菜单"), ("参悟菜单", "参悟菜单"), ("本源菜单", "本源菜单"),
+         ("技能菜单", "技能菜单"), ("装备菜单", "装备菜单"), ("专属养成菜单", "专属养成")),
+    ),
+    (
+        "⚔️ 战斗与资源",
+        "副本挑战、背包交易、药园炼丹、灵兽与洞府生产。",
+        (("副本菜单", "副本菜单"), ("资源菜单", "资源菜单"), ("灵兽菜单", "灵兽菜单"),
+         ("洞府菜单", "洞府菜单")),
+    ),
+    (
+        "👥 社交与活动",
+        "队伍协作、宗门师徒、世界 Boss、赛季与排行榜。",
+        (("队伍菜单", "队伍菜单"), ("宗门菜单", "宗门菜单"), ("活动菜单", "活动菜单"),
+         ("战力菜单", "战力菜单")),
+    ),
+    (
+        "📚 指引与记录",
+        "新手札记、玩法说明与版本更新记录。",
+        (("问道札记", "新手札记"), ("玩法介绍", "玩法介绍"), ("更新日志", "更新日志")),
+    ),
+)
+
+
+def _menu_link(command, label):
+    return f"<qqbot-cmd-input text='{command}' show='{label}' />"
+
+
+def _menu_rows(entries, width=3):
+    """主菜单每行最多三个入口，避免蓝字文本在窄屏消息中拥挤换行。"""
+    return "\n".join(
+        " | ".join(_menu_link(command, label) for command, label in entries[index:index + width])
+        for index in range(0, len(entries), width)
+    )
+
+
 # ================================
 # 菜单辅助函数
 # ================================
@@ -198,26 +238,15 @@ async def show_main_menu(uid, qz):
     else:
         role_display = "未出战角色"
 
-    # 构建菜单内容
-    output = "##### 游戏主菜单\n\n"
+    output = "##### 🏮 问道诸天｜主菜单\n\n"
     output += f"**玩家：** {player_info['name']}\n"
     output += f"**当前角色：** {role_display}\n"
     output += f"**灵石：** {player_info['lingshi']} | **仙玉：** {player_info['xianyu']}\n\n"
-    output += "***\n\n"
+    output += "> 首页仅保留系统入口；进入对应「xx菜单」查看具体操作。\n\n"
 
-    # 按系统分组显示
-    output += "<qqbot-cmd-input text='角色菜单' show='角色菜单' /> | <qqbot-cmd-input text='参悟菜单' show='参悟菜单' />\n\n"
-    output += "<qqbot-cmd-input text='本源菜单' show='本源菜单' /> | <qqbot-cmd-input text='技能菜单' show='技能菜单' />\n\n"
-    output += "<qqbot-cmd-input text='副本菜单' show='副本菜单' /> | <qqbot-cmd-input text='装备菜单' show='装备菜单' />\n\n"
-    output += "<qqbot-cmd-input text='药园菜单' show='药园菜单' /> | <qqbot-cmd-input text='炼丹菜单' show='炼丹菜单' />\n\n"
-
-    output += "<qqbot-cmd-input text='商城' show='商城' /> | <qqbot-cmd-input text='物品背包' show='物品背包' />\n\n"
-    output += "<qqbot-cmd-input text='灵兽菜单' show='灵兽菜单' /> | <qqbot-cmd-input text='洞府菜单' show='洞府菜单' />\n\n"
-    output += "<qqbot-cmd-input text='队伍菜单' show='队伍菜单' /> | <qqbot-cmd-input text='宗门菜单' show='宗门菜单' />\n\n"
-    output += "<qqbot-cmd-input text='世界BOSS' show='世界Boss' /> | <qqbot-cmd-input text='赛季' show='赛季' />\n\n"
-    output += "<qqbot-cmd-input text='更新日志' show='更新日志 v1.22' />\n\n"
-    output += "<qqbot-cmd-input text='问道札记' show='新手引导' /> | <qqbot-cmd-input text='玩法介绍' show='玩法介绍' />\n\n"
-    output += "<qqbot-cmd-input text='战力菜单' show='战力菜单' />\n\n"
+    for title, description, entries in MAIN_MENU_SECTIONS:
+        output += f"***\n\n**{title}**\n> {description}\n"
+        output += _menu_rows(entries) + "\n\n"
 
     return {"type": "markdown", "content": output}
 
@@ -270,6 +299,39 @@ async def show_sect_menu(uid, qz):
     output += "<qqbot-cmd-input text='宗门' show='我的宗门' /> | <qqbot-cmd-input text='宗门列表' show='宗门列表' />\n\n"
     output += "<qqbot-cmd-input text='宗门创建 ' show='创建宗门*' /> | <qqbot-cmd-input text='宗门委托' show='宗门委托' />\n\n"
     output += "<qqbot-cmd-input text='师徒进度' show='师徒进度' /> | <qqbot-cmd-input text='师徒修行' show='师徒修行' />\n\n"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
+    return {"type": "markdown", "content": output}
+
+
+@reg_xz_func
+async def show_role_special_menu(uid, qz):
+    """角色专属战斗养成入口；具体内容随当前出战角色切换。"""
+    output = "##### ⚔️ 专属养成菜单\n\n"
+    output += "当前出战角色的专属材料、图鉴、进阶、组合与排行均在此处；先在副本或世界 Boss 中获得对应养成资源。\n\n"
+    output += "<qqbot-cmd-input text='角色养成' show='当前角色养成' /> | <qqbot-cmd-input text='专属图鉴' show='专属图鉴' />\n\n"
+    output += "<qqbot-cmd-input text='专属进阶' show='专属进阶' /> | <qqbot-cmd-input text='专属排行榜' show='专属排行榜' />\n\n"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
+    return {"type": "markdown", "content": output}
+
+
+@pd_reg_func
+async def show_resource_menu(uid, qz):
+    """资源、背包、药园和炼丹的聚合入口。"""
+    output = "##### 📦 资源菜单\n\n"
+    output += "管理物品与货币，进入药园与炼丹子菜单处理长期资源生产。\n\n"
+    output += "<qqbot-cmd-input text='物品背包' show='物品背包' /> | <qqbot-cmd-input text='商城' show='灵石商城' />\n\n"
+    output += "<qqbot-cmd-input text='药园菜单' show='药园菜单' /> | <qqbot-cmd-input text='炼丹菜单' show='炼丹菜单' />\n\n"
+    output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
+    return {"type": "markdown", "content": output}
+
+
+@reg_xz_func
+async def show_activity_menu(uid, qz):
+    """周期性挑战与长期目标的聚合入口。"""
+    output = "##### 🌌 活动菜单\n\n"
+    output += "参与世界 Boss 获取贡献与专属感悟；赛季记录长期目标与外观、称号资格。\n\n"
+    output += "<qqbot-cmd-input text='世界BOSS' show='世界Boss' /> | <qqbot-cmd-input text='赛季' show='赛季主页' />\n\n"
+    output += "<qqbot-cmd-input text='世界排行' show='世界排行' /> | <qqbot-cmd-input text='赛季任务' show='赛季任务' />\n\n"
     output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
     return {"type": "markdown", "content": output}
 
