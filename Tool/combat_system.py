@@ -887,6 +887,7 @@ class CombatManager:
         return self.winner, self.combat_log[before:]
 
     def _execute_player_action(self, action: Optional[Dict]) -> None:
+        self._apply_role_special_conditional_passive()
         if action is None or str(action.get('action_type', '')).upper() == 'AUTO':
             self._execute_turn(self.player, self.enemy)
             return
@@ -1461,12 +1462,37 @@ class CombatManager:
         self.role_special['events'].append({'round': self.round, 'type': 'PASSIVE', 'id': passive.get('id'), 'name': passive['name'], 'final_value': 0})
         self._log('role_special_passive', message)
 
+    def _apply_role_special_conditional_passive(self) -> None:
+        passive = self.role_special.get('passive')
+        if not passive or self.role_special.get('passive_triggered'):
+            return
+        effect = passive.get('effect') or {}
+        if effect.get('trigger') != 'LOW_HP':
+            return
+        threshold = max(1, min(90, int(effect.get('threshold', 30))))
+        if self.player.hp > self.player.max_hp * threshold / 100:
+            return
+        value = max(1, min(10, int(effect.get('value', 8))))
+        self.player.add_buff(Buff('shield', value, 2, passive['name'], passive['name']))
+        self.role_special['passive_triggered'] = True
+        self.role_special['events'].append({'round': self.round, 'type': 'PASSIVE', 'id': passive.get('id'), 'name': passive['name'], 'final_value': value})
+        self._log('role_special_passive', f"🛡️ 专属被动「{passive['name']}」在低血量时生成{value}%护身屏障。")
+
     def _execute_role_special(self) -> None:
         active = self.role_special.get('active') or {}
         effect = active.get('effect') or {}
         multiplier = max(0.0, min(2.0, float(active.get('multiplier', 0))))
         base_value = max(1, int(self.player.get_effective_attack() * max(1.0, self.player.crit_dmg)))
-        raw_damage = int(base_value * (1 + multiplier))
+        conditional_bonus = 0
+        if effect.get('target_hp_below') and self.enemy.hp <= self.enemy.max_hp * int(effect['target_hp_below']) / 100:
+            conditional_bonus += min(15, int(effect.get('damage_bonus', 0)))
+        if effect.get('self_hp_above') and self.player.hp >= self.player.max_hp * int(effect['self_hp_above']) / 100:
+            conditional_bonus += min(15, int(effect.get('damage_bonus', 10)))
+        if effect.get('first_round_bonus') and self.round == 1:
+            conditional_bonus += min(15, int(effect['first_round_bonus']))
+        if effect.get('boss_bonus') and self.enemy.entity_type == 'boss':
+            conditional_bonus += min(15, int(effect['boss_bonus']))
+        raw_damage = int(base_value * (1 + multiplier) * (1 + conditional_bonus / 100))
         defense_ignore = max(0, min(15, int(effect.get('defense_ignore', 0)))) / 100
         defense = max(0, self.enemy.get_effective_defense() * (1 - defense_ignore))
         damage = max(1, int(raw_damage * (1 - defense / (defense + 800))))
@@ -1489,6 +1515,10 @@ class CombatManager:
             value = min(15, int(effect['resilience_down']))
             self.enemy.add_buff(Buff('defense_down', value, 2, active.get('name', ''), '韧性削减'))
             self._log('role_special_effect', f"⚔️ {self.enemy.name}韧性降低{value}%。")
+        if effect.get('healing_down'):
+            value = min(20, int(effect['healing_down']))
+            self.enemy.add_buff(Buff('healing_down', value, 2, active.get('name', ''), '治疗压制'))
+            self._log('role_special_effect', f"☯️ {self.enemy.name}下一次治疗效果降低{value}%。")
         if effect_type == 'DAMAGE_DISPEL' and effect.get('dispel'):
             removable = [buff for buff in self.enemy.buffs if buff.buff_type.endswith('_up')]
             if removable:

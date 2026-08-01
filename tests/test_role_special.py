@@ -27,6 +27,13 @@ class RoleSpecialCatalogTests(unittest.TestCase):
         self.assertEqual("焚诀", spec["growth_name"])
         self.assertEqual({4, 5}, {item["rarity"] for item in spec["abilities"]})
 
+    def test_wang_lin_uses_concepts_and_eight_ancient_god_stars(self):
+        spec = get_role_spec("王林")
+        validate_role_spec(spec)
+        self.assertEqual("古神星点", spec["growth_name"])
+        self.assertEqual(8, len(spec["stages"]))
+        self.assertIn("轮回本源", {item["name"] for item in spec["abilities"]})
+
 
 class RoleSpecialCombatTests(unittest.TestCase):
     def test_special_active_is_once_per_battle_and_boss_capped(self):

@@ -7,6 +7,7 @@ from typing import Dict, Iterable, List, Optional
 
 ROLE_MODULES = {
     "萧炎": "Game_domain.role_special_xiao",
+    "王林": "Game_domain.role_special_wanglin",
 }
 
 
@@ -60,4 +61,3 @@ def validate_role_spec(spec: Dict) -> None:
 
 for _spec in iter_role_specs():
     validate_role_spec(_spec)
-
