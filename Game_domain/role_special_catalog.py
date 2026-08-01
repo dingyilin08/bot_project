@@ -10,6 +10,7 @@ ROLE_MODULES = {
     "王林": "Game_domain.role_special_wanglin",
     "韩立": "Game_domain.role_special_hanli",
     "石昊": "Game_domain.role_special_shihao",
+    "叶凡": "Game_domain.role_special_yefan",
 }
 
 
@@ -53,6 +54,8 @@ def validate_role_spec(spec: Dict) -> None:
     if not any(item["rarity"] == 5 for item in spec["abilities"]):
         raise ValueError(f"{spec['role_name']}缺少五星长期养成内容")
     for item in spec["abilities"]:
+        if not item.get("enabled", True):
+            continue
         if item["kind"] not in {"ACTIVE", "PASSIVE"}:
             raise ValueError(f"能力类型无效：{item['code']}")
         if not 0 <= float(item.get("multiplier", 0)) <= 2.0:

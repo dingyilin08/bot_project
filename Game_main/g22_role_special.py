@@ -14,6 +14,7 @@ from Game_domain.role_special_service import (
     pray,
     rank,
     set_target,
+    select_feature,
     unlock,
 )
 
@@ -40,7 +41,12 @@ def render_home(data):
     output += f"当前主动：**{data['active_skill']}**｜当前被动：**{data['active_passive']}**\n"
     output += f"五星保底：{data['rare_pity']}/10｜定向偏离：{data['target_miss']}/3｜今日祈愿：{data['daily_pray_count']}/{DAILY_PRAY_LIMIT}\n\n"
     output += f"> {spec['growth_material']}：{materials.get(codes['growth'], 0)}｜{spec['essence_name']}：{materials.get(codes['essence'], 0)}｜{spec['core_name']}：{materials.get(codes['core'], 0)}\n"
+    for code, name in spec.get("extra_materials", {}).items():
+        output += f"> {name}：{materials.get(code, 0)}\n"
     output += f"> {spec['passive_lore']}\n\n"
+    if spec.get("featured_system"):
+        output += f"> {spec['featured_system']}\n"
+        output += f"> 当前机制：{data.get('feature', {}).get('feature_name', '未选择')}\n\n"
     output += "专属能力只在 PVE 生效；主动每场最多施放一次，不暴击、不触发五行连锁，世界 Boss 单次伤害不超过最大生命的 3%。\n\n"
     output += " | ".join([
         _button("专属图鉴", spec["drop_name"] + "图鉴"),
@@ -59,9 +65,9 @@ def render_collection(data, notice=""):
         output += f"> {notice}\n\n"
     for item in data["items"]:
         stars = "★" * item["rarity"]
-        status = "已点亮" if item["unlocked"] else f"残片 {item['fragments']}/{item['cost']}"
+        status = "未开放·待考据" if not item["enabled"] else "已点亮" if item["unlocked"] else f"残片 {item['fragments']}/{item['cost']}"
         slot = f"｜已装备{item['slot']}" if item["slot"] else ""
-        kind = "主动" if item["kind"] == "ACTIVE" else "被动"
+        kind = "未开放" if not item["enabled"] else "主动" if item["kind"] == "ACTIVE" else "被动"
         output += f"**#{item['id']} {item['name']}**｜{stars}｜{kind}｜倍率 {item['multiplier']:.0%}\n"
         output += f"> {status}{slot}｜{item['lore']}\n"
     output += "\n" + " | ".join([
@@ -179,3 +185,14 @@ async def role_special_rank(uid, qz):
         return {"type": "markdown", "content": output}
     except RoleSpecialError as error:
         return {"type": "markdown", "content": str(error)}
+
+
+@reg_xz_func
+async def role_special_feature(uid, qz, value):
+    try:
+        message = await select_feature(uid, int(value))
+        result = render_home(await home(uid))
+        result["content"] = f"> {message}\n\n" + result["content"]
+        return result
+    except (ValueError, RoleSpecialError) as error:
+        return {"type": "markdown", "content": f"机制选择失败：{error or '请输入机制编号。'}"}

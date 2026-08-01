@@ -165,4 +165,6 @@ async def world_boss_reward(uid, qz):
     content = f"领取世界 Boss「{tier}」奖励成功：灵石 +{reward}。"
     if insight:
         content += f"\n获得{insight['role_name']}角色感悟：本体感悟 +2、感悟精华 +10、组合核心 +1。"
+        if insight.get("extra_name"):
+            content += f"\n{insight['extra_name']} +1。"
     return {"type": "markdown", "content": content}

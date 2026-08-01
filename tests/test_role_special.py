@@ -48,6 +48,14 @@ class RoleSpecialCatalogTests(unittest.TestCase):
         self.assertEqual(12, spec["combo_min_stage"])
         self.assertIn("SH_ART_09", spec["non_combinable_codes"])
 
+    def test_ye_fan_keeps_disputed_secrets_out_of_pool(self):
+        spec = get_role_spec("叶凡")
+        validate_role_spec(spec)
+        disabled = {item["name"] for item in spec["abilities"] if not item.get("enabled", True)}
+        self.assertEqual({"临字秘", "数秘"}, disabled)
+        self.assertEqual("四极秘境", spec["stages"][3]["name"])
+        self.assertTrue(spec["fixed_combos"])
+
 
 class RoleSpecialCombatTests(unittest.TestCase):
     def test_special_active_is_once_per_battle_and_boss_capped(self):

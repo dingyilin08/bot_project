@@ -807,6 +807,7 @@ class CombatManager:
         self.first, self.second = self._determine_order()
         self._log("order", f"速度判定：{self.first.name} 先手！")
         self._apply_role_special_passive()
+        self._apply_role_feature()
         self.initialized = True
 
     def validate_player_action(self, action: Dict) -> Tuple[bool, str]:
@@ -1485,6 +1486,18 @@ class CombatManager:
         self.role_special['events'].append({'round': self.round, 'type': 'PASSIVE', 'id': passive.get('id'), 'name': passive['name'], 'final_value': final_value})
         self._log('role_special_passive', message)
 
+    def _apply_role_feature(self) -> None:
+        feature = self.role_special.get('feature') or {}
+        effect = feature.get('effect') or {}
+        if not feature.get('feature_name'):
+            return
+        if effect.get('type') == 'PLAYER_DEFENSE_UP':
+            value = min(15, int(effect.get('value', 0)))
+            self.player.add_buff(Buff('defense_up', value, max(1, int(effect.get('duration', 1))), feature['feature_name'], feature['feature_name']))
+        elif effect.get('type') == 'PLAYER_SHIELD':
+            self.player.add_buff(Buff('shield', min(10, int(effect.get('value', 0))), 2, feature['feature_name'], feature['feature_name']))
+        self._log('role_feature', f"🌌 角色机制「{feature['feature_name']}」随战斗快照生效。")
+
     def _execute_role_special(self) -> None:
         active = self.role_special.get('active') or {}
         effect = active.get('effect') or {}
@@ -1542,6 +1555,11 @@ class CombatManager:
             self.player.add_buff(Buff('shield', value, 2, active.get('name', ''), '专属护盾'))
             self._log('role_special_effect', f"🛡️ {self.player.name}获得{value}%专属护盾。")
         if effect_type == 'DAMAGE_HEAL':
+            if effect.get('clear_dot'):
+                removable = next((buff for buff in self.player.buffs if buff.buff_type in ('burning', 'poison', 'damage_over_time')), None)
+                if removable:
+                    self.player.buffs.remove(removable)
+                    self._log('role_special_effect', f"✨ 「{active.get('name')}」清除了一项持续伤害。")
             if effect.get('heal_damage_percent'):
                 heal = int(damage * min(5, int(effect['heal_damage_percent'])) / 100)
             else:

@@ -150,6 +150,7 @@ async def home(uid: int) -> Dict:
             await cursor.execute(
                 """SELECT p.growth_stage,p.growth_value,p.daily_drop_date,p.daily_drop_count,
                           a.name,b.name,pt.rare_pity_count,pt.target_miss_count,pt.daily_pray_date,pt.daily_pray_count
+                          ,p.preset_json
                    FROM user_role_special_progress p
                    LEFT JOIN role_special_collection_config a ON a.id=p.active_skill_id
                    LEFT JOIN role_special_collection_config b ON b.id=p.active_passive_id
@@ -183,8 +184,28 @@ async def home(uid: int) -> Dict:
         "active_skill": row[4] or "未装备", "active_passive": row[5] or "未装备",
         "rare_pity": int(row[6]), "target_miss": int(row[7]),
         "daily_pray_count": int(row[9]) if row[8] == today else 0,
-        "unlocked": unlocked, "total": total, "materials": materials,
+        "unlocked": unlocked, "total": total, "materials": materials, "feature": _json(row[10]),
     }
+
+
+async def select_feature(uid: int, feature_id: int) -> str:
+    async with connect_mysql() as conn:
+        async with conn.cursor() as cursor:
+            role_id, template_id, role_name = await _active_role(cursor, uid, True)
+            await _ensure_progress(cursor, uid, role_id, template_id, role_name)
+            spec = get_role_spec(role_name)
+            feature = next((item for item in spec.get("features", []) if int(item["id"]) == int(feature_id)), None)
+            if not feature:
+                raise RoleSpecialError("当前角色没有该机制编号。")
+            await cursor.execute("SELECT growth_stage FROM user_role_special_progress WHERE uid=%s AND role_id=%s FOR UPDATE", (uid, role_id))
+            stage = int((await cursor.fetchone())[0])
+            if stage < int(feature.get("unlock_stage", 1)):
+                raise RoleSpecialError(f"该机制需要角色专属成长达到第{feature['unlock_stage']}阶段。")
+            payload = {"feature_id": feature["id"], "feature_name": feature["name"], "effect": feature["effect"]}
+            await cursor.execute("UPDATE user_role_special_progress SET preset_json=%s WHERE uid=%s AND role_id=%s",
+                                 (json.dumps(payload, ensure_ascii=False), uid, role_id))
+            await conn.commit()
+    return f"已装备角色机制「{feature['name']}」；同一场只生效一个。"
 
 
 async def collection(uid: int) -> Dict:
@@ -195,11 +216,11 @@ async def collection(uid: int) -> Dict:
             await cursor.execute(
                 """SELECT c.id,c.collection_code,c.name,c.rarity,c.fragment_cost,c.skill_type,
                           c.skill_multiplier,c.effect_json,c.lore_desc,
-                          COALESCE(u.fragment_amount,0),COALESCE(u.unlocked,0),u.equipped_slot
+                          COALESCE(u.fragment_amount,0),COALESCE(u.unlocked,0),u.equipped_slot,c.enabled
                    FROM role_special_collection_config c
                    LEFT JOIN user_role_special_collection u
                      ON u.collection_id=c.id AND u.uid=%s AND u.role_id=%s
-                   WHERE c.role_template_id=%s AND c.enabled=1
+                   WHERE c.role_template_id=%s
                    ORDER BY c.rarity,c.id""",
                 (uid, role_id, template_id),
             )
@@ -208,7 +229,7 @@ async def collection(uid: int) -> Dict:
     return {"role_id": role_id, "role_name": role_name, "spec": get_role_spec(role_name), "items": [
         {"id": int(r[0]), "code": r[1], "name": r[2], "rarity": int(r[3]), "cost": int(r[4]),
          "kind": r[5], "multiplier": float(r[6]), "effect": _json(r[7]), "lore": r[8],
-         "fragments": int(r[9]), "unlocked": bool(r[10]), "slot": r[11]} for r in rows
+         "fragments": int(r[9]), "unlocked": bool(r[10]), "slot": r[11], "enabled": bool(r[12])} for r in rows
     ]}
 
 
@@ -453,10 +474,17 @@ async def combine(uid: int, ids: Sequence[int], custom_name: str) -> Dict:
             seed = random.SystemRandom().randint(1, 2**63 - 1)
             rng = random.Random(seed)
             values = [float(row[3]) for row in materials]
-            multiplier = max(sum(values) / 3, rng.uniform(min(values), min(2.0, max(values) * 1.5)))
-            effect_source = rng.choice(materials)
-            effect = _json(effect_source[4])
-            effect["inherited_from"] = effect_source[2]
+            fixed_key = "+".join(row[1] for row in materials)
+            fixed_effect = spec.get("fixed_combos", {}).get(fixed_key)
+            if fixed_effect:
+                multiplier = sum(values) / 3
+                effect = dict(fixed_effect)
+                effect["inherited_from"] = "固定连携"
+            else:
+                multiplier = max(sum(values) / 3, rng.uniform(min(values), min(2.0, max(values) * 1.5)))
+                effect_source = rng.choice(materials)
+                effect = _json(effect_source[4])
+                effect["inherited_from"] = effect_source[2]
             await cursor.execute(
                 """INSERT INTO user_role_special_combo
                    (uid,role_id,combo_type,custom_name,normalized_name,material_collection_ids_json,slot_order_json,multiplier,effect_json,seed)
@@ -491,7 +519,7 @@ async def load_battle_special(cursor, uid: int, role_id: int, role_name: str) ->
     if not get_role_spec(role_name):
         return None
     await cursor.execute(
-        """SELECT p.growth_stage,a.id,a.name,a.skill_multiplier,a.effect_json,b.id,b.name,b.effect_json
+        """SELECT p.growth_stage,a.id,a.name,a.skill_multiplier,a.effect_json,b.id,b.name,b.effect_json,p.preset_json
            FROM user_role_special_progress p
            LEFT JOIN role_special_collection_config a ON a.id=p.active_skill_id
            LEFT JOIN role_special_collection_config b ON b.id=p.active_passive_id
@@ -504,6 +532,7 @@ async def load_battle_special(cursor, uid: int, role_id: int, role_name: str) ->
         "role_id": role_id, "role_name": role_name, "growth_stage": int(row[0]),
         "active": None if not row[1] else {"id": int(row[1]), "name": row[2], "multiplier": float(row[3]), "effect": _json(row[4])},
         "passive": None if not row[5] else {"id": int(row[5]), "name": row[6], "effect": _json(row[7])},
+        "feature": _json(row[8]),
     }
 
 
@@ -572,6 +601,9 @@ async def grant_battle_drop(*, battle_id: str, uid: int, role_id: int, role_name
                 await _change_material(cursor, request_id=request_id, battle_id=battle_id, uid=uid, role_id=role_id,
                                        code=codes["growth"], amount=1, source="BOSS_GROWTH")
             if is_boss:
+                if spec.get("boss_material_code"):
+                    await _change_material(cursor, request_id=request_id, battle_id=battle_id, uid=uid, role_id=role_id,
+                                           code=spec["boss_material_code"], amount=1, source="BOSS_TRIAL_MATERIAL")
                 if rng.random() < .20:
                     await _change_material(cursor, request_id=request_id, battle_id=battle_id, uid=uid, role_id=role_id,
                                            code=codes["core"], amount=1, source="BOSS_CORE")
@@ -624,9 +656,14 @@ async def grant_world_insight(*, run_key: str, uid: int) -> Optional[Dict]:
                                              code=codes["essence"], amount=10, source="WORLD_INSIGHT")
             await _change_material(cursor, request_id=request_id, battle_id=run_key, uid=uid, role_id=role_id,
                                    code=codes["core"], amount=1, source="WORLD_INSIGHT")
+            extra_name = None
+            if spec.get("world_material_code"):
+                await _change_material(cursor, request_id=request_id, battle_id=run_key, uid=uid, role_id=role_id,
+                                       code=spec["world_material_code"], amount=1, source="WORLD_ROLE_MATERIAL")
+                extra_name = spec.get("extra_materials", {}).get(spec["world_material_code"], spec["world_material_code"])
             await cursor.execute(
                 "UPDATE user_role_special_progress SET world_insight_key=%s WHERE uid=%s AND role_id=%s",
                 (run_key, uid, role_id),
             )
             await conn.commit()
-    return {"role_name": role_name, "growth": growth, "essence": essence}
+    return {"role_name": role_name, "growth": growth, "essence": essence, "extra_name": extra_name}
