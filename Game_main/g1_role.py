@@ -6,6 +6,7 @@ import time
 import random
 from Tool.tool_command import *
 from Game_main.g7_equip import calc_role_equip_bonus
+from Game_domain.role_special_intro import render_role_special_intro
 
 
 # 注册游戏
@@ -127,6 +128,10 @@ async def select_role(uid, qz, role_name):
             output += f"> 破防：{round((pofang / 100), 2)}% | 吸血：{round((xixue / 100), 2)}%\n"
             output += f"> 法力上限：{max_fali}\n"
             output += "**技能：** 未装备"
+            special_intro = render_role_special_intro(role_name, include_actions=False)
+            if special_intro:
+                output += f"\n\n***\n\n{special_intro}"
+                output += "\n\n> 先点击下方“出战”让该角色出战，再进入专属养成。"
 
             kj = await all_write_command(uid, (f"出战{role_id}", "角色背包", "查看本源"))
 
@@ -169,9 +174,21 @@ async def role_info(uid, qz, role_name):
             output += f"> 破防：{round((pofang / 100), 1)}% | 吸血：{round((xixue / 100), 1)}%\n"
             output += f"> 法力上限：{max_fali}\n\n"
             output += "***\n"
+            special_intro = render_role_special_intro(role_name)
+            if special_intro:
+                output += special_intro + "\n\n"
             output += f"<qqbot-cmd-input text='选择角色 {role_name}' show='选择角色 {role_name}' />\n"
 
             return {"type": "markdown", "content": output}
+
+
+# 角色专属玩法介绍
+@pd_reg_func
+async def role_special_info(uid, qz, role_name):
+    output = render_role_special_intro(role_name)
+    if output is None:
+        return {"type": "markdown", "content": qz + "该角色暂未开放专属战斗养成玩法。\n\n示例：玩法介绍 萧炎"}
+    return {"type": "markdown", "content": qz + output}
 
 
 # 角色属性

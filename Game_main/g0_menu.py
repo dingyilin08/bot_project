@@ -294,6 +294,8 @@ async def show_role_menu(uid, qz):
     output += "> 点击蓝字后输入想选择的角色名称，如：选择角色 王林\n\n"
     output += "<qqbot-cmd-input text='角色介绍' show='角色介绍 角色名称' />\n"
     output += "> 点击蓝字后输入想了解的角色名称，如：角色介绍 韩立\n\n"
+    output += "<qqbot-cmd-input text='玩法介绍' show='玩法介绍 角色名称' />\n"
+    output += "> 查看角色专属战斗养成路线，如：玩法介绍 萧炎\n\n"
     output += "<qqbot-cmd-input text='角色背包' show='角色背包 页码' />\n"
     output += "> 点击蓝字后输入页码可查看角色背包的第X页，如：角色背包1\n\n"
     output += "<qqbot-cmd-input text='角色属性' show='角色属性' />\n"

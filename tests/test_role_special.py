@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
 import unittest
+import asyncio
 
 from Game_domain.role_special_catalog import get_role_spec, validate_role_spec
+from Game_domain.role_special_intro import render_role_special_intro
 from Game_domain.role_special_service import world_boss_contribution
 from Tool.combat_system import CombatEntity, CombatManager
 from Tool.qq_keyboard import attach_keyboard, extract_keyboard
+from output_main import jiance
 
 
 def entity(name, hp=1000, entity_type="player", role_special=None):
@@ -19,6 +22,22 @@ def entity(name, hp=1000, entity_type="player", role_special=None):
 
 
 class RoleSpecialCatalogTests(unittest.TestCase):
+    def test_role_special_intro_describes_xiao_yan_growth_and_entry(self):
+        intro = render_role_special_intro("萧炎")
+        self.assertIn("专属战斗养成玩法", intro)
+        self.assertIn("焚诀", intro)
+        self.assertIn("异火融合", intro)
+        self.assertIn("萧炎养成", intro)
+
+    def test_role_special_intro_is_available_for_all_six_roles_only(self):
+        for role_name in ("萧炎", "王林", "韩立", "石昊", "叶凡", "孟川"):
+            self.assertIn(role_name, render_role_special_intro(role_name, include_actions=False))
+        self.assertIsNone(render_role_special_intro("不存在的角色"))
+
+    def test_role_special_intro_command_keeps_generic_guide_compatible(self):
+        self.assertEqual(("玩法介绍", "萧炎"), asyncio.run(jiance("玩法介绍 萧炎")))
+        self.assertEqual(("玩法介绍", ""), asyncio.run(jiance("玩法介绍")))
+
     def test_xiao_yan_catalog_has_original_growth_shape(self):
         spec = get_role_spec("萧炎")
         validate_role_spec(spec)
@@ -72,6 +91,8 @@ class RoleSpecialCombatTests(unittest.TestCase):
             "passive": None,
         }
         manager = CombatManager(entity("萧炎", role_special=special), entity("Boss", hp=1000, entity_type="boss"))
+        manager.player.speed = 1000
+        manager.enemy.speed = 1
         valid, _ = manager.validate_player_action({"action_type": "SPECIAL"})
         self.assertTrue(valid)
         before = manager.enemy.hp

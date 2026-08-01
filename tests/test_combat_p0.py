@@ -67,7 +67,9 @@ class P0CombatRulesTests(unittest.TestCase):
         )
         manager.enemy.hp = 70
 
-        manager.resolve_round({"action_type": "SKILL", "skill_id": 1})
+        # 本用例验证天机元素破局，不应因随机闪避而失去目标。
+        with patch("Tool.combat_system.random.random", return_value=0.5):
+            manager.resolve_round({"action_type": "SKILL", "skill_id": 1})
         log_types = [log["type"] for log in manager.combat_log]
         self.assertIn("boss_telegraph", log_types)
         self.assertIn("boss_break", log_types)
