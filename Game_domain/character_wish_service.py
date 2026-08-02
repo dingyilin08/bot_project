@@ -551,18 +551,14 @@ async def draw(uid: int, count: int, request_id: str = None) -> dict:
                        result_json=%s,completed_at=NOW() WHERE id=%s""",
                     (current_pity, _dumps(result), order_id),
                 )
+                if level_changed:
+                    # 祈愿经验、角色升级和战力快照必须同时成功或同时回滚。
+                    from Tool.tool_power import update_role_power
+                    await update_role_power(conn, uid)
             await conn.commit()
         except Exception:
             await conn.rollback()
             raise
-    if level_changed:
-        try:
-            from Tool.tool_power import update_role_power
-            async with connect_mysql() as power_conn:
-                await update_role_power(power_conn, uid)
-                await power_conn.commit()
-        except Exception:
-            pass
     return result
 
 

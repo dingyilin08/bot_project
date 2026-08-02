@@ -10,6 +10,11 @@ from sql.mysql import *
 from Tool.tool_user import *
 from func.pd_func import *
 from config import IMG_BASE_URL
+from Game_domain.equipment_rules import (
+    EQUIPMENT_ENHANCE_BONUS_PER_LEVEL,
+    EQUIPMENT_QUALITY_MULTIPLIER,
+    EQUIPMENT_SET_BONUS,
+)
 
 # ================================
 # 常量定义
@@ -24,13 +29,7 @@ QUALITY_ICON = {
     '神品': '✦'
 }
 
-QUALITY_MULTIPLIER = {
-    '凡品': 1.0,
-    '良品': 1.3,
-    '精品': 1.8,
-    '仙品': 2.5,
-    '神品': 3.5
-}
+QUALITY_MULTIPLIER = EQUIPMENT_QUALITY_MULTIPLIER
 
 # 品质掉落概率
 QUALITY_DROP_RATE = [
@@ -134,14 +133,10 @@ def calc_equip_sell_info(equip_min_level, quality, enhance_level):
     }
 
 # 强化加成
-ENHANCE_BONUS_PER_LEVEL = 0.1  # 每级加成10%基础属性
+ENHANCE_BONUS_PER_LEVEL = EQUIPMENT_ENHANCE_BONUS_PER_LEVEL
 
 # 套装加成
-SET_BONUS = {
-    2: 0.20,  # 2件套+20%
-    4: 0.40,  # 4件套+40%
-    6: 0.60   # 6件套+60%
-}
+SET_BONUS = EQUIPMENT_SET_BONUS
 
 # 部位图标与中文名
 PART_ICON = {
@@ -373,11 +368,9 @@ async def create_user_equip(uid, equip_id, quality):
             return cursor.lastrowid
 
 
-async def get_role_equipped_items(role_id):
+async def get_role_equipped_items(role_id, cursor=None):
     """获取角色已穿戴的所有装备"""
-    async with connect_mysql() as conn:
-        async with conn.cursor() as cursor:
-            sql = """
+    sql = """
                 SELECT ue.id, ue.equip_id, ue.level, ue.quality,
                        de.name, de.set_name, de.part, de.min_level,
                        de.base_gongji, de.base_fangyu, de.base_qixue, de.base_fali, de.base_sudu,
@@ -386,12 +379,18 @@ async def get_role_equipped_items(role_id):
                 JOIN data_equip de ON ue.equip_id = de.id
                 WHERE ue.equipped_role_id = %s
             """
-            await cursor.execute(sql, (role_id,))
-            results = await cursor.fetchall()
+    if cursor is None:
+        async with connect_mysql() as conn:
+            async with conn.cursor() as own_cursor:
+                await own_cursor.execute(sql, (role_id,))
+                results = await own_cursor.fetchall()
+    else:
+        await cursor.execute(sql, (role_id,))
+        results = await cursor.fetchall()
 
-            equipments = []
-            for row in results:
-                equipments.append({
+    equipments = []
+    for row in results:
+        equipments.append({
                     'id': row[0],
                     'equip_id': row[1],
                     'level': row[2],
@@ -411,9 +410,9 @@ async def get_role_equipped_items(role_id):
                     'base_mingzhong': row[16],
                     'base_pofang': row[17],
                     'base_xixue': row[18]
-                })
+        })
 
-            return equipments
+    return equipments
 
 
 def calc_equip_final_attrs(equip_instance):
@@ -440,9 +439,9 @@ def calc_equip_final_attrs(equip_instance):
     return final_attrs
 
 
-async def calc_role_equip_bonus(role_id):
+async def calc_role_equip_bonus(role_id, cursor=None):
     """计算角色装备总加成（含套装效果）"""
-    equipments = await get_role_equipped_items(role_id)
+    equipments = await get_role_equipped_items(role_id, cursor)
 
     if not equipments:
         return {
@@ -1048,7 +1047,7 @@ async def wear_equip(uid, qz, equip_instance_id):
                     lines.append("<qqbot-cmd-input text='装备背包' show='装备背包' /> | <qqbot-cmd-input text='角色背包' show='角色背包' />")
                     return {"type": "markdown", "content": "\n".join(lines)}
 
-            sql = "SELECT id, `name`, dengji, world FROM user_role WHERE uid = %s AND is_chuzhan = 1 LIMIT 1"
+            sql = "SELECT id, `name`, dengji, world FROM user_role WHERE uid = %s AND is_chuzhan = 1 LIMIT 1 FOR UPDATE"
             await cursor.execute(sql, (uid,))
             role_result = await cursor.fetchone()
 
@@ -1075,7 +1074,7 @@ async def wear_equip(uid, qz, equip_instance_id):
                 lines.append("<qqbot-cmd-input text='当前角色' show='当前角色' /> | <qqbot-cmd-input text='装备背包' show='装备背包' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
-            old_bonus = await calc_role_equip_bonus(role_id)
+            old_bonus = await calc_role_equip_bonus(role_id, cursor)
 
             part_en = equip['part']
             column_name = PART_COLUMN_MAP.get(part_en)
@@ -1107,12 +1106,13 @@ async def wear_equip(uid, qz, equip_instance_id):
                 (role_id, equip_instance_id)
             )
 
-            await conn.commit()
-
             from Tool.tool_power import update_role_power
             await update_role_power(conn, uid)
 
-            new_bonus = await calc_role_equip_bonus(role_id)
+            new_bonus = await calc_role_equip_bonus(role_id, cursor)
+
+            # 装备槽、装备实例状态与战力快照必须在同一事务中落库。
+            await conn.commit()
 
             attrs_change = {}
             for attr in ['gongji', 'fangyu', 'qixue', 'fali', 'sudu', 'baoji', 'baoshang', 'shanbi', 'mingzhong', 'pofang', 'xixue']:
@@ -1153,7 +1153,7 @@ async def remove_equip(uid, qz, part_name):
     # 获取当前出战角色
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            sql = "SELECT id, `name`, dengji, world FROM user_role WHERE uid = %s AND is_chuzhan = 1 LIMIT 1"
+            sql = "SELECT id, `name`, dengji, world FROM user_role WHERE uid = %s AND is_chuzhan = 1 LIMIT 1 FOR UPDATE"
             await cursor.execute(sql, (uid,))
             role_result = await cursor.fetchone()
 
@@ -1199,7 +1199,7 @@ async def remove_equip(uid, qz, part_name):
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             # 计算卸下前后属性变化
-            old_bonus = await calc_role_equip_bonus(role_id)
+            old_bonus = await calc_role_equip_bonus(role_id, cursor)
 
             # 清空角色装备槽位
             await cursor.execute(
@@ -1213,13 +1213,14 @@ async def remove_equip(uid, qz, part_name):
                 (current_equip_id,)
             )
 
-            await conn.commit()
-
             from Tool.tool_power import update_role_power
             await update_role_power(conn, uid)
 
             # 计算卸下后属性
-            new_bonus = await calc_role_equip_bonus(role_id)
+            new_bonus = await calc_role_equip_bonus(role_id, cursor)
+
+            # 槽位、装备状态与战力快照一次提交。
+            await conn.commit()
 
             final_bonus = {}
             for attr in ['gongji', 'fangyu', 'qixue', 'fali', 'sudu', 'baoji', 'baoshang', 'shanbi', 'mingzhong', 'pofang', 'xixue']:
@@ -1348,10 +1349,11 @@ async def enhance_equip(uid, qz, equip_instance_id):
                 "UPDATE user_zt SET lingshi = lingshi - %s WHERE id = %s",
                 (cost_lingshi, uid)
             )
-            await conn.commit()
-
             from Tool.tool_power import update_role_power
             await update_role_power(conn, uid)
+
+            # 强化等级、灵石扣除与战力快照一次提交。
+            await conn.commit()
 
             equip['level'] = new_level
             new_attrs = calc_equip_final_attrs(equip)

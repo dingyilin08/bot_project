@@ -309,15 +309,14 @@ class MySQLRewardService:
                             result.applied.append(key)
                         else:
                             result.duplicates.append(key)
+                    if role_level_changed:
+                        # 奖励经验、等级属性和战力快照使用同一事务提交。
+                        from Tool.tool_power import update_role_power
+                        await update_role_power(conn, uid)
                 await conn.commit()
             except Exception:
                 await conn.rollback()
                 raise
-        if role_level_changed:
-            from Tool.tool_power import update_role_power
-
-            async with connect_mysql() as power_conn:
-                await update_role_power(power_conn, uid)
         return result
 
     async def _apply_experience(self, cursor, role, add_exp: int) -> Dict:

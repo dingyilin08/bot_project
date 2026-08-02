@@ -17,5 +17,10 @@ async def connect_mysql():
     )
     try:
         yield conn
+    except BaseException:
+        # 所有业务连接均关闭自动提交。显式回滚能保证异常路径不会把
+        # 未完成的跨表操作遗留给连接关闭时的隐式行为处理。
+        await conn.rollback()
+        raise
     finally:
         conn.close()

@@ -5,6 +5,11 @@
 """
 from typing import Dict, Tuple
 from sql.mysql import connect_mysql
+from Game_domain.equipment_rules import (
+    EQUIPMENT_ENHANCE_BONUS_PER_LEVEL,
+    EQUIPMENT_QUALITY_MULTIPLIER,
+    EQUIPMENT_SET_BONUS,
+)
 
 
 ATTR_WEIGHTS = {
@@ -24,19 +29,12 @@ COMBAT_ATTR_WEIGHTS = {
     'xixue': 0.35,
 }
 
-QUALITY_MULTIPLIER = {
-    '凡品': 1.0,
-    '良品': 1.3,
-    '精品': 1.8,
-    '仙品': 2.5,
-    '神品': 3.5
-}
-
-SET_BONUS = {2: 0.15, 4: 0.35, 6: 0.60}
+QUALITY_MULTIPLIER = EQUIPMENT_QUALITY_MULTIPLIER
+SET_BONUS = EQUIPMENT_SET_BONUS
 
 SKILL_QUALITY_COEF = {'凡': 1, '灵': 2, '玄': 3, '地': 5, '天': 8}
 
-ENHANCE_BONUS_PER_LEVEL = 0.08
+ENHANCE_BONUS_PER_LEVEL = EQUIPMENT_ENHANCE_BONUS_PER_LEVEL
 
 
 async def calculate_base_power(role_data: Dict) -> int:
@@ -340,7 +338,7 @@ async def calculate_total_power(conn, uid: int, role_id: int) -> Tuple[int, Dict
 
 async def update_role_power(conn, uid: int) -> int:
     """
-    更新玩家战力到数据库（user_zt表）
+    更新玩家战力到数据库（user_zt表），但不提交事务。
     
     Args:
         conn: 数据库连接
@@ -365,7 +363,6 @@ async def update_role_power(conn, uid: int) -> int:
                     power_role_name = '', power_update_time = NOW()
                 WHERE id = %s
             """, (uid,))
-            await conn.commit()
         return 0
     
     role_id = current_role[0]
@@ -395,8 +392,6 @@ async def update_role_power(conn, uid: int) -> int:
             role_name,
             uid
         ))
-        await conn.commit()
-    
     return total_power
 
 

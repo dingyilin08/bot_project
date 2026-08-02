@@ -509,14 +509,11 @@ async def up_benyuan(uid, qz):
 
             by_dengji = benyuan_dengji + 1
             unlocked_skills = await sync_unlock_benyuan_skills(uid, role_id, by_id, role_name, by_dengji, cursor)
-            await conn.commit()
+            from Tool.tool_power import update_role_power
+            await update_role_power(conn, uid)
 
-            try:
-                from Tool.tool_power import update_role_power
-                await update_role_power(conn, uid)
-            except Exception:
-                await conn.rollback()
-                logger.exception("本源升级后的战力刷新失败 uid=%s role_id=%s", uid, role_id)
+            # 材料、本源、角色属性与战力快照一次提交。
+            await conn.commit()
 
             # 设置显示文本
             up_attr = f"{config['role_field'].split('_')[0].capitalize()}+{display_value}{config['percent']}"

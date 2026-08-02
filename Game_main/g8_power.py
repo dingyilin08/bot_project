@@ -159,4 +159,6 @@ async def refresh_power(uid: int) -> int:
         更新后的总战力
     """
     async with connect_mysql() as conn:
-        return await update_role_power(conn, uid)
+        power = await update_role_power(conn, uid)
+        await conn.commit()
+        return power

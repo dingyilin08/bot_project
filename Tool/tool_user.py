@@ -212,55 +212,60 @@ async def up_lvl(role_id, add_exp):
                 add_baoji, add_baoshang, add_mingzhong, add_shanbi,
                 add_pofang, add_xixue, role_id
             ))
+            from Tool.tool_power import update_role_power
+            await update_role_power(conn, uid)
             await conn.commit()
-
-        from Tool.tool_power import update_role_power
-        await update_role_power(conn, uid)
 
         return add_gongji, add_fangyu, add_qixue
 
 
 # 扣除物品
-async def cut_bag_item(uid, item_id, num):
+async def _cut_bag_item(cursor, uid, item_id, num):
+    """在调用方事务中原子扣除物品；调用方决定是否提交。"""
+    await cursor.execute(
+        "UPDATE user_item SET `item_num` = `item_num` - %s "
+        "WHERE uid = %s and item_id = %s and `item_num` >= %s",
+        (num, uid, item_id, num),
+    )
+    if cursor.rowcount <= 0:
+        return False
+    await cursor.execute(
+        "DELETE FROM user_item WHERE uid = %s and item_id = %s and `item_num` = 0",
+        (uid, item_id),
+    )
+    return True
+
+
+async def cut_bag_item(uid, item_id, num, cursor=None):
+    """扣除背包物品。传入 cursor 时纳入调用方事务。"""
+    if cursor is not None:
+        return await _cut_bag_item(cursor, uid, item_id, num)
     async with connect_mysql() as conn:
-        async with conn.cursor() as cursor:
-            # 使用原子更新操作，确保并发安全
-            # 只有当物品数量充足时才执行扣除
-            sql = "UPDATE user_item SET `item_num` = `item_num` - %s WHERE uid = %s and item_id = %s and `item_num` >= %s"
-            await cursor.execute(sql, (num, uid, item_id, num))
-            
-            # 检查是否有行被更新
-            if cursor.rowcount > 0:
-                # 扣除成功
+        async with conn.cursor() as own_cursor:
+            success = await _cut_bag_item(own_cursor, uid, item_id, num)
+            if success:
                 await conn.commit()
-                
-                # 清理数量为0的记录（可选，保持与原逻辑一致）
-                # 这一步不需要原子性，因为物品已经扣除成功
-                sql_clean = "DELETE FROM user_item WHERE uid = %s and item_id = %s and `item_num` = 0"
-                await cursor.execute(sql_clean, (uid, item_id))
-                await conn.commit()
-                
-                return True
-            else:
-                # 扣除失败（数量不足或物品不存在）
-                return False
+            return success
 
 
 # 添加物品
-async def add_bag_item(uid, item_id, add_num):
+async def _add_bag_item(cursor, uid, item_id, add_num):
+    await cursor.execute(
+        """INSERT INTO user_item (uid, item_id, item_num) VALUES (%s, %s, %s)
+           ON DUPLICATE KEY UPDATE item_num = item_num + VALUES(item_num)""",
+        (uid, item_id, add_num),
+    )
+    return True
+
+
+async def add_bag_item(uid, item_id, add_num, cursor=None):
+    """添加背包物品。传入 cursor 时纳入调用方事务。"""
+    if cursor is not None:
+        return await _add_bag_item(cursor, uid, item_id, add_num)
     async with connect_mysql() as conn:
-        async with conn.cursor() as cursor:
-            sql1 = "SELECT `item_num` FROM user_item WHERE uid = %s and item_id = %s"
-            await cursor.execute(sql1, (uid, item_id))
-            a = await cursor.fetchone()
-            if a is None:
-                sql2 = "INSERT INTO user_item (uid, item_id, item_num) VALUES (%s, %s, %s)"
-                await cursor.execute(sql2, (uid, item_id, add_num))
-                await conn.commit()
-            else:
-                sql = "UPDATE user_item SET `item_num` = `item_num` + %s WHERE uid = %s and item_id = %s"
-                await cursor.execute(sql, (add_num, uid, item_id))
-                await conn.commit()
+        async with conn.cursor() as own_cursor:
+            await _add_bag_item(own_cursor, uid, item_id, add_num)
+            await conn.commit()
             return True
 
 

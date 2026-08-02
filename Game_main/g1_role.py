@@ -632,7 +632,8 @@ async def cz_role_attr(uid, qz):
 async def cz_role(uid, qz, role_id):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            sql = "SELECT id, `name` FROM user_role WHERE uid = %s and is_chuzhan = 1"
+            # 锁定该玩家当前角色和目标角色，避免并发切换产生多个出战角色。
+            sql = "SELECT id, `name` FROM user_role WHERE uid = %s and is_chuzhan = 1 FOR UPDATE"
             await cursor.execute(sql, (uid, ))
             result = await cursor.fetchone()
             output = ""
@@ -640,22 +641,19 @@ async def cz_role(uid, qz, role_id):
                 id, name = result
                 if id == role_id:
                     return {"type": "markdown", "content": qz + "此角色当前已出战，无需重复出战。"}
-                sql = "UPDATE user_role SET is_chuzhan = 0 WHERE id = %s"
-                await cursor.execute(sql, (id,))
-                await conn.commit()
                 output += f"检测到您已有出战角色[{id}.{name}]，已自动将其收回。\n\n"
-            sql = "SELECT id, name, world FROM user_role WHERE uid = %s and id = %s"
+            sql = "SELECT id, name, world FROM user_role WHERE uid = %s and id = %s FOR UPDATE"
             await cursor.execute(sql, (uid, role_id))
             result = await cursor.fetchone()
             if result is None:
                 return {"type": "markdown", "content": qz + "您没有此角色，请输入正确的角色编号！\n\n示例：出战 10001"}
             role_id, role_name, role_world = result
-            sql = "UPDATE user_role SET is_chuzhan = 1 WHERE id = %s"
-            await cursor.execute(sql, (role_id,))
-            await conn.commit()
+            await cursor.execute("UPDATE user_role SET is_chuzhan = 0 WHERE uid = %s AND is_chuzhan = 1", (uid,))
+            await cursor.execute("UPDATE user_role SET is_chuzhan = 1 WHERE id = %s AND uid = %s", (role_id, uid))
 
             from Tool.tool_power import update_role_power
             await update_role_power(conn, uid)
+            await conn.commit()
 
             output += f"##### 出战成功\n"
             output += f"[{role_id}.{role_name}]已出战！\n"
@@ -671,7 +669,7 @@ async def cz_role(uid, qz, role_id):
 async def sh_role(uid, qz):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            sql = "SELECT id, `name` FROM user_role WHERE uid = %s and is_chuzhan = 1"
+            sql = "SELECT id, `name` FROM user_role WHERE uid = %s and is_chuzhan = 1 FOR UPDATE"
             await cursor.execute(sql, (uid, ))
             result = await cursor.fetchone()
             if result is None:
@@ -679,6 +677,8 @@ async def sh_role(uid, qz):
             role_id, name = result
             sql = "UPDATE user_role SET is_chuzhan = 0 WHERE id = %s"
             await cursor.execute(sql, (role_id,))
+            from Tool.tool_power import update_role_power
+            await update_role_power(conn, uid)
             await conn.commit()
             output = f"##### 收回成功\n\n[{role_id}.{name}]已收回！"
 
@@ -750,19 +750,14 @@ async def jinjie_role(uid, qz):
 
             pojing_dan_id = pojing_dan_result[0]
 
-            # 检查玩家是否有破境丹
-            has_pojing_dan = await pd_bag_num(uid, pojing_dan_id, 1)
-
-            if not has_pojing_dan:
+            # 原子扣除破境丹，避免“先检查后扣除”在并发请求下重复消耗。
+            if not await cut_bag_item(uid, pojing_dan_id, 1, cursor=cursor):
                 old_stage = await role_stage(role_name, dengji)
                 output = f"##### 需要破境丹\n\n"
                 output += f"您所出战的角色已至 **{dengji}级[{old_stage}]境巅峰**\n\n"
                 output += f"欲突破至下一境界，需服用 **【{pojing_dan_name}】** 方可破境成功！\n\n"
                 output += "该丹药可通过挑战对应世界副本概率获得。\n"
                 return {"type": "markdown", "content": output}
-
-            # 扣除破境丹
-            await cut_bag_item(uid, pojing_dan_id, 1)
 
             # 计算剩余经验（破境后经验不断累计，不清空）
             remaining_exp = exp - max_exp  # 计算溢出的经验
@@ -773,8 +768,7 @@ async def jinjie_role(uid, qz):
 
             aaa = ""
             base_prob = 100 - (dengji // 10) * 10
-            if await pd_bag_num(uid, 1, 1):
-                await cut_bag_item(uid, 1, 1)
+            if await cut_bag_item(uid, 1, 1, cursor=cursor):
                 base_prob += 50
                 aaa = "> 检测到您背包中有[悟道天书]，已自动抵扣，提升悟道概率\n"
             base_prob = min(base_prob, 100)
@@ -805,6 +799,8 @@ async def jinjie_role(uid, qz):
             # 破境成功：经验累计到下一境界（不清空）
             sql = "UPDATE user_role SET dengji = dengji + 1, exp = %s, gongji = gongji + %s, fangyu = fangyu + %s, qixue = qixue + %s, baoji = baoji + %s, baoshang = baoshang + %s WHERE uid = %s and id = %s"
             await cursor.execute(sql, (remaining_exp, add_gongji, add_fangyu, add_qixue, add_baoji, add_baoshang, uid, role_id))
+            from Tool.tool_power import update_role_power
+            await update_role_power(conn, uid)
             await conn.commit()
             stage = await role_stage(role_name, dengji + 1)
             output = "##### 破境成功！\n\n"

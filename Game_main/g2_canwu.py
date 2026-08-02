@@ -217,15 +217,12 @@ async def canwu_lq_exp(uid, qz):
             if cursor.rowcount != 1:
                 await conn.rollback()
                 return {"type": "markdown", "content": "##### 操作失败\n\n参悟状态已变化，本次未扣除或发放任何奖励。"}
-            await conn.commit()
-
             if exp_result["level_up"]:
-                try:
-                    from Tool.tool_power import update_role_power
-                    await update_role_power(conn, uid)
-                except Exception:
-                    await conn.rollback()
-                    logger.exception("参悟升级后的战力刷新失败 uid=%s role_id=%s", uid, cw_role)
+                from Tool.tool_power import update_role_power
+                await update_role_power(conn, uid)
+
+            # 经验、参悟状态与战力快照一起提交。
+            await conn.commit()
 
             if exp_result["need_breakthrough"]:
                 output = "##### 境界巅峰\n\n"

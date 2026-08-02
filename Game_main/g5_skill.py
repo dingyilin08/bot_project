@@ -25,7 +25,7 @@ async def jh_skill(uid, qz, skill_name):
             if result is not None:
                 return {"type": "markdown", "content": qz + "该技能已激活，请勿重复激活。\n"}
 
-            if await cut_bag_item(uid, item_id, 1) is False:
+            if await cut_bag_item(uid, item_id, 1, cursor=cursor) is False:
                 return {"type": "markdown", "content": qz + f"激活失败！缺少技能卷轴[{skill_name}卷轴]，无法激活该技能。\n"}
 
             sql = "SELECT COALESCE(MAX(id), 0) + 1 FROM user_skill"
@@ -292,10 +292,10 @@ async def equip_skill(uid, qz, skill_info):
 
             sql = "UPDATE user_skill SET is_zb = 1 WHERE id = %s LIMIT 1"
             await cursor.execute(sql, (skill_id, ))
-            await conn.commit()
 
             from Tool.tool_power import update_role_power
             await update_role_power(conn, uid)
+            await conn.commit()
 
             return {"type": "markdown", "content": qz + f"技能[{skill_name}]已成功装备给角色[{role_name}]。\n"}
 
@@ -363,14 +363,13 @@ async def unload_skill(uid, qz, skill_num):
 
             sql = f"UPDATE user_role SET `skill{skill_num}_id` = NULL WHERE id = %s AND uid = %s LIMIT 1"
             await cursor.execute(sql, (role_id, uid))
-            await conn.commit()
 
             sql = "UPDATE user_skill SET is_zb = 0 WHERE id = %s LIMIT 1"
             await cursor.execute(sql, (skill_id,))
-            await conn.commit()
 
             from Tool.tool_power import update_role_power
             await update_role_power(conn, uid)
+            await conn.commit()
 
             return {"type": "markdown", "content": qz + f"成功卸下角色[{role_id}.{role_name}]的技能槽{skill_num}：{await get_skill_name(cursor, skill_id)}。\n"}
 
@@ -440,7 +439,6 @@ async def skill_bag(uid, qz, page_num=1):
                 output += f"<qqbot-cmd-input text='技能背包 {prev_page}' show='技能背包 {prev_page}' /> | <qqbot-cmd-input text='技能背包' show='跳转[页码]' /> | <qqbot-cmd-input text='技能背包 {next_page}' show='技能背包 {next_page}' />\n"
 
             return {"type": "markdown", "content": qz + output}
-
 
 
 

@@ -2002,8 +2002,7 @@ async def fu_dan(uid, qz, param):
 
             if attr_add:
                 await update_role_power(conn, uid)
-            else:
-                await conn.commit()
+            await conn.commit()
             from Game_main.g18_alchemy_study import record_pill_tolerance
             await record_pill_tolerance(uid, pill['name'], use_num)
 
