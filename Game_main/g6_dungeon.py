@@ -730,7 +730,7 @@ def format_dungeon_markdown(dungeons, page, total_pages, role_info, remaining_co
     lines.append("***")
     lines.append("⚠️跨界挑战将有因果压制，怪物全属性提升15%")
     lines.append("***")
-    lines.append(f"<qqbot-cmd-input text='副本列表 {page - 1}' show='副本列表 {page - 1}' /> | <qqbot-cmd-input text='副本列表' show='跳转【页数】' /> | <qqbot-cmd-input text='副本列表 {page + 1}' show='副本列表 {page + 1}' />")
+    lines.append(pagination_controls("副本列表", page, total_pages))
 
     return "\n".join(lines)
 
@@ -1009,10 +1009,11 @@ async def dungeon_list(uid, qz, page=1):
             # 分页显示
             page_size = 6
             page = max(1, int(page) if isinstance(page, (int, str)) and str(page).isdigit() else 1)
+            total_pages = (len(dungeons) + page_size - 1) // page_size
+            page = min(page, total_pages)
             start_idx = (page - 1) * page_size
             end_idx = start_idx + page_size
             page_dungeons = dungeons[start_idx:end_idx]
-            total_pages = (len(dungeons) + page_size - 1) // page_size
 
             role_info = {
                 'id': role_id,

@@ -5,6 +5,7 @@ from datetime import date
 
 from func.pd_func import reg_xz_func
 from sql.mysql import connect_mysql
+from Tool.tool_command import pagination_controls
 
 
 SHOP_PAGE_SIZE = 6
@@ -52,11 +53,14 @@ DEFAULT_SHOP_ITEMS = (
 
 
 def parse_name_num(param):
-    """解析“商品名-数量”，数量必须是正整数。"""
-    if "-" not in str(param):
-        return None, None
-    name, num_text = str(param).rsplit("-", 1)
+    """解析“商品名-数量”；省略数量或以“-”结尾时默认购买一件。"""
+    text = str(param or "").strip()
+    if "-" not in text:
+        return (text, 1) if text else (None, None)
+    name, num_text = text.rsplit("-", 1)
     name = name.strip()
+    if not num_text.strip():
+        return (name, 1) if name else (None, None)
     try:
         num = int(num_text.strip())
     except (TypeError, ValueError):
@@ -208,17 +212,19 @@ async def show_shop(uid, qz, page=1):
             rows = await cursor.fetchall()
             await conn.commit()
 
-    lines = [f"##### 🏪 灵石商城（{page}/{total_pages}页）", f"> 当前灵石：{lingshi}", "***"]
+    lines = [f"##### 🏪 灵石商城（第{page}/{total_pages}页）", f"> 当前灵石：**{lingshi}**", "***"]
     for name, price, category, description, daily_limit, bought_num in rows:
         limit_text = "不限购" if int(daily_limit) <= 0 else f"今日 {int(bought_num)}/{int(daily_limit)}"
-        lines.append(f"**{name}**｜{category}｜{price}灵石｜{limit_text}")
+        lines.append(f"**【{category}】{name}**")
         lines.append(f"> {description}")
-        lines.append(f"<qqbot-cmd-input text='购买商品 {name}-' show='购买{name}*' />")
+        lines.append(f"> 价格：**{price} 灵石** ｜ 限购：{limit_text}")
+        lines.append(f"<qqbot-cmd-input text='购买商品 {name}' show='购买1件' /> | <qqbot-cmd-input text='购买商品 {name}-5' show='购买5件' />")
+        lines.append("")
     lines.extend([
         "***",
         "便捷道具只缩短等待或补充可玩次数，不直接出售装备、技能与副本稀有材料。",
-        f"<qqbot-cmd-input text='商城 {max(1, page - 1)}' show='商城 {max(1, page - 1)}' /> | <qqbot-cmd-input text='商城 {min(total_pages, page + 1)}' show='商城 {min(total_pages, page + 1)}' />",
-        "<qqbot-cmd-input text='购买商品 ' show='购买商品 名称-数量' /> | <qqbot-cmd-input text='使用体力药 ' show='使用体力药 数量' />",
+        pagination_controls("商城", page, total_pages),
+        "<qqbot-cmd-input text='购买商品 ' show='购买商品 名称[-数量]' /> | <qqbot-cmd-input text='使用体力药' show='使用1瓶体力药' />",
     ])
     return {"type": "markdown", "content": "\n".join(lines)}
 
@@ -227,7 +233,7 @@ async def show_shop(uid, qz, page=1):
 async def buy_shop_item(uid, qz, param):
     item_name, count = parse_name_num(param)
     if not item_name:
-        return {"type": "markdown", "content": "指令错误，正确指令：购买商品 商品名-数量\n示例：购买商品 体力药-1"}
+        return {"type": "markdown", "content": "指令错误，正确指令：购买商品 商品名[-数量]\n示例：购买商品 体力药 或 购买商品 体力药-5"}
 
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
@@ -296,6 +302,8 @@ async def buy_shop_item(uid, qz, param):
 
 @reg_xz_func
 async def use_stamina_potion(uid, qz, param):
+    if not str(param or "").strip():
+        param = 1
     try:
         count = int(str(param).strip())
     except (TypeError, ValueError):

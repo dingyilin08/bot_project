@@ -388,22 +388,23 @@ async def skill_bag(uid, qz, page_num=1):
                 page_num = 1
 
             page_size = 9
-            offset = (page_num - 1) * page_size
 
             count_sql = "SELECT COUNT(*) FROM user_skill WHERE uid = %s and is_zb = 0"
             await cursor.execute(count_sql, (uid,))
             a = await cursor.fetchone()
             total_records = a[0]
+            if total_records == 0:
+                return {"type": "markdown", "content": qz + "你的背包中暂无待装备技能！\n"}
             total_pages = (total_records + page_size - 1) // page_size
+            page_num = min(page_num, total_pages)
+            offset = (page_num - 1) * page_size
 
-            output = f"##### 装备背包 ({page_num}/{total_pages}页)"
+            output = f"##### 技能背包 ({page_num}/{total_pages}页)"
 
             sql = "SELECT id, is_data_skill, skill_name, skill_type FROM user_skill WHERE uid = %s and is_zb = 0 LIMIT %s OFFSET %s"
             await cursor.execute(sql, (uid, page_size, offset))
             result = await cursor.fetchall()
 
-            if result == ():
-                return {"type": "markdown", "content": qz + "你的背包中暂无待装备技能！\n"}
             for i in result:
                 skill_id, is_data_skill, skill_name, skill_type = i
                 if is_data_skill == 0:
@@ -433,15 +434,9 @@ async def skill_bag(uid, qz, page_num=1):
 
             output += "***\n"
 
-            if total_pages > 1:
-                prev_page = page_num - 1 if page_num > 1 else 1
-                next_page = page_num + 1 if page_num < total_pages else page_num
-                output += f"<qqbot-cmd-input text='技能背包 {prev_page}' show='技能背包 {prev_page}' /> | <qqbot-cmd-input text='技能背包' show='跳转[页码]' /> | <qqbot-cmd-input text='技能背包 {next_page}' show='技能背包 {next_page}' />\n"
+            output += pagination_controls("技能背包", page_num, total_pages) + "\n"
 
             return {"type": "markdown", "content": qz + output}
-
-
-
 
 
 

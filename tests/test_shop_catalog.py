@@ -1,6 +1,8 @@
 import unittest
 
 from Game_main.g10_shop import DEFAULT_SHOP_ITEMS, STAMINA_POTION_ITEM_ID, parse_name_num
+from Game_main.g9_yaoyuan import _parse_name_num
+from Tool.tool_command import pagination_controls
 
 
 class ShopCatalogTests(unittest.TestCase):
@@ -10,9 +12,22 @@ class ShopCatalogTests(unittest.TestCase):
         self.assertTrue(all(item["price"] > 0 and item["daily_limit"] > 0 for item in DEFAULT_SHOP_ITEMS))
         self.assertIn(STAMINA_POTION_ITEM_ID, {item["item_id"] for item in DEFAULT_SHOP_ITEMS})
 
-    def test_parse_name_num_accepts_only_positive_quantity(self):
+    def test_parse_name_num_defaults_to_one_and_rejects_invalid_quantity(self):
         self.assertEqual(parse_name_num("体力药-2"), ("体力药", 2))
         self.assertEqual(parse_name_num(" 体力药 - 1 "), ("体力药", 1))
-        self.assertEqual(parse_name_num("体力药"), (None, None))
+        self.assertEqual(parse_name_num("体力药"), ("体力药", 1))
+        self.assertEqual(parse_name_num("体力药-"), ("体力药", 1))
         self.assertEqual(parse_name_num("体力药-0"), (None, None))
         self.assertEqual(parse_name_num("体力药-abc"), (None, None))
+
+    def test_seed_and_pill_quantity_defaults_to_one(self):
+        self.assertEqual(_parse_name_num("灵草种子"), ("灵草种子", 1))
+        self.assertEqual(_parse_name_num("丹药-"), ("丹药", 1))
+
+    def test_pagination_buttons_use_clear_labels_and_clamped_commands(self):
+        controls = pagination_controls("物品背包", 2, 3)
+        self.assertIn("text='物品背包 1' show='上一页'", controls)
+        self.assertIn("text='物品背包' show='跳转【页数】'", controls)
+        self.assertIn("text='物品背包 3' show='下一页'", controls)
+        first_page = pagination_controls("物品背包", 1, 3)
+        self.assertIn("text='物品背包 1' show='上一页'", first_page)

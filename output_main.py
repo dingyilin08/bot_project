@@ -201,12 +201,10 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         return await show_shop(uid, con_arr1 or 1)
     elif con_arr0 == '购买商品':
         if con_arr1 == "":
-            return "指令错误，正确指令：购买商品 商品名-数量\n示例：购买商品 体力药-1"
+            return "指令错误，正确指令：购买商品 商品名[-数量]\n示例：购买商品 体力药 或 购买商品 体力药-5"
         return await buy_shop_item(uid, con_arr1)
     elif con_arr0 == '使用体力药':
-        if con_arr1 == "":
-            return "指令错误，正确指令：使用体力药 数量\n示例：使用体力药 1"
-        return await use_stamina_potion(uid, con_arr1)
+        return await use_stamina_potion(uid, con_arr1 or 1)
     elif con_arr0 == '角色背包':
         if con_arr1 == "":
             return await role_bag(uid, 1)
@@ -387,7 +385,7 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         return await zz_shangdian(uid, con_arr1)
     elif con_arr0 == '购买种子':
         if con_arr1 == "":
-            return "指令错误，正确指令：购买种子 种子名-数量\n示例：购买种子 冰灵焰草种子-5"
+            return "指令错误，正确指令：购买种子 种子名[-数量]\n示例：购买种子 冰灵焰草种子 或 购买种子 冰灵焰草种子-5"
         return await gm_zhongzi(uid, con_arr1)
     elif con_arr0 == '播种':
         if con_arr1 == "":
@@ -431,7 +429,7 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         return await shou_dan(uid, con_arr1)
     elif con_arr0 == '服丹':
         if con_arr1 == "":
-            return "指令错误，正确指令：服丹 丹药名-数量\n示例：服丹 九转丹-10"
+            return "指令错误，正确指令：服丹 丹药名[-数量]\n示例：服丹 九转丹 或 服丹 九转丹-10"
         return await fu_dan(uid, con_arr1)
     elif con_arr0 == '解锁丹炉':
         if con_arr1 == "":

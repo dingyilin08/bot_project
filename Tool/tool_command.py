@@ -3,6 +3,23 @@ from sql.mysql import *
 from Tool.tool_user import *
 
 
+def pagination_controls(command: str, page: int, total_pages: int, *, separator: str = " ") -> str:
+    """返回统一分页交互：上一页｜跳转【页数】｜下一页。"""
+    page = max(1, int(page))
+    total_pages = max(1, int(total_pages))
+    previous = max(1, page - 1)
+    following = min(total_pages, page + 1)
+
+    def _command(target_page: int) -> str:
+        return f"{command}{separator}{target_page}".strip()
+
+    return (
+        f"<qqbot-cmd-input text='{_command(previous)}' show='上一页' /> | "
+        f"<qqbot-cmd-input text='{command}' show='跳转【页数】' /> | "
+        f"<qqbot-cmd-input text='{_command(following)}' show='下一页' />"
+    )
+
+
 # 判断玩家当前快捷指令表中是否有欲输入指令
 async def pd_command(openid, input_str):
     """

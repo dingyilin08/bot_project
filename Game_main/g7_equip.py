@@ -10,6 +10,7 @@ from sql.mysql import *
 from Tool.tool_user import *
 from func.pd_func import *
 from config import IMG_BASE_URL
+from Tool.tool_command import pagination_controls
 from Game_domain.equipment_rules import (
     EQUIPMENT_ENHANCE_BONUS_PER_LEVEL,
     EQUIPMENT_QUALITY_MULTIPLIER,
@@ -522,10 +523,7 @@ def format_equip_bag_markdown(equipments, page, total_pages, role_info):
             else:
                 lines.append(f"> <qqbot-cmd-input text='穿戴装备 {equip['id']}' show='穿戴装备 {equip['id']}' /> <qqbot-cmd-input text='装备详情 {equip['id']}' show='装备详情 {equip['id']}' /> <qqbot-cmd-input text='强化装备 {equip['id']}' show='强化装备 {equip['id']}' /> <qqbot-cmd-input text='出售装备 {equip['id']}' show='出售装备 {equip['id']}' />\n")
 
-    if total_pages > 1:
-        prev_page = page - 1 if page > 1 else 1
-        next_page = page + 1 if page < total_pages else page
-        lines.append(f"<qqbot-cmd-input text='装备背包 {prev_page}' show='装备背包 {prev_page}' /> | <qqbot-cmd-input text='装备背包' show='跳转[页码]' /> | <qqbot-cmd-input text='装备背包 {next_page}' show='装备背包 {next_page}' />\n")
+    lines.append(pagination_controls("装备背包", page, total_pages) + "\n")
 
     lines.append("***")
 
@@ -905,6 +903,7 @@ async def equip_bag(uid, qz, page=1):
         page = max(1, int(page) if isinstance(page, (int, str)) and str(page).isdigit() else 1)
     except (ValueError, TypeError):
         page = 1
+    requested_page = page
 
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
@@ -925,17 +924,10 @@ async def equip_bag(uid, qz, page=1):
             equipments, total_count = await get_user_equip_list(uid, page, PAGE_SIZE)
 
             # 计算总页数
-            total_pages = (total_count + PAGE_SIZE - 1) // PAGE_SIZE
-
-            # 验证页码
-            if page > total_pages and total_pages > 0:
-                lines = []
-                lines.append(f"##### 🎒 装备背包")
-                lines.append("")
-                lines.append(f"> 页码超出范围，当前只有{total_pages}页")
-                lines.append("***")
-                lines.append(f"<qqbot-cmd-input text='装备背包' show='装备背包' /> | <qqbot-cmd-input text='装备背包 {total_pages}' show='装备背包 {total_pages}' />")
-                return {"type": "markdown", "content": "\n".join(lines)}
+            total_pages = max(1, (total_count + PAGE_SIZE - 1) // PAGE_SIZE)
+            page = min(page, total_pages)
+            if page != requested_page:
+                equipments, total_count = await get_user_equip_list(uid, page, PAGE_SIZE)
 
             role_info = {'id': role_id, 'name': role_name, 'level': role_level, 'world': role_world}
             markdown_content = format_equip_bag_markdown(equipments, page, total_pages, role_info)

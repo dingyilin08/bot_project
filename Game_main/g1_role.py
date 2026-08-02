@@ -835,18 +835,18 @@ async def role_bag(uid, qz, page_num=1):
                 page_num = 1
 
             page_size = 9
+            count_sql = "SELECT COUNT(*) FROM user_role WHERE uid = %s and is_chuzhan = 0"
+            await cursor.execute(count_sql, (uid,))
+            a = await cursor.fetchone()
+            total_records = a[0]
+            if total_records == 0:
+                return {"type": "markdown", "content": qz + "你的背包中暂无空闲角色！"}
+            total_pages = (total_records + page_size - 1) // page_size
+            page_num = min(page_num, total_pages)
             offset = (page_num - 1) * page_size
             sql = "SELECT id, `name`, dengji FROM user_role WHERE uid = %s and is_chuzhan = 0 LIMIT %s OFFSET %s"
             await cursor.execute(sql, (uid, page_size, offset))
             result = await cursor.fetchall()
-            if result == ():
-                return {"type": "markdown", "content": qz + "你的背包中暂无空闲角色！"}
-
-            count_sql = "SELECT COUNT(*) FROM user_role WHERE uid = %s"
-            await cursor.execute(count_sql, (uid,))
-            a = await cursor.fetchone()
-            total_records = a[0]
-            total_pages = (total_records + page_size - 1) // page_size
 
             output = f"##### 角色背包({page_num}/{total_pages})\n"
             for i in result:
@@ -864,7 +864,7 @@ async def role_bag(uid, qz, page_num=1):
 
             output += f"***\n"
 
-            output += f"<qqbot-cmd-input text='角色背包 {page_num - 1}' show='角色背包 {page_num - 1}' /> | <qqbot-cmd-input text='角色背包 ' show='跳转【页数】' /> |<qqbot-cmd-input text='角色背包 {page_num + 1}' show='角色背包 {page_num + 1}' />"
+            output += pagination_controls("角色背包", page_num, total_pages)
 
             kj = await all_write_command(uid, (f"出战", "物品背包", "当前角色"))
 
@@ -889,18 +889,18 @@ async def item_bag(uid, qz, page_num=1):
                 page_num = 1
 
             page_size = 9
-            offset = (page_num - 1) * page_size
-            sql = "SELECT item_id, item_num FROM user_item WHERE uid = %s LIMIT %s OFFSET %s"
-            await cursor.execute(sql, (uid, page_size, offset))
-            result = await cursor.fetchall()
-            if result == ():
-                return {"type": "markdown", "content": qz + "你的物品背包中暂无物品！"}
-
             count_sql = "SELECT COUNT(*) FROM user_item WHERE uid = %s"
             await cursor.execute(count_sql, (uid,))
             a = await cursor.fetchone()
             total_records = a[0]
+            if total_records == 0:
+                return {"type": "markdown", "content": qz + "你的物品背包中暂无物品！"}
             total_pages = (total_records + page_size - 1) // page_size
+            page_num = min(page_num, total_pages)
+            offset = (page_num - 1) * page_size
+            sql = "SELECT item_id, item_num FROM user_item WHERE uid = %s LIMIT %s OFFSET %s"
+            await cursor.execute(sql, (uid, page_size, offset))
+            result = await cursor.fetchall()
 
             output = f"##### 物品背包({page_num}/{total_pages}页)\n\n"
 
@@ -929,7 +929,7 @@ async def item_bag(uid, qz, page_num=1):
             lingshi, xianyu = await cursor.fetchone()
             output += f"**灵石：** {lingshi}\n**仙玉：** {xianyu}\n"
 
-            output += f"<qqbot-cmd-input text='物品背包 {page_num - 1}' show='物品背包 {page_num - 1}' /> | <qqbot-cmd-input text='物品背包 ' show='跳转【页数】' /> |<qqbot-cmd-input text='物品背包 {page_num + 1}' show='物品背包 {page_num + 1}' />"
+            output += pagination_controls("物品背包", page_num, total_pages)
 
             kj = await all_write_command(uid, (f"角色背包", f"物品信息 {item_name}"))
 

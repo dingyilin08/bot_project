@@ -12,6 +12,7 @@ from sql.mysql import *
 from Tool.tool_user import *
 from func.pd_func import *
 from Tool.tool_power import update_role_power
+from Tool.tool_command import pagination_controls
 
 
 FARM_SLOT_COUNT = 12
@@ -94,12 +95,15 @@ def _farm_unlock_cost(plot_no):
 
 
 def _parse_name_num(param):
-    if "-" not in str(param):
-        return None, None
-    name, num_txt = str(param).rsplit("-", 1)
+    text = str(param or "").strip()
+    if "-" not in text:
+        return (text, 1) if text else (None, None)
+    name, num_txt = text.rsplit("-", 1)
     name = name.strip()
     if not name:
         return None, None
+    if not num_txt.strip():
+        return name, 1
     try:
         num = int(num_txt.strip())
     except Exception:
@@ -1032,7 +1036,7 @@ async def zz_shangdian(uid, qz, param):
             lines.append("***")
             prev_page = max(1, page - 1)
             next_page = min(total_pages, page + 1)
-            lines.append(f"<qqbot-cmd-input text='种子商店 {prev_page}' show='种子商店 {prev_page}' /> | <qqbot-cmd-input text='种子商店 {next_page}' show='种子商店 {next_page}' />")
+            lines.append(pagination_controls("种子商店", page, total_pages))
             lines.append("<qqbot-cmd-input text='丹方列表 ' show='丹方列表' /> | <qqbot-cmd-input text='种子背包' show='种子背包' />")
             lines.append("<qqbot-cmd-input text='种子商店 斗破苍穹' show='种子商店 斗破苍穹' /> | <qqbot-cmd-input text='种子商店 仙逆' show='种子商店 仙逆' />")
             return {"type": "markdown", "content": "\n".join(lines)}
@@ -1632,7 +1636,7 @@ async def df_liebiao(uid, qz, param):
             lines.append("***")
             prev_page = max(1, page - 1)
             next_page = min(total_pages, page + 1)
-            lines.append(f"<qqbot-cmd-input text='丹方列表 {prev_page}' show='丹方列表 {prev_page}' /> | <qqbot-cmd-input text='丹方列表 {next_page}' show='丹方列表 {next_page}' />")
+            lines.append(pagination_controls("丹方列表", page, total_pages))
             lines.append("<qqbot-cmd-input text='炼丹 ' show='炼丹*' /> | <qqbot-cmd-input text='查看丹炉' show='查看丹炉' />")
             return {"type": "markdown", "content": "\n".join(lines)}
 
@@ -1880,7 +1884,7 @@ async def yj_shoudan(uid, qz):
 async def fu_dan(uid, qz, param):
     pill_name, use_num = _parse_name_num(param)
     if not pill_name or not use_num or use_num <= 0:
-        return {"type": "markdown", "content": "指令错误，正确指令：服丹 丹药名-数量\n示例：服丹 九转丹-10"}
+        return {"type": "markdown", "content": "指令错误，正确指令：服丹 丹药名[-数量]\n示例：服丹 九转丹 或 服丹 九转丹-10"}
 
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:

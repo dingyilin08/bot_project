@@ -546,10 +546,11 @@ async def dungeon_list(uid, qz, page=1):
             # 分页显示
             page_size = 5
             page = max(1, int(page) if isinstance(page, (int, str)) and str(page).isdigit() else 1)
+            total_pages = (len(dungeons) + page_size - 1) // page_size
+            page = min(page, total_pages)
             start_idx = (page - 1) * page_size
             end_idx = start_idx + page_size
             page_dungeons = dungeons[start_idx:end_idx]
-            total_pages = (len(dungeons) + page_size - 1) // page_size
 
             output = f"【副本列表】（第{page}/{total_pages}页）\n"
             output += f"当前角色：[{role_id}]{role_name} Lv.{role_level}\n"
@@ -569,6 +570,8 @@ async def dungeon_list(uid, qz, page=1):
                 output += f"│ 世界：{dungeon['world']} | 等级要求：{dungeon['min_level']}级+\n"
                 output += f"│ 今日剩余：{remaining}次\n"
                 output += f"└────────────────────────────────┘\n"
+
+            output += pagination_controls("副本列表", page, total_pages) + "\n"
 
             kj = await all_write_cmd(uid, [
                 ("副本信息", 1),
