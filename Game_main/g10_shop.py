@@ -289,6 +289,8 @@ async def buy_shop_item(uid, qz, param):
             await conn.commit()
     from Game_main.g16_onboarding import record_onboarding_event
     await record_onboarding_event(uid, "SHOP")
+    from Game_main.g25_daily_tasks import record_daily_event
+    await record_daily_event(uid, "SHOP")
 
     return {
         "type": "markdown",

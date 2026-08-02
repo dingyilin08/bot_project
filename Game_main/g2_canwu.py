@@ -117,6 +117,8 @@ async def canwu_role(uid, qz):
             await conn.commit()
             from Game_main.g16_onboarding import record_onboarding_event
             await record_onboarding_event(uid, "CULTIVATION")
+            from Game_main.g25_daily_tasks import record_daily_event
+            await record_daily_event(uid, "CULTIVATION")
 
             output = f"##### 开始参悟\n\n"
             output += f"您已选择角色[{id}.{name}]参悟世界法则\n\n"

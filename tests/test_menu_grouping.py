@@ -26,6 +26,7 @@ class MenuGroupingTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("text='祈愿菜单'", content)
         self.assertIn("text='资源菜单'", content)
         self.assertIn("text='活动菜单'", content)
+        self.assertIn("text='日常任务'", content)
         self.assertNotIn("text='队伍创建'", content)
         self.assertNotIn("text='灵兽寻访'", content)
         self.assertNotIn("text='世界BOSS'", content)

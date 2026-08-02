@@ -1790,6 +1790,8 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
             rewards['dungeon_completed'] = True
         from Game_main.g16_onboarding import record_onboarding_event
         await record_onboarding_event(uid, "BATTLE")
+        from Game_main.g25_daily_tasks import record_daily_event
+        await record_daily_event(uid, "DUNGEON")
         from Game_main.g21_season import record_season_event
         await record_season_event(uid, "DUNGEON")
 
