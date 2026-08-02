@@ -10,8 +10,9 @@ async def add_fragments(cursor, *, request_id: str, battle_id, uid: int, role_id
                         collection_id: int, fragment_code: str, amount: int,
                         source: str) -> int:
     await cursor.execute(
-        """INSERT IGNORE INTO user_role_special_collection
-           (uid,role_id,collection_id,fragment_amount) VALUES (%s,%s,%s,0)""",
+        """INSERT INTO user_role_special_collection
+           (uid,role_id,collection_id,fragment_amount) VALUES (%s,%s,%s,0)
+           ON DUPLICATE KEY UPDATE fragment_amount=fragment_amount""",
         (uid, role_id, collection_id),
     )
     await cursor.execute(

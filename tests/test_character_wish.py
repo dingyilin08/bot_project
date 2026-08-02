@@ -3,7 +3,7 @@ import asyncio
 import unittest
 from pathlib import Path
 
-from Game_domain.character_wish_service import choose_by_rarity, choose_main_reward
+from Game_domain.character_wish_service import _ledger_source_id, choose_by_rarity, choose_main_reward
 from Game_main.g16_onboarding import ONBOARDING_ALL_XIANYU, ONBOARDING_XIANYU_PER_TASK, TASKS
 from Game_main.g23_character_wish import render_home
 from Tool.qq_keyboard import attach_keyboard
@@ -24,6 +24,11 @@ class FixedRandom:
 
 
 class CharacterWishRuleTests(unittest.TestCase):
+    def test_long_request_id_is_safe_for_reward_ledger_source_id(self):
+        source_id = _ledger_source_id("x" * 200)
+        self.assertLessEqual(len(source_id), 64)
+        self.assertEqual(source_id, _ledger_source_id("x" * 200))
+
     RATES = {"herb": 3000, "pill": 3000, "special4": 2500,
              "special5": 1000, "role_fragment": 500}
 

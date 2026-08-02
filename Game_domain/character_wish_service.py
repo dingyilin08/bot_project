@@ -4,6 +4,7 @@
 import json
 import math
 import random
+from hashlib import sha256
 from datetime import date, datetime
 from decimal import Decimal
 from uuid import uuid4
@@ -50,6 +51,14 @@ def _loads(value, default=None):
         return json.loads(value)
     except (TypeError, ValueError):
         return {} if default is None else default
+
+
+def _ledger_source_id(request_id: str) -> str:
+    """适配 reward_ledger.source_id 的 VARCHAR(64)，保留可审计的稳定来源。"""
+    value = str(request_id)
+    if len(value) <= 64:
+        return value
+    return "wish:" + sha256(value.encode("utf-8")).hexdigest()[:59]
 
 
 def choose_main_reward(rng, rates: dict, *, full_roster: bool = False) -> str:
@@ -186,7 +195,7 @@ async def _grant_item(cursor, *, key: str, uid: int, item_id: int, amount: int, 
         """INSERT INTO reward_ledger
            (business_key,uid,reward_type,amount,source_type,source_id,status,payload_json)
            VALUES (%s,%s,'ITEM',%s,'CHARACTER_WISH',%s,'GRANTED',%s)""",
-        (key, uid, amount, source_id, _dumps({"item_id": item_id})),
+        (key, uid, amount, _ledger_source_id(source_id), _dumps({"item_id": item_id})),
     )
     await cursor.execute(
         """INSERT INTO user_item (uid,item_id,item_num) VALUES (%s,%s,%s)
@@ -506,7 +515,7 @@ async def draw(uid: int, count: int, request_id: str = None) -> dict:
                             """INSERT INTO reward_ledger
                                (business_key,uid,reward_type,amount,source_type,source_id,status,payload_json)
                                VALUES (%s,%s,'EXP',%s,'CHARACTER_WISH',%s,'GRANTED',%s)""",
-                            (f"{draw_key}:exp", uid, role_exp, request_id,
+                            (f"{draw_key}:exp", uid, role_exp, _ledger_source_id(request_id),
                              _dumps({"role_id": role["role_id"]})),
                         )
                         progress = await apply_role_experience(
