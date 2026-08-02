@@ -41,7 +41,7 @@ def render_home(data):
     output += f"出战角色：**{data['role']['name']} Lv.{data['role']['level']}**｜角色图鉴 {data['owned']}/{data['roster_total']}\n"
     output += f"角色保底：**{pity['pity']}/{pool['pity_limit']}**（还需 {pool['pity_limit']-pity['pity']} 抽）\n\n"
     output += "> 每抽主奖励：药材30%｜丹药30%｜当前角色四星专属碎片25%｜五星专属碎片10%｜定向角色碎片5%。\n"
-    output += "> 每抽另得当前角色升级所需经验的1/3与本源材料；80抽主奖励保底，固定奖励照常发放。\n\n"
+    output += "> 每抽另得当前角色升级所需经验的1/15与本源材料；80抽主奖励保底，固定奖励照常发放。\n\n"
     if data["full_roster"]:
         if pity["full_type"] == FULL_SPECIAL:
             choice = f"五星专属礼包-{data['full_role_name']}"

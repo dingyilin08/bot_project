@@ -21,6 +21,7 @@ FULL_RESOURCE = "HIGH_RESOURCE_PACK"
 FULL_SPECIAL_FRAGMENT_AMOUNT = 10
 FULL_RESOURCE_PILL_AMOUNT = 2
 FULL_RESOURCE_ORIGIN_AMOUNT = 20
+WISH_EXP_DIVISOR = 15
 
 
 class CharacterWishError(Exception):
@@ -510,7 +511,7 @@ async def draw(uid: int, count: int, request_id: str = None) -> dict:
                     fixed = []
                     role_exp = 0
                     if current_level < 100:
-                        role_exp = int(math.ceil(required_exp(current_level) / 3))
+                        role_exp = int(math.ceil(required_exp(current_level) / WISH_EXP_DIVISOR))
                         await cursor.execute(
                             """INSERT INTO reward_ledger
                                (business_key,uid,reward_type,amount,source_type,source_id,status,payload_json)
