@@ -7,7 +7,7 @@ from datetime import datetime
 import botpy
 from botpy import logging as botpy_logging
 from botpy.ext.cog_yaml import read
-from botpy.manage import GroupManageEvent
+from botpy.manage import C2CManageEvent, GroupManageEvent
 from botpy.message import GroupMessage, Message, C2CMessage, DirectMessage
 from botpy.types.message import KeyboardPayload, MarkdownPayload, MessageMarkdownParams
 from botpy.types.inline import Keyboard, Button, RenderData, Action, Permission, KeyboardRow
@@ -15,7 +15,8 @@ from botpy.types.inline import Keyboard
 
 from output_main import *
 from Tool.tool_command import *
-from Tool.qq_group_welcome import build_group_welcome_message
+from Tool.qq_group_welcome import build_friend_welcome_message, build_group_welcome_message
+from Tool.qq_official_group import attach_official_group_notice
 from Game_domain.event_inbox import MySQLEventInbox
 
 test_config = read(os.path.join(os.path.dirname(__file__), "config.yaml"))
@@ -92,6 +93,34 @@ class MyClient(botpy.Client):
         await event_inbox.mark_processed(event.event_id)
         _log.info(f"已向新加入的群聊[{event.group_openid}]发送游戏介绍")
 
+    # 玩家新添加机器人好友
+    async def on_friend_add(self, event: C2CManageEvent):
+        if not await event_inbox.claim(
+            event.event_id,
+            source="websocket",
+            event_type="FRIEND_ADD",
+            body={"openid": event.openid, "timestamp": event.timestamp},
+        ):
+            return
+
+        try:
+            welcome = build_friend_welcome_message()
+            await self.api.post_c2c_message(
+                openid=event.openid,
+                msg_type=2,
+                event_id=event.event_id,
+                msg_seq=1,
+                content="",
+                markdown=MarkdownPayload(content=welcome["content"]),
+                keyboard=welcome["keyboard"],
+            )
+        except Exception as exc:
+            await event_inbox.mark_processed(event.event_id, str(exc)[:500])
+            raise
+
+        await event_inbox.mark_processed(event.event_id)
+        _log.info(f"已向新添加机器人的玩家[{event.openid}]发送游戏介绍")
+
     # 群聊消息
     async def on_group_at_message_create(self, message: GroupMessage):
         user_openid = message.author.member_openid        # 用户的openid
@@ -106,6 +135,7 @@ class MyClient(botpy.Client):
             return
 
         send_content = await output_content(message.content, user_openid, qun_openid, request_id=message.id)
+        send_content = attach_official_group_notice(send_content)
 
         _log.info(f"群聊玩家消息[{user_openid}]：{redact_sensitive_content(message.content.strip())}")
         if isinstance(send_content, dict):
@@ -143,6 +173,7 @@ class MyClient(botpy.Client):
             return
 
         send_content = await output_content(message.content, user_openid, request_id=message.id)
+        send_content = attach_official_group_notice(send_content)
 
         _log.info(f"私聊玩家消息[{user_openid}]：{redact_sensitive_content(message.content)}")
         if isinstance(send_content, dict):

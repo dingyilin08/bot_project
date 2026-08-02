@@ -15,7 +15,8 @@ from output_main import *
 from config import DOMAIN, IMG_BASE_URL
 from Game_domain.event_inbox import MySQLEventInbox
 from Tool.qq_keyboard import attach_keyboard
-from Tool.qq_group_welcome import build_group_welcome_message
+from Tool.qq_group_welcome import build_friend_welcome_message, build_group_welcome_message
+from Tool.qq_official_group import append_official_group_notice
 
 send_content = ''
 user_last_call_time = {}
@@ -159,7 +160,7 @@ async def send_c2c_message(openid, content, msg_id):
         headers = await get_headers(APP_ID, BOT_SECRET)
         url = f"{API_BASE}/v2/users/{openid}/messages"
         json_data = {
-            "content": content,
+            "content": append_official_group_notice(content),
             "msg_type": 0,
             "msg_id": msg_id
         }
@@ -187,7 +188,7 @@ async def send_group_message(group_openid, content, msg_id):
         headers = await get_headers(APP_ID, BOT_SECRET)
         url = f"{API_BASE}/v2/groups/{group_openid}/messages"
         json_data = {
-            "content": content,
+            "content": append_official_group_notice(content),
             "msg_type": 0,
             "msg_id": msg_id
         }
@@ -226,7 +227,7 @@ async def send_group_markdown(group_openid, markdown_content, msg_id):
             "msg_type": 2,   # 2 表示 markdown 消息
             "msg_id": msg_id,
             "markdown": {
-                "content": markdown_content
+                "content": append_official_group_notice(markdown_content)
             }
         }
 
@@ -265,7 +266,7 @@ async def send_c2c_markdown(openid, markdown_content, msg_id):
             "msg_type": 2,   # 2 表示 markdown 消息
             "msg_id": msg_id,
             "markdown": {
-                "content": markdown_content
+                "content": append_official_group_notice(markdown_content)
             }
         }
 
@@ -315,7 +316,7 @@ async def send_group_markdown_keyboard(
             "content": "",
             "msg_type": 2,
             "markdown": {
-                "content": markdown_content
+                "content": append_official_group_notice(markdown_content)
             },
             "keyboard": keyboard
         }
@@ -339,14 +340,25 @@ async def send_group_markdown_keyboard(
 
 
 # 发送私聊Markdown+Keyboard消息（异步版本）
-async def send_c2c_markdown_keyboard(openid, markdown_content, keyboard, msg_id):
+async def send_c2c_markdown_keyboard(
+    openid,
+    markdown_content,
+    keyboard,
+    msg_id=None,
+    *,
+    event_id=None,
+):
     """
     发送私聊Markdown+Keyboard消息
     :param openid: 用户openid
     :param markdown_content: Markdown内容字符串
     :param keyboard: Keyboard按钮对象
-    :param msg_id: 回复的消息ID
+    :param msg_id: 被动回复的消息 ID
+    :param event_id: 被动响应的事件 ID，与 msg_id 二选一
     """
+    if bool(msg_id) == bool(event_id):
+        raise ValueError("msg_id 和 event_id 必须且只能传入一个")
+
     try:
         headers = await get_headers(APP_ID, BOT_SECRET)
         url = f"{API_BASE}/v2/users/{openid}/messages"
@@ -355,12 +367,12 @@ async def send_c2c_markdown_keyboard(openid, markdown_content, keyboard, msg_id)
         json_data = {
             "content": "",
             "msg_type": 2,
-            "msg_id": msg_id,
             "markdown": {
-                "content": markdown_content
+                "content": append_official_group_notice(markdown_content)
             },
             "keyboard": keyboard
         }
+        json_data["msg_id" if msg_id else "event_id"] = msg_id or event_id
 
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=json_data, headers=headers) as response:
@@ -500,7 +512,7 @@ async def handle_webhook(request: Request):
             json_data = json.loads(json_data_text)
 
             logging.info(f"消息类型: {message_type}")
-            # 入群事件的事件体不含 content/author/id，必须先于消息事件分流。
+            # 管理事件体不含普通消息的 content/author/id，必须先分流。
             if payload.t == "GROUP_ADD_ROBOT":
                 group_openid = json_data["group_openid"]
                 welcome = build_group_welcome_message()
@@ -513,6 +525,20 @@ async def handle_webhook(request: Request):
                 if result is None:
                     raise RuntimeError("入群欢迎消息发送失败")
                 logging.info(f"已向新加入的群聊[{group_openid}]发送游戏介绍")
+
+            # 玩家新添加机器人后，使用顶层事件 ID 发送被动欢迎消息。
+            elif payload.t == "FRIEND_ADD":
+                user_openid = json_data["openid"]
+                welcome = build_friend_welcome_message()
+                result = await send_c2c_markdown_keyboard(
+                    user_openid,
+                    welcome["content"],
+                    welcome["keyboard"],
+                    event_id=event_id,
+                )
+                if result is None:
+                    raise RuntimeError("好友欢迎消息发送失败")
+                logging.info(f"已向新添加机器人的玩家[{user_openid}]发送游戏介绍")
 
             # 群聊消息处理
             elif payload.t == "GROUP_AT_MESSAGE_CREATE":

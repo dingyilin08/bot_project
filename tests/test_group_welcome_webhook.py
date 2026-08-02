@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 import main
 from Game_domain.event_inbox import InMemoryEventInbox
+from Tool.qq_official_group import OFFICIAL_GROUP_NOTICE
 
 
 class _FakeRequest:
@@ -65,6 +66,22 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
                 "group_openid": "group-openid-1",
                 "op_member_openid": "member-openid-1",
                 "timestamp": 1784570534,
+            },
+        })
+
+    @staticmethod
+    def _friend_request(event_id="event-friend-add-1"):
+        return _FakeRequest({
+            "id": event_id,
+            "op": 0,
+            "t": "FRIEND_ADD",
+            "s": 2,
+            "d": {
+                "openid": "user-openid-1",
+                "timestamp": 1784570523,
+                "scene": 1001,
+                "scene_param": "",
+                "author": {"union_openid": "union-openid-1"},
             },
         })
 
@@ -129,6 +146,75 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
         retry_sender.assert_awaited_once()
         self.assertEqual("PROCESSED", inbox.events["event-group-add-failed"]["status"])
 
+    async def test_friend_add_event_replies_to_openid_with_event_id(self):
+        inbox = InMemoryEventInbox()
+        sender = AsyncMock(return_value={"id": "sent-friend-welcome"})
+
+        with patch.object(main, "event_inbox", inbox), patch.object(
+            main, "send_c2c_markdown_keyboard", sender
+        ):
+            response = await main.handle_webhook(self._friend_request())
+
+        self.assertEqual({"op": 12}, response)
+        sender.assert_awaited_once()
+        args, kwargs = sender.await_args
+        self.assertEqual("user-openid-1", args[0])
+        self.assertIn("欢迎添加《问道诸天》", args[1])
+        self.assertTrue(args[1].endswith(OFFICIAL_GROUP_NOTICE))
+        self.assertEqual("event-friend-add-1", kwargs["event_id"])
+        self.assertNotIn("msg_id", kwargs)
+        self.assertEqual(
+            "注册游戏",
+            args[2]["content"]["rows"][0]["buttons"][0]["action"]["data"],
+        )
+        self.assertEqual("PROCESSED", inbox.events["event-friend-add-1"]["status"])
+
+    async def test_duplicate_friend_add_event_does_not_send_twice(self):
+        inbox = InMemoryEventInbox()
+        sender = AsyncMock(return_value={"id": "sent-friend-welcome"})
+
+        with patch.object(main, "event_inbox", inbox), patch.object(
+            main, "send_c2c_markdown_keyboard", sender
+        ):
+            first = await main.handle_webhook(
+                self._friend_request("event-friend-duplicate")
+            )
+            second = await main.handle_webhook(
+                self._friend_request("event-friend-duplicate")
+            )
+
+        self.assertEqual({"op": 12}, first)
+        self.assertEqual({"op": 12}, second)
+        sender.assert_awaited_once()
+
+    async def test_failed_friend_welcome_can_retry(self):
+        inbox = InMemoryEventInbox()
+        failed_sender = AsyncMock(return_value=None)
+
+        with patch.object(main, "event_inbox", inbox), patch.object(
+            main, "send_c2c_markdown_keyboard", failed_sender
+        ):
+            with self.assertRaises(HTTPException):
+                await main.handle_webhook(self._friend_request("event-friend-retry"))
+
+        self.assertEqual("FAILED", inbox.events["event-friend-retry"]["status"])
+        self.assertIn(
+            "好友欢迎消息发送失败",
+            inbox.events["event-friend-retry"]["error_message"],
+        )
+
+        retry_sender = AsyncMock(return_value={"id": "sent-on-retry"})
+        with patch.object(main, "event_inbox", inbox), patch.object(
+            main, "send_c2c_markdown_keyboard", retry_sender
+        ):
+            response = await main.handle_webhook(
+                self._friend_request("event-friend-retry")
+            )
+
+        self.assertEqual({"op": 12}, response)
+        retry_sender.assert_awaited_once()
+        self.assertEqual("PROCESSED", inbox.events["event-friend-retry"]["status"])
+
     async def test_group_sender_serializes_event_reply_without_msg_id(self):
         captured = {}
         keyboard = {"content": {"rows": []}}
@@ -150,6 +236,75 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("msg_id", captured["json"])
         self.assertEqual(2, captured["json"]["msg_type"])
         self.assertEqual(keyboard, captured["json"]["keyboard"])
+        self.assertTrue(
+            captured["json"]["markdown"]["content"].endswith(OFFICIAL_GROUP_NOTICE)
+        )
+
+    async def test_c2c_sender_serializes_friend_event_reply_without_msg_id(self):
+        captured = {}
+        keyboard = {"content": {"rows": []}}
+
+        with patch.object(
+            main, "get_headers", AsyncMock(return_value={"Authorization": "QQBot token"})
+        ), patch.object(
+            main.aiohttp, "ClientSession", lambda: _FakeSession(captured)
+        ):
+            result = await main.send_c2c_markdown_keyboard(
+                "user-openid-1",
+                "welcome",
+                keyboard,
+                event_id="event-friend-add-1",
+            )
+
+        self.assertEqual({"id": "sent-message-id"}, result)
+        self.assertEqual("event-friend-add-1", captured["json"]["event_id"])
+        self.assertNotIn("msg_id", captured["json"])
+        self.assertEqual(2, captured["json"]["msg_type"])
+        self.assertEqual(keyboard, captured["json"]["keyboard"])
+        self.assertTrue(
+            captured["json"]["markdown"]["content"].endswith(OFFICIAL_GROUP_NOTICE)
+        )
+
+    async def test_text_and_markdown_senders_append_official_group_notice(self):
+        cases = (
+            (
+                "c2c_text",
+                lambda: main.send_c2c_message("user-1", "reply", "message-1"),
+                lambda payload: payload["content"],
+            ),
+            (
+                "group_text",
+                lambda: main.send_group_message("group-1", "reply", "message-1"),
+                lambda payload: payload["content"],
+            ),
+            (
+                "c2c_markdown",
+                lambda: main.send_c2c_markdown("user-1", "reply", "message-1"),
+                lambda payload: payload["markdown"]["content"],
+            ),
+            (
+                "group_markdown",
+                lambda: main.send_group_markdown("group-1", "reply", "message-1"),
+                lambda payload: payload["markdown"]["content"],
+            ),
+        )
+
+        for name, sender, get_content in cases:
+            with self.subTest(name=name):
+                captured = {}
+                with patch.object(
+                    main,
+                    "get_headers",
+                    AsyncMock(return_value={"Authorization": "QQBot token"}),
+                ), patch.object(
+                    main.aiohttp,
+                    "ClientSession",
+                    lambda: _FakeSession(captured),
+                ):
+                    result = await sender()
+
+                self.assertEqual({"id": "sent-message-id"}, result)
+                self.assertTrue(get_content(captured["json"]).endswith(OFFICIAL_GROUP_NOTICE))
 
     async def test_group_sender_requires_exactly_one_reply_id(self):
         with self.assertRaises(ValueError):
@@ -159,6 +314,20 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await main.send_group_markdown_keyboard(
                 "group-openid-1",
+                "welcome",
+                {},
+                msg_id="message-id",
+                event_id="event-id",
+            )
+
+    async def test_c2c_sender_requires_exactly_one_reply_id(self):
+        with self.assertRaises(ValueError):
+            await main.send_c2c_markdown_keyboard(
+                "user-openid-1", "welcome", {}, msg_id=None, event_id=None
+            )
+        with self.assertRaises(ValueError):
+            await main.send_c2c_markdown_keyboard(
+                "user-openid-1",
                 "welcome",
                 {},
                 msg_id="message-id",
