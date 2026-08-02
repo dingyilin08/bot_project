@@ -113,6 +113,16 @@ def _format_lore_buff_name(buff_type: str, skill_name: str = "", custom_name: st
     return buff_cn
 
 
+def normalize_buff_target(value, default: int = 2) -> int:
+    """兼容历史技能数据：0、1 均表示自身，2 表示敌方。"""
+    if value is None:
+        return default
+    try:
+        return 2 if int(value) == 2 else 1
+    except (TypeError, ValueError):
+        return default
+
+
 # ================================
 # 枚举定义
 # ================================
@@ -270,6 +280,12 @@ class Skill:
     buff_name: str = ""  # BUFF显示名称（从data_skill.buff_name获取）
     description: str = ""
     element: str = ""
+
+    def __post_init__(self):
+        # 旧 data_skill 曾以 0 表示“自身”。统一标准化，避免增益 Buff 落到敌方。
+        self.buff_target = normalize_buff_target(self.buff_target)
+        if self.buff_type:
+            self.target_type = "enemy" if self.buff_target == 2 else "self"
 
     def can_use(self, entity: 'CombatEntity') -> Tuple[bool, str]:
         """检查是否可以使用技能"""

@@ -18,7 +18,7 @@ import copy
 
 # 导入战斗系统
 from Tool.combat_system import (
-    CombatManager, CombatEntity, Skill, Buff,
+    CombatManager, CombatEntity, Skill, Buff, normalize_buff_target,
     create_skill_from_db, create_combat_entity
 )
 
@@ -204,7 +204,7 @@ async def create_monster_skill(skill_id):
                     buff_type=result[7],
                     buff_value=result[8] or 0,
                     buff_duration=result[9] or 0,
-                    buff_target=result[10] or 2,
+                    buff_target=normalize_buff_target(result[10]),
                 )
             return None
 

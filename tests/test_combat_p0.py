@@ -59,6 +59,29 @@ class P0CombatRulesTests(unittest.TestCase):
         manager.resolve_round({"action_type": "ARTIFACT"})
         self.assertLess(manager.player.mana, mana_before)
 
+    def test_legacy_zero_buff_target_applies_self_buff_to_player(self):
+        legacy_self_buff = Skill(
+            64, "洞天连爆", 1, "enemy", 20, 0,
+            buff_type="attack_up", buff_value=30, buff_duration=3, buff_target=0,
+        )
+        manager = CombatManager(
+            entity("石昊", skills=[legacy_self_buff]),
+            entity("怪物", hp=1000, speed=1, entity_type="normal"),
+        )
+        with patch("Tool.combat_system.random.random", return_value=0.5):
+            manager.resolve_round({"action_type": "SKILL", "skill_id": 64})
+        self.assertEqual(1, legacy_self_buff.buff_target)
+        self.assertTrue(manager.player.has_buff("attack_up"))
+        self.assertFalse(manager.enemy.has_buff("attack_up"))
+
+    def test_skill_snapshot_keeps_legacy_self_target_semantics(self):
+        skill = Skill.from_snapshot({
+            "id": 64, "name": "洞天连爆", "skill_type": 1, "target_type": "enemy",
+            "value": 20, "is_percent": 0, "buff_type": "attack_up", "buff_target": 0,
+        })
+        self.assertEqual(1, skill.buff_target)
+        self.assertEqual("self", skill.target_type)
+
     def test_boss_telegraph_can_be_broken_by_counter_element(self):
         metal = attack_skill(1, "Metal Art", "METAL")
         manager = CombatManager(

@@ -329,7 +329,7 @@ async def get_role_benyuan_skills_for_battle(uid, role_id, role_name, cursor=Non
                 "buff_type": row[6],
                 "buff_value": row[7],
                 "buff_duration": row[8],
-                "buff_target": row[9] if row[9] else 2,
+                "buff_target": row[9] if row[9] is not None else 2,
                 "skill_desc": row[10] or "",
                 "priority": row[11] or 1
             })

@@ -20,7 +20,7 @@ from uuid import NAMESPACE_URL, uuid5
 # 导入战斗系统
 from Tool.combat_system import (
     CombatManager, CombatEntity, Skill, Buff,
-    create_skill_from_db, create_combat_entity
+    create_skill_from_db, create_combat_entity, normalize_buff_target
 )
 
 # 导入装备系统（用于副本掉落和战斗属性集成）
@@ -293,7 +293,7 @@ async def create_monster_skill(skill_id):
 
                 if result:
                     # 根据buff_target确定target_type (1:我方/self, 2:敌方/enemy)
-                    buff_target = result[10] if result[10] else 0
+                    buff_target = normalize_buff_target(result[10])
                     target_type = "enemy" if buff_target == 2 else "self"
 
                     # Boss技能设置5回合冷却
@@ -1421,7 +1421,7 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                             """, (data_skill_id,))
                             skill_result = await cursor.fetchone()
                             if skill_result:
-                                buff_target = skill_result[10] if skill_result[10] else 2
+                                buff_target = normalize_buff_target(skill_result[10])
                                 target_type = "enemy" if buff_target == 2 else "self"
 
                                 player_skills.append(Skill(
@@ -1469,7 +1469,7 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                                     buff_type = buff_result[0]
                                     buff_value = buff_result[1] or 0
                                     buff_duration = buff_result[2] or 0
-                                    buff_target = buff_result[3] if buff_result[3] else 2
+                                    buff_target = normalize_buff_target(buff_result[3])
                                     buff_desc = buff_result[4] or ""
                                     buff_name_result = buff_result[5] or ""
 
@@ -1496,7 +1496,7 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
             # 注入本源技能（独立于普通技能槽）
             benyuan_skills = await get_role_benyuan_skills_for_battle(uid, role_id, role_name, cursor)
             for by_skill in benyuan_skills:
-                buff_target = by_skill.get('buff_target', 2) or 2
+                buff_target = normalize_buff_target(by_skill.get('buff_target'))
                 target_type = "enemy" if buff_target == 2 else "self"
                 player_skills.append(Skill(
                     id=by_skill['id'],
