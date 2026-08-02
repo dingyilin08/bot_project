@@ -37,6 +37,11 @@ SKILL_QUALITY_COEF = {'凡': 1, '灵': 2, '玄': 3, '地': 5, '天': 8}
 ENHANCE_BONUS_PER_LEVEL = EQUIPMENT_ENHANCE_BONUS_PER_LEVEL
 
 
+def _number(value) -> float:
+    """将 MySQL DECIMAL、整数和空值统一为可参与权重计算的数值。"""
+    return float(value or 0)
+
+
 async def calculate_base_power(role_data: Dict) -> int:
     """
     计算基础战力（属性战力）
@@ -49,18 +54,18 @@ async def calculate_base_power(role_data: Dict) -> int:
     """
     power = 0
     
-    power += role_data.get('gongji', 0) * ATTR_WEIGHTS['gongji']
-    power += role_data.get('fangyu', 0) * ATTR_WEIGHTS['fangyu']
-    power += role_data.get('qixue', 0) * ATTR_WEIGHTS['qixue']
-    power += role_data.get('fali', 0) * ATTR_WEIGHTS['fali']
-    power += role_data.get('sudu', 0) * ATTR_WEIGHTS['sudu']
+    power += _number(role_data.get('gongji')) * ATTR_WEIGHTS['gongji']
+    power += _number(role_data.get('fangyu')) * ATTR_WEIGHTS['fangyu']
+    power += _number(role_data.get('qixue')) * ATTR_WEIGHTS['qixue']
+    power += _number(role_data.get('fali')) * ATTR_WEIGHTS['fali']
+    power += _number(role_data.get('sudu')) * ATTR_WEIGHTS['sudu']
     
-    power += role_data.get('baoji', 0) * COMBAT_ATTR_WEIGHTS['baoji']
-    power += role_data.get('baoshang', 0) * COMBAT_ATTR_WEIGHTS['baoshang']
-    power += role_data.get('shanbi', 0) * COMBAT_ATTR_WEIGHTS['shanbi']
-    power += role_data.get('mingzhong', 0) * COMBAT_ATTR_WEIGHTS['mingzhong']
-    power += role_data.get('pofang', 0) * COMBAT_ATTR_WEIGHTS['pofang']
-    power += role_data.get('xixue', 0) * COMBAT_ATTR_WEIGHTS['xixue']
+    power += _number(role_data.get('baoji')) * COMBAT_ATTR_WEIGHTS['baoji']
+    power += _number(role_data.get('baoshang')) * COMBAT_ATTR_WEIGHTS['baoshang']
+    power += _number(role_data.get('shanbi')) * COMBAT_ATTR_WEIGHTS['shanbi']
+    power += _number(role_data.get('mingzhong')) * COMBAT_ATTR_WEIGHTS['mingzhong']
+    power += _number(role_data.get('pofang')) * COMBAT_ATTR_WEIGHTS['pofang']
+    power += _number(role_data.get('xixue')) * COMBAT_ATTR_WEIGHTS['xixue']
     
     return int(power)
 
@@ -75,6 +80,7 @@ async def calculate_level_power(level: int) -> int:
     Returns:
         等级战力值
     """
+    level = _number(level)
     linear_power = level * 200
     quadratic_power = ((level / 10) ** 2) * 500
     return int(linear_power + quadratic_power)
@@ -113,10 +119,10 @@ async def calculate_equip_power(conn, role_id: int, uid: int) -> Tuple[int, Dict
     equip_details = []
     
     for equip in equipments:
-        equip_id, equip_level, quality = equip[0], equip[1], equip[2]
-        base_gongji, base_fangyu, base_qixue = equip[3], equip[4], equip[5]
-        base_fali, base_sudu, base_baoji, base_baoshang = equip[6], equip[7], equip[8], equip[9]
-        base_shanbi, base_mingzhong, base_pofang, base_xixue = equip[10], equip[11], equip[12], equip[13]
+        equip_id, equip_level, quality = equip[0], _number(equip[1]), equip[2]
+        base_gongji, base_fangyu, base_qixue = _number(equip[3]), _number(equip[4]), _number(equip[5])
+        base_fali, base_sudu, base_baoji, base_baoshang = _number(equip[6]), _number(equip[7]), _number(equip[8]), _number(equip[9])
+        base_shanbi, base_mingzhong, base_pofang, base_xixue = _number(equip[10]), _number(equip[11]), _number(equip[12]), _number(equip[13])
         set_name, equip_name, part = equip[14], equip[15], equip[16]
         
         quality_multi = QUALITY_MULTIPLIER.get(quality, 1.0)
@@ -197,21 +203,21 @@ async def calculate_benyuan_power(conn, role_id: int, uid: int, role_data: Dict)
     if not benyuan:
         return 0
     
-    level_power = benyuan[0] * 300
+    level_power = _number(benyuan[0]) * 300
     
     attr_power = 0
     
-    qx_jc, gj_jc, fy_jc = benyuan[1], benyuan[2], benyuan[3]
-    bj_jc, bs_jc = benyuan[4], benyuan[5]
-    sb_jc, mz_jc = benyuan[6], benyuan[7]
-    pf_jc, xx_jc = benyuan[8], benyuan[9]
+    qx_jc, gj_jc, fy_jc = _number(benyuan[1]), _number(benyuan[2]), _number(benyuan[3])
+    bj_jc, bs_jc = _number(benyuan[4]), _number(benyuan[5])
+    sb_jc, mz_jc = _number(benyuan[6]), _number(benyuan[7])
+    pf_jc, xx_jc = _number(benyuan[8]), _number(benyuan[9])
     
     if qx_jc and qx_jc > 0:
-        attr_power += role_data.get('qixue', 0) * (qx_jc / 100) * ATTR_WEIGHTS['qixue']
+        attr_power += _number(role_data.get('qixue')) * (qx_jc / 100) * ATTR_WEIGHTS['qixue']
     if gj_jc and gj_jc > 0:
-        attr_power += role_data.get('gongji', 0) * (gj_jc / 100) * ATTR_WEIGHTS['gongji']
+        attr_power += _number(role_data.get('gongji')) * (gj_jc / 100) * ATTR_WEIGHTS['gongji']
     if fy_jc and fy_jc > 0:
-        attr_power += role_data.get('fangyu', 0) * (fy_jc / 100) * ATTR_WEIGHTS['fangyu']
+        attr_power += _number(role_data.get('fangyu')) * (fy_jc / 100) * ATTR_WEIGHTS['fangyu']
     
     if bj_jc:
         attr_power += bj_jc * COMBAT_ATTR_WEIGHTS['baoji']

@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import unittest
+from decimal import Decimal
 
 from Game_domain.equipment_rules import (
     EQUIPMENT_ENHANCE_BONUS_PER_LEVEL,
@@ -74,6 +75,16 @@ class EquipmentTransactionConsistencyTests(unittest.TestCase):
     def test_power_refresh_never_commits_caller_transaction(self):
         source = inspect.getsource(tool_power.update_role_power)
         self.assertNotIn("await conn.commit()", source)
+
+    def test_mysql_decimal_attributes_can_be_used_in_power_formula(self):
+        power = asyncio.run(tool_power.calculate_base_power({
+            "gongji": Decimal("100.0"), "fangyu": Decimal("50.0"),
+            "qixue": Decimal("0"), "fali": Decimal("0"), "sudu": Decimal("0"),
+            "baoji": Decimal("0"), "baoshang": Decimal("0"),
+            "shanbi": Decimal("0"), "mingzhong": Decimal("0"),
+            "pofang": Decimal("0"), "xixue": Decimal("0"),
+        }))
+        self.assertEqual(140, power)
 
     def test_connection_context_explicitly_rolls_back_on_exception(self):
         from sql import mysql
