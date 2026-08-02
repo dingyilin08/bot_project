@@ -570,6 +570,8 @@ async def show_dungeon_menu(uid, qz):
     output += "> 点击后输入副本编号，可查看该副本的详细信息，如：副本信息 1\n\n"
     output += "<qqbot-cmd-input text='挑战副本 ' show='挑战副本 副本编号' />\n"
     output += "> 点击后输入副本编号，可进入副本进行挑战。如：挑战副本 1\n\n"
+    output += "<qqbot-cmd-input text='扫荡副本' show='扫荡已通关副本' />\n"
+    output += "> 查看永久解锁的已通关副本，消耗扫荡副本券与1次历练次数即可一键结算。\n\n"
     output += "<qqbot-cmd-input text='怪物列表' show='怪物列表' />\n"
     output += "> 点击后发送可查看当前副本中可挑战的怪物。\n\n"
     output += "<qqbot-cmd-input text='挑战怪物 ' show='挑战怪物 怪物编号' />\n"

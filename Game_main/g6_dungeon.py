@@ -512,13 +512,52 @@ async def update_dungeon_progress(uid, dungeon_id, monster_index, player_hp_rati
     }
 
 
+# 确保永久通关记录存在。user_dungeon_progress 会在重打或放弃时被覆盖，
+# 因此扫荡资格必须单独保存，不能只依赖当前进度状态。
+async def ensure_dungeon_clear_schema(cursor):
+    await cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_dungeon_clear (
+            uid INT NOT NULL,
+            dungeon_id INT NOT NULL,
+            clear_count INT NOT NULL DEFAULT 1,
+            first_clear_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            last_clear_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (uid, dungeon_id),
+            KEY idx_dungeon_id (dungeon_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='玩家_副本永久通关记录'
+        """
+    )
+
+
 # 设置副本状态
 async def set_dungeon_status(uid, dungeon_id, status):
     async with connect_mysql() as conn:
-        async with conn.cursor() as cursor:
-            sql = "UPDATE user_dungeon_progress SET status = %s WHERE uid = %s AND dungeon_id = %s"
-            await cursor.execute(sql, (status, uid, dungeon_id))
+        try:
+            async with conn.cursor() as cursor:
+                if status == 'completed':
+                    await ensure_dungeon_clear_schema(cursor)
+                sql = """
+                    UPDATE user_dungeon_progress SET status = %s
+                    WHERE uid = %s AND dungeon_id = %s AND status <> %s
+                """
+                await cursor.execute(sql, (status, uid, dungeon_id, status))
+                status_changed = cursor.rowcount > 0
+                if status == 'completed' and status_changed:
+                    await cursor.execute(
+                        """
+                        INSERT INTO user_dungeon_clear (uid, dungeon_id, clear_count)
+                        VALUES (%s, %s, 1)
+                        ON DUPLICATE KEY UPDATE
+                            clear_count = clear_count + 1,
+                            last_clear_at = CURRENT_TIMESTAMP
+                        """,
+                        (uid, dungeon_id),
+                    )
             await conn.commit()
+        except Exception:
+            await conn.rollback()
+            raise
 
 
 # 放弃副本
@@ -541,7 +580,7 @@ async def get_daily_remaining_count(uid):
             if not result:
                 return FREE_DAILY_CHALLENGES
 
-            remaining = result[0] or FREE_DAILY_CHALLENGES
+            remaining = result[0] if result[0] is not None else FREE_DAILY_CHALLENGES
             last_reset = result[1]
 
             # 如果日期不同，重置次数
@@ -575,8 +614,9 @@ async def increment_daily_challenge(uid):
 
             sql = "UPDATE user_zt SET dungeon_num = dungeon_num - 1 WHERE id = %s AND dungeon_num > 0"
             await cursor.execute(sql, (uid,))
+            success = cursor.rowcount > 0
             await conn.commit()
-            return True
+            return success
 
 
 # 添加副本掉落

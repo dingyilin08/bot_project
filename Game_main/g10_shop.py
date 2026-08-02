@@ -13,6 +13,7 @@ FREE_DAILY_CHALLENGES = 20
 DAILY_CHALLENGE_CAP = 40
 STAMINA_POTION_ITEM_ID = 209
 STAMINA_POTION_RESTORE = 5
+DUNGEON_SWEEP_TICKET_ITEM_ID = 211
 
 # 商品价格以当前副本、药园和炼丹的灵石产出为基准；商品均可由后续运营在
 # data_shop_item 表中调整，不在业务逻辑中硬编码价格。
@@ -24,6 +25,14 @@ DEFAULT_SHOP_ITEMS = (
         "category": "历练",
         "daily_limit": 4,
         "description": "使用后恢复5次副本历练次数；当日历练次数最多为40次。",
+    },
+    {
+        "name": "扫荡副本券",
+        "item_id": DUNGEON_SWEEP_TICKET_ITEM_ID,
+        "price": 800,
+        "category": "历练",
+        "daily_limit": 10,
+        "description": "消耗1张可一键扫荡已通关副本，同时消耗1次副本历练次数。",
     },
     {
         "name": "灵草培育液",
@@ -106,6 +115,7 @@ async def _ensure_shop_schema(cursor):
         (208, "炼丹加速卡", "使指定丹炉立即完成炼制。", "药园炼丹、灵石商城"),
         (209, "体力药", "恢复副本历练次数，每次恢复5次。", "灵石商城"),
         (210, "灵草培育液", "使已播种药田立即成熟。", "灵石商城"),
+        (211, "扫荡副本券", "可一键扫荡已通关副本。", "灵石商城"),
     )
     for item_id, name, description, access in item_definitions:
         await cursor.execute(

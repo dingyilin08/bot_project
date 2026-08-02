@@ -36,6 +36,7 @@ from Game_main.g25_daily_tasks import *    # P2 日常任务
 from Game_main.g26_signin import *          # P2 三十日签到
 from Game_main.g27_world_message import *   # GM 世界消息库
 from Game_main.g28_player_guide import *     # 玩家交互攻略
+from Game_main.g29_dungeon_sweep import *    # 已通关副本扫荡
 from Game_main.g0_menu import *          # 菜单系统
 from Tool.qq_keyboard import attach_keyboard
 from Game_domain.gm_service import GMError, authenticate_admin
@@ -45,6 +46,7 @@ wuhouzhui = '收回|当前角色|参悟|参悟状态|领取参悟经验|悟道�
 youhouzhui = '注册游戏|选择角色|角色介绍|玩法介绍|角色属性|出战|角色背包|物品背包|物品信息|副本信息|副本列表|挑战副本|挑战怪物|战斗行动|激活技能|卷轴信息|技能信息|技能融合|技能装备|技能卸下|穿戴装备|卸下装备|强化装备|装备详情|出售装备|技能背包|装备背包|战力排行|排行榜|商城|购买商品|使用体力药|种子商店|购买种子|播种|一键播种|采摘|解锁药田|施肥|出售药材|丹方列表|炼丹|收丹|服丹|解锁丹炉|加速炼丹|添火|关闭图片模式|开启图片模式|GM验证|GM发放物品|GM发放仙玉|灵兽出战|队伍加入|布阵|洞府升级|洞府收取|道途投票|札记领取|队伍战斗行动|宗门创建|宗门申请|宗门投票|拜师|收徒|世界挑战|仙玉祈愿|祈愿定向|祈愿保底选择|合成角色|专属祈愿|专属定向|点亮能力|装备专属|专属组合|异火祈愿|异火定向|合成异火|装备异火|异火融合|意境祈愿|参悟意境|装备意境|本源合道|法宝祈愿|点亮法宝|法宝协同|炼制飞剑|宝术祈愿|铭刻宝术|六道轮回|九秘祈愿|参悟九秘|九秘连携|选择异象|刀法祈愿|绘制绘卷|刀势推演'
 wuhouzhui += '|日常任务|签到|签到记录|签到奖励|攻略|开荒攻略|角色攻略|战斗攻略|资源攻略'
 youhouzhui += '|日常领取'
+youhouzhui += '|扫荡副本'
 youhouzhui += '|GM世界消息添加|GM世界消息修改|GM世界消息启用|GM世界消息停用|GM世界消息删除'
 
 world_message_value_commands = (
@@ -251,6 +253,10 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         if con_arr1 == "":
             return await challenge_dungeon(uid)
         return await start_challenge_dungeon(uid, con_arr1)
+    elif con_arr0 == '扫荡副本':
+        if con_arr1 == "":
+            return await dungeon_sweep_list(uid)
+        return await sweep_dungeon(uid, con_arr1, request_id=request_id)
     elif con_arr0 == '查看怪物' or con_arr0 == '怪物列表':
         return await show_monster_list(uid)
     elif con_arr0 == '挑战怪物':

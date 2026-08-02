@@ -247,7 +247,7 @@ class MySQLRewardService:
                     if exp:
                         key = self._key(battle_id, uid, "exp")
                         if await self._claim(cursor, key, uid, "EXP", exp, battle_id, {"role_id": current_role[0]}):
-                            progress = await self._apply_experience(cursor, current_role, exp)
+                            progress = await self.apply_experience(cursor, current_role, exp)
                             result.level_before = current_role[2]
                             result.level_after = progress["level"]
                             result.exp_after = progress["exp"]
@@ -319,7 +319,8 @@ class MySQLRewardService:
                 raise
         return result
 
-    async def _apply_experience(self, cursor, role, add_exp: int) -> Dict:
+    async def apply_experience(self, cursor, role, add_exp: int) -> Dict:
+        """在调用方当前事务中结算角色经验与升级属性。"""
         role_id, role_name, level, current_exp = role[0], role[1], role[2], role[3]
         progress = calculate_exp_progress(level, current_exp, add_exp)
         levels_gained = progress["levels_gained"]
