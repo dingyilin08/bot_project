@@ -351,6 +351,7 @@ async def update_role_power(conn, uid: int) -> int:
         await cursor.execute("""
             SELECT id, `name` FROM user_role
             WHERE uid = %s AND is_chuzhan = 1
+            FOR UPDATE
         """, (uid,))
         current_role = await cursor.fetchone()
     
