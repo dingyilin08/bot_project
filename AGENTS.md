@@ -28,6 +28,8 @@ Name tests `test_*.py` and test classes `*Tests`. Cover parsers, catalog/config 
 
 This checkout has no Git history, so use concise imperative Conventional Commit messages, for example `feat(shop): add lingshi convenience store`. Keep each commit focused. Pull requests should explain gameplay impact, list schema changes and commands added, link the issue when applicable, and include representative bot-response screenshots for menu or interaction changes.
 
+After every completed task, stage only the files that belong to that task, create a focused commit, and push the current branch to its configured Git remote. Do not report a task as complete until the push succeeds. If committing or pushing is blocked, report the exact blocker instead of silently leaving completed work uncommitted or unpushed. Never include unrelated working-tree changes or secrets merely to satisfy this rule.
+
 ## Security & Configuration
 
 Never commit real QQ credentials, database passwords, private keys, or production SQL dumps with sensitive player data. Move local secrets to environment-specific configuration before deployment.
