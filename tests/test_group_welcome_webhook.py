@@ -54,6 +54,10 @@ class _FakeSession:
         return _FakeResponse()
 
 
+async def _append_official_notice(content):
+    return f"{content}\n\n{OFFICIAL_GROUP_NOTICE}"
+
+
 class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
     @staticmethod
     def _request(event_id="event-group-add-1"):
@@ -297,6 +301,8 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
             main, "get_headers", AsyncMock(return_value={"Authorization": "QQBot token"})
         ), patch.object(
             main.aiohttp, "ClientSession", lambda: _FakeSession(captured)
+        ), patch.object(
+            main, "append_rotating_reply_notice", _append_official_notice
         ):
             result = await main.send_group_markdown_keyboard(
                 "group-openid-1",
@@ -322,6 +328,8 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
             main, "get_headers", AsyncMock(return_value={"Authorization": "QQBot token"})
         ), patch.object(
             main.aiohttp, "ClientSession", lambda: _FakeSession(captured)
+        ), patch.object(
+            main, "append_rotating_reply_notice", _append_official_notice
         ):
             result = await main.send_c2c_markdown_keyboard(
                 "user-openid-1",
@@ -374,6 +382,10 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
                     main.aiohttp,
                     "ClientSession",
                     lambda: _FakeSession(captured),
+                ), patch.object(
+                    main,
+                    "append_rotating_reply_notice",
+                    _append_official_notice,
                 ):
                     result = await sender()
 
@@ -415,6 +427,23 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual("注册游戏", command)
         self.assertEqual("云澈", player_name)
+
+    async def test_world_message_gm_content_reaches_parser_without_uppercasing(self):
+        raw_command = "GM世界消息添加 Boss 前先检查 Skill 配置！"
+        parser = AsyncMock(return_value=("GM世界消息添加", "Boss 前先检查 Skill 配置！"))
+        main.user_last_call_time.pop("gm-world-message-user", None)
+
+        with patch.object(main, "jiance", parser), patch.object(
+            main, "is_txt_exist", AsyncMock(return_value=False)
+        ), patch.object(
+            main, "content", AsyncMock(return_value="保存成功")
+        ), patch.object(
+            main.logging, "FileHandler", return_value=main.logging.NullHandler()
+        ):
+            result = await main.output_content(raw_command, "gm-world-message-user")
+
+        parser.assert_awaited_once_with(raw_command)
+        self.assertEqual("保存成功", result)
 
 
 if __name__ == "__main__":

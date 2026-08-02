@@ -15,7 +15,7 @@ from config import DOMAIN, IMG_BASE_URL
 from Game_domain.event_inbox import MySQLEventInbox
 from Tool.qq_keyboard import attach_keyboard
 from Tool.qq_group_welcome import build_friend_welcome_message, build_group_welcome_message
-from Tool.qq_official_group import append_official_group_notice
+from Tool.qq_reply_footer import append_rotating_reply_notice
 
 send_content = ''
 user_last_call_time = {}
@@ -33,6 +33,7 @@ async def output_content(user_content, user_openid, qun_openid=None, request_id=
     c_logger = lg.getLogger(__name__)
 
     # try:
+    raw_user_content = user_content
     user_content = user_content.upper()
 
     # 图片模式密令两步验证（优先于限频与指令解析）
@@ -61,7 +62,7 @@ async def output_content(user_content, user_openid, qun_openid=None, request_id=
     # 小群：DF4D4281BEFA2776256C11AD7030596D
     # 内测群：1341185812BBA8426C8E1AD1BB254DAF
 
-    con_arr0, con_arr1 = await jiance(user_content)
+    con_arr0, con_arr1 = await jiance(raw_user_content)
     send_content = await content(con_arr0, con_arr1, user_openid, qun_openid, request_id=request_id)
     send_content = apply_image_mode(send_content)
     send_content = attach_keyboard(send_content, is_group=qun_openid is not None)
@@ -159,7 +160,7 @@ async def send_c2c_message(openid, content, msg_id):
         headers = await get_headers(APP_ID, BOT_SECRET)
         url = f"{API_BASE}/v2/users/{openid}/messages"
         json_data = {
-            "content": append_official_group_notice(content),
+            "content": await append_rotating_reply_notice(content),
             "msg_type": 0,
             "msg_id": msg_id
         }
@@ -187,7 +188,7 @@ async def send_group_message(group_openid, content, msg_id):
         headers = await get_headers(APP_ID, BOT_SECRET)
         url = f"{API_BASE}/v2/groups/{group_openid}/messages"
         json_data = {
-            "content": append_official_group_notice(content),
+            "content": await append_rotating_reply_notice(content),
             "msg_type": 0,
             "msg_id": msg_id
         }
@@ -226,7 +227,7 @@ async def send_group_markdown(group_openid, markdown_content, msg_id):
             "msg_type": 2,   # 2 表示 markdown 消息
             "msg_id": msg_id,
             "markdown": {
-                "content": append_official_group_notice(markdown_content)
+                "content": await append_rotating_reply_notice(markdown_content)
             }
         }
 
@@ -265,7 +266,7 @@ async def send_c2c_markdown(openid, markdown_content, msg_id):
             "msg_type": 2,   # 2 表示 markdown 消息
             "msg_id": msg_id,
             "markdown": {
-                "content": append_official_group_notice(markdown_content)
+                "content": await append_rotating_reply_notice(markdown_content)
             }
         }
 
@@ -315,7 +316,7 @@ async def send_group_markdown_keyboard(
             "content": "",
             "msg_type": 2,
             "markdown": {
-                "content": append_official_group_notice(markdown_content)
+                "content": await append_rotating_reply_notice(markdown_content)
             },
             "keyboard": keyboard
         }
@@ -367,7 +368,7 @@ async def send_c2c_markdown_keyboard(
             "content": "",
             "msg_type": 2,
             "markdown": {
-                "content": append_official_group_notice(markdown_content)
+                "content": await append_rotating_reply_notice(markdown_content)
             },
             "keyboard": keyboard
         }

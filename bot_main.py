@@ -17,7 +17,7 @@ from output_main import *
 from Tool.tool_command import *
 from Tool.qq_group_welcome import build_friend_welcome_message, build_group_welcome_message
 from Tool.qq_event_delivery import send_event_with_retry
-from Tool.qq_official_group import attach_official_group_notice
+from Tool.qq_reply_footer import attach_rotating_reply_notice
 from Game_domain.event_inbox import MySQLEventInbox
 
 test_config = read(os.path.join(os.path.dirname(__file__), "config.yaml"))
@@ -28,6 +28,7 @@ event_inbox = MySQLEventInbox()
 
 
 async def output_content(user_content, user_openid, qun_openid=None, request_id=None):
+    raw_user_content = user_content
     user_content = user_content.upper()
 
     # 图片模式密令两步验证（优先于限频与指令解析）
@@ -52,7 +53,15 @@ async def output_content(user_content, user_openid, qun_openid=None, request_id=
         if user_content is False:
             return "该快捷指令不存在！"
 
-    con_arr0, con_arr1 = await jiance(user_content)
+    parser_content = (
+        raw_user_content
+        if any(
+            raw_user_content.strip().upper().startswith(command)
+            for command in world_message_value_commands
+        )
+        else user_content
+    )
+    con_arr0, con_arr1 = await jiance(parser_content)
     send_content = await content(con_arr0, con_arr1, user_openid, qun_openid, request_id=request_id)
     send_content = apply_image_mode(send_content)
     return attach_keyboard(send_content, is_group=qun_openid is not None)
@@ -140,7 +149,7 @@ class MyClient(botpy.Client):
             return
 
         send_content = await output_content(message.content, user_openid, qun_openid, request_id=message.id)
-        send_content = attach_official_group_notice(send_content)
+        send_content = await attach_rotating_reply_notice(send_content)
 
         _log.info(f"群聊玩家消息[{user_openid}]：{redact_sensitive_content(message.content.strip())}")
         if isinstance(send_content, dict):
@@ -178,7 +187,7 @@ class MyClient(botpy.Client):
             return
 
         send_content = await output_content(message.content, user_openid, request_id=message.id)
-        send_content = attach_official_group_notice(send_content)
+        send_content = await attach_rotating_reply_notice(send_content)
 
         _log.info(f"私聊玩家消息[{user_openid}]：{redact_sensitive_content(message.content)}")
         if isinstance(send_content, dict):

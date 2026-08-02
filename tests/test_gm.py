@@ -91,6 +91,11 @@ class GMCommandTests(unittest.TestCase):
                          asyncio.run(jiance("GM发放物品 10086-九转丹-5")))
         self.assertEqual(("GM发放仙玉", "10086-1600"),
                          asyncio.run(jiance("GM发放仙玉 10086-1600")))
+        self.assertEqual(("GM世界消息", ""), asyncio.run(jiance("GM世界消息")))
+        self.assertEqual(
+            ("GM世界消息添加", "副本前，记得检查技能！"),
+            asyncio.run(jiance("GM世界消息添加 副本前，记得检查技能！")),
+        )
 
     def test_sensitive_commands_are_redacted_from_logs(self):
         original = output_main.ADMIN_PASSWORD
@@ -118,6 +123,8 @@ class GMCommandTests(unittest.TestCase):
         buttons = [button for row in result["keyboard"]["content"]["rows"] for button in row["buttons"]]
         self.assertEqual("GM发放物品", buttons[0]["action"]["data"])
         self.assertFalse(buttons[0]["action"]["enter"])
+        commands = [button["action"]["data"] for button in buttons]
+        self.assertIn("GM世界消息", commands)
 
     def test_migration_contains_audited_idempotent_operation_table(self):
         root = Path(__file__).resolve().parents[1]
