@@ -9,7 +9,6 @@ import uvicorn
 import json
 import hashlib
 import aiohttp
-import asyncio
 import os
 from output_main import *
 from config import DOMAIN, IMG_BASE_URL
@@ -555,17 +554,21 @@ async def handle_webhook(request: Request):
                     result_type = result.get("type")
                     if result_type == "markdown_keyboard":
                         # Markdown + Keyboard 消息
-                        asyncio.create_task(send_group_markdown_keyboard(
+                        send_result = await send_group_markdown_keyboard(
                             group_openid, result["content"], result["keyboard"], msg_id
-                        ))
+                        )
                     elif result_type == "markdown":
                         # 纯 Markdown 消息
-                        await asyncio.create_task(send_group_markdown(group_openid, result["content"], msg_id))
+                        send_result = await send_group_markdown(
+                            group_openid, result["content"], msg_id
+                        )
                     else:
                         # 普通文本消息
-                        await asyncio.create_task(send_group_message(group_openid, result, msg_id))
+                        send_result = await send_group_message(group_openid, result, msg_id)
                 else:
-                    asyncio.create_task(send_group_message(group_openid, result, msg_id))
+                    send_result = await send_group_message(group_openid, result, msg_id)
+                if send_result is None:
+                    raise RuntimeError("群聊回复消息发送失败")
 
             # 私聊消息处理
             elif payload.t == "C2C_MESSAGE_CREATE":
@@ -580,17 +583,21 @@ async def handle_webhook(request: Request):
                     result_type = result.get("type")
                     if result_type == "markdown_keyboard":
                         # Markdown + Keyboard 消息
-                        await asyncio.create_task(send_c2c_markdown_keyboard(
+                        send_result = await send_c2c_markdown_keyboard(
                             user_openid, result["content"], result["keyboard"], msg_id
-                        ))
+                        )
                     elif result_type == "markdown":
                         # 纯 Markdown 消息
-                        await asyncio.create_task(send_c2c_markdown(user_openid, result["content"], msg_id))
+                        send_result = await send_c2c_markdown(
+                            user_openid, result["content"], msg_id
+                        )
                     else:
                         # 普通文本消息
-                        await asyncio.create_task(send_c2c_message(user_openid, result, msg_id))
+                        send_result = await send_c2c_message(user_openid, result, msg_id)
                 else:
-                    asyncio.create_task(send_c2c_message(user_openid, result, msg_id))
+                    send_result = await send_c2c_message(user_openid, result, msg_id)
+                if send_result is None:
+                    raise RuntimeError("私聊回复消息发送失败")
 
             else:
                 logging.info(f"暂未配置业务处理的事件: {message_type}")

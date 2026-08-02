@@ -85,6 +85,35 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
             },
         })
 
+    @staticmethod
+    def _group_message_request(event_id="event-group-message-1"):
+        return _FakeRequest({
+            "id": event_id,
+            "op": 0,
+            "t": "GROUP_AT_MESSAGE_CREATE",
+            "s": 3,
+            "d": {
+                "id": "group-message-id-1",
+                "content": "menu",
+                "group_openid": "group-openid-1",
+                "author": {"union_openid": "union-openid-1"},
+            },
+        })
+
+    @staticmethod
+    def _c2c_message_request(event_id="event-c2c-message-1"):
+        return _FakeRequest({
+            "id": event_id,
+            "op": 0,
+            "t": "C2C_MESSAGE_CREATE",
+            "s": 4,
+            "d": {
+                "id": "c2c-message-id-1",
+                "content": "menu",
+                "author": {"union_openid": "union-openid-1"},
+            },
+        })
+
     async def test_group_add_event_replies_with_top_level_event_id(self):
         inbox = InMemoryEventInbox()
         sender = AsyncMock(return_value={"id": "sent-message-id"})
@@ -214,6 +243,51 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual({"op": 12}, response)
         retry_sender.assert_awaited_once()
         self.assertEqual("PROCESSED", inbox.events["event-friend-retry"]["status"])
+
+    async def test_failed_group_reply_is_not_marked_processed(self):
+        inbox = InMemoryEventInbox()
+        reply = {
+            "type": "markdown_keyboard",
+            "content": "reply",
+            "keyboard": {"content": {"rows": []}},
+        }
+        sender = AsyncMock(return_value=None)
+
+        with patch.object(main, "event_inbox", inbox), patch.object(
+            main, "output_content", AsyncMock(return_value=reply)
+        ), patch.object(main, "send_group_markdown_keyboard", sender):
+            with self.assertRaises(HTTPException) as caught:
+                await main.handle_webhook(
+                    self._group_message_request("event-group-reply-failed")
+                )
+
+        self.assertEqual(500, caught.exception.status_code)
+        sender.assert_awaited_once()
+        self.assertEqual("FAILED", inbox.events["event-group-reply-failed"]["status"])
+        self.assertIn(
+            "群聊回复消息发送失败",
+            inbox.events["event-group-reply-failed"]["error_message"],
+        )
+
+    async def test_failed_c2c_reply_is_not_marked_processed(self):
+        inbox = InMemoryEventInbox()
+        sender = AsyncMock(return_value=None)
+
+        with patch.object(main, "event_inbox", inbox), patch.object(
+            main, "output_content", AsyncMock(return_value="reply")
+        ), patch.object(main, "send_c2c_message", sender):
+            with self.assertRaises(HTTPException) as caught:
+                await main.handle_webhook(
+                    self._c2c_message_request("event-c2c-reply-failed")
+                )
+
+        self.assertEqual(500, caught.exception.status_code)
+        sender.assert_awaited_once()
+        self.assertEqual("FAILED", inbox.events["event-c2c-reply-failed"]["status"])
+        self.assertIn(
+            "私聊回复消息发送失败",
+            inbox.events["event-c2c-reply-failed"]["error_message"],
+        )
 
     async def test_group_sender_serializes_event_reply_without_msg_id(self):
         captured = {}

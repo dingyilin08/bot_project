@@ -16,6 +16,7 @@ from botpy.types.inline import Keyboard
 from output_main import *
 from Tool.tool_command import *
 from Tool.qq_group_welcome import build_friend_welcome_message, build_group_welcome_message
+from Tool.qq_event_delivery import send_event_with_retry
 from Tool.qq_official_group import attach_official_group_notice
 from Game_domain.event_inbox import MySQLEventInbox
 
@@ -77,14 +78,16 @@ class MyClient(botpy.Client):
 
         try:
             welcome = build_group_welcome_message()
-            await self.api.post_group_message(
-                group_openid=event.group_openid,
-                msg_type=2,
-                event_id=event.event_id,
-                msg_seq=1,
-                content="",
-                markdown=MarkdownPayload(content=welcome["content"]),
-                keyboard=welcome["keyboard"],
+            await send_event_with_retry(
+                lambda: self.api.post_group_message(
+                    group_openid=event.group_openid,
+                    msg_type=2,
+                    event_id=event.event_id,
+                    msg_seq=1,
+                    content="",
+                    markdown=MarkdownPayload(content=welcome["content"]),
+                    keyboard=welcome["keyboard"],
+                )
             )
         except Exception as exc:
             await event_inbox.mark_processed(event.event_id, str(exc)[:500])
@@ -105,14 +108,16 @@ class MyClient(botpy.Client):
 
         try:
             welcome = build_friend_welcome_message()
-            await self.api.post_c2c_message(
-                openid=event.openid,
-                msg_type=2,
-                event_id=event.event_id,
-                msg_seq=1,
-                content="",
-                markdown=MarkdownPayload(content=welcome["content"]),
-                keyboard=welcome["keyboard"],
+            await send_event_with_retry(
+                lambda: self.api.post_c2c_message(
+                    openid=event.openid,
+                    msg_type=2,
+                    event_id=event.event_id,
+                    msg_seq=1,
+                    content="",
+                    markdown=MarkdownPayload(content=welcome["content"]),
+                    keyboard=welcome["keyboard"],
+                )
             )
         except Exception as exc:
             await event_inbox.mark_processed(event.event_id, str(exc)[:500])
