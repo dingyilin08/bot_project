@@ -15,6 +15,7 @@ from output_main import *
 from config import DOMAIN, IMG_BASE_URL
 from Game_domain.event_inbox import MySQLEventInbox
 from Tool.qq_keyboard import attach_keyboard
+from Tool.qq_group_welcome import build_group_welcome_message
 
 send_content = ''
 user_last_call_time = {}
@@ -286,14 +287,25 @@ async def send_c2c_markdown(openid, markdown_content, msg_id):
 
 
 # 发送群聊Markdown+Keyboard消息（异步版本）
-async def send_group_markdown_keyboard(group_openid, markdown_content, keyboard, msg_id):
+async def send_group_markdown_keyboard(
+    group_openid,
+    markdown_content,
+    keyboard,
+    msg_id=None,
+    *,
+    event_id=None,
+):
     """
     发送群聊Markdown+Keyboard消息
     :param group_openid: 群openid
     :param markdown_content: Markdown内容字符串
     :param keyboard: Keyboard按钮对象
-    :param msg_id: 回复的消息ID
+    :param msg_id: 被动回复的消息 ID
+    :param event_id: 被动响应的事件 ID，与 msg_id 二选一
     """
+    if bool(msg_id) == bool(event_id):
+        raise ValueError("msg_id 和 event_id 必须且只能传入一个")
+
     try:
         headers = await get_headers(APP_ID, BOT_SECRET)
         url = f"{API_BASE}/v2/groups/{group_openid}/messages"
@@ -302,12 +314,12 @@ async def send_group_markdown_keyboard(group_openid, markdown_content, keyboard,
         json_data = {
             "content": "",
             "msg_type": 2,
-            "msg_id": msg_id,
             "markdown": {
                 "content": markdown_content
             },
             "keyboard": keyboard
         }
+        json_data["msg_id" if msg_id else "event_id"] = msg_id or event_id
 
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=json_data, headers=headers) as response:
@@ -486,17 +498,27 @@ async def handle_webhook(request: Request):
             # webhook收到事件内容
             json_data_text = json.dumps(payload.d, ensure_ascii=False, indent=2)
             json_data = json.loads(json_data_text)
-            # 消息内容
-            content = json_data["content"]
-            content = filter_message_content(content)
-            # 用户openid
-            user_openid = json_data["author"]["union_openid"]
-            # msg_id
-            msg_id = json_data["id"]
 
             logging.info(f"消息类型: {message_type}")
+            # 入群事件的事件体不含 content/author/id，必须先于消息事件分流。
+            if payload.t == "GROUP_ADD_ROBOT":
+                group_openid = json_data["group_openid"]
+                welcome = build_group_welcome_message()
+                result = await send_group_markdown_keyboard(
+                    group_openid,
+                    welcome["content"],
+                    welcome["keyboard"],
+                    event_id=event_id,
+                )
+                if result is None:
+                    raise RuntimeError("入群欢迎消息发送失败")
+                logging.info(f"已向新加入的群聊[{group_openid}]发送游戏介绍")
+
             # 群聊消息处理
-            if payload.t == "GROUP_AT_MESSAGE_CREATE":
+            elif payload.t == "GROUP_AT_MESSAGE_CREATE":
+                content = filter_message_content(json_data["content"])
+                user_openid = json_data["author"]["union_openid"]
+                msg_id = json_data["id"]
                 group_openid = json_data["group_openid"]
                 logging.info(f"群聊【{group_openid}】{user_openid}：{redact_sensitive_content(content)}")
                 # 发送群聊消息
@@ -521,6 +543,9 @@ async def handle_webhook(request: Request):
 
             # 私聊消息处理
             elif payload.t == "C2C_MESSAGE_CREATE":
+                content = filter_message_content(json_data["content"])
+                user_openid = json_data["author"]["union_openid"]
+                msg_id = json_data["id"]
                 logging.info(f"私聊【{user_openid}】：{redact_sensitive_content(content)}")
                 result = await output_content(content, user_openid, request_id=msg_id)
 
@@ -540,6 +565,9 @@ async def handle_webhook(request: Request):
                         await asyncio.create_task(send_c2c_message(user_openid, result, msg_id))
                 else:
                     asyncio.create_task(send_c2c_message(user_openid, result, msg_id))
+
+            else:
+                logging.info(f"暂未配置业务处理的事件: {message_type}")
 
             # logging.info(f"{json_data_text}")
 

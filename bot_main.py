@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 
 import botpy
-from botpy import logging
+from botpy import logging as botpy_logging
 from botpy.ext.cog_yaml import read
 from botpy.manage import GroupManageEvent
 from botpy.message import GroupMessage, Message, C2CMessage, DirectMessage
@@ -15,10 +15,11 @@ from botpy.types.inline import Keyboard
 
 from output_main import *
 from Tool.tool_command import *
+from Tool.qq_group_welcome import build_group_welcome_message
 from Game_domain.event_inbox import MySQLEventInbox
 
 test_config = read(os.path.join(os.path.dirname(__file__), "config.yaml"))
-_log = logging.get_logger()
+_log = botpy_logging.get_logger()
 
 user_last_call_time = {}
 event_inbox = MySQLEventInbox()
@@ -58,6 +59,38 @@ async def output_content(user_content, user_openid, qun_openid=None, request_id=
 class MyClient(botpy.Client):
     async def on_ready(self):
         _log.info(f"机器人 「{self.robot.name}」 上线了!")
+
+    # 机器人被添加到群聊
+    async def on_group_add_robot(self, event: GroupManageEvent):
+        if not await event_inbox.claim(
+            event.event_id,
+            source="websocket",
+            event_type="GROUP_ADD_ROBOT",
+            body={
+                "group_openid": event.group_openid,
+                "op_member_openid": event.op_member_openid,
+                "timestamp": event.timestamp,
+            },
+        ):
+            return
+
+        try:
+            welcome = build_group_welcome_message()
+            await self.api.post_group_message(
+                group_openid=event.group_openid,
+                msg_type=2,
+                event_id=event.event_id,
+                msg_seq=1,
+                content="",
+                markdown=MarkdownPayload(content=welcome["content"]),
+                keyboard=welcome["keyboard"],
+            )
+        except Exception as exc:
+            await event_inbox.mark_processed(event.event_id, str(exc)[:500])
+            raise
+
+        await event_inbox.mark_processed(event.event_id)
+        _log.info(f"已向新加入的群聊[{event.group_openid}]发送游戏介绍")
 
     # 群聊消息
     async def on_group_at_message_create(self, message: GroupMessage):
