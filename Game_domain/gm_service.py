@@ -52,6 +52,16 @@ def parse_xianyu_grant(value: str):
     return target_uid, amount
 
 
+def parse_global_grant(value: str, command: str) -> int:
+    matched = re.fullmatch(r"\d+", str(value or "").strip())
+    if not matched:
+        raise GMError(f"格式：{command} 数量")
+    amount = int(matched.group(0))
+    if amount <= 0 or amount > MAX_GRANT_AMOUNT:
+        raise GMError(f"发放数量必须在 1—{MAX_GRANT_AMOUNT} 之间。")
+    return amount
+
+
 def _validate_amount(target_uid: int, amount: int) -> None:
     if target_uid <= 0:
         raise GMError("目标 UID 无效。")
@@ -176,6 +186,69 @@ async def grant_xianyu(*, operator_uid: int, target_uid: int, amount: int,
                        VALUES (%s,%s,%s,'GRANT_XIANYU',%s,%s,%s,'SUCCESS',%s)""",
                     (request_id, operator_uid, target_uid, amount,
                      balance_before, balance_after, payload),
+                )
+            await conn.commit()
+        except Exception:
+            await conn.rollback()
+            raise
+    return result
+
+
+async def grant_all_currency(*, operator_uid: int, currency: str, amount: int,
+                             request_id: str = None) -> dict:
+    """Atomically grant one currency amount to every existing player."""
+    require_admin(operator_uid)
+    currency_config = {
+        "lingshi": ("灵石", "LINGSHI", "GRANT_ALL_LINGSHI"),
+        "xianyu": ("仙玉", "XIANYU", "GRANT_ALL_XIANYU"),
+    }
+    if currency not in currency_config:
+        raise GMError("不支持的全服发放货币。")
+    currency_name, reward_type, operation_type = currency_config[currency]
+    amount = parse_global_grant(amount, f"GM全服发放{currency_name}")
+    request_id = str(request_id or f"gm:{uuid4().hex}")[:80]
+
+    async with connect_mysql() as conn:
+        try:
+            async with conn.cursor() as cursor:
+                existing = await _existing_operation(cursor, request_id)
+                if existing:
+                    return existing
+                await cursor.execute("SELECT COUNT(*) FROM user_zt")
+                player_count = int((await cursor.fetchone())[0])
+                if player_count <= 0:
+                    raise GMError("当前没有可发放奖励的玩家。")
+
+                await cursor.execute(
+                    f"UPDATE user_zt SET {currency}={currency}+%s",
+                    (amount,),
+                )
+                recipient_count = int(cursor.rowcount)
+                total_amount = recipient_count * amount
+                result = {
+                    "operation": operation_type,
+                    "operator_uid": int(operator_uid),
+                    "currency": currency,
+                    "currency_name": currency_name,
+                    "amount_per_player": amount,
+                    "recipient_count": recipient_count,
+                    "total_amount": total_amount,
+                }
+                payload = json.dumps(result, ensure_ascii=False)
+                await cursor.execute(
+                    """INSERT INTO reward_ledger
+                       (business_key,uid,reward_type,amount,source_type,source_id,status,payload_json)
+                       VALUES (%s,0,%s,%s,'GM',%s,'GRANTED',%s)""",
+                    (f"gm:{request_id}:all:{currency}", reward_type, total_amount,
+                     str(operator_uid), payload),
+                )
+                await cursor.execute(
+                    """INSERT INTO gm_operation_log
+                       (request_id,operator_uid,target_uid,operation_type,amount,
+                        balance_before,balance_after,status,result_json)
+                       VALUES (%s,%s,0,%s,%s,0,%s,'SUCCESS',%s)""",
+                    (request_id, operator_uid, operation_type, amount,
+                     recipient_count, payload),
                 )
             await conn.commit()
         except Exception:

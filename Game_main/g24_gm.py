@@ -6,8 +6,10 @@ from func.pd_func import pd_reg_func
 from Game_domain.gm_service import (
     GMError,
     authenticate_admin,
+    grant_all_currency,
     grant_item,
     grant_xianyu,
+    parse_global_grant,
     parse_item_grant,
     parse_xianyu_grant,
     require_admin,
@@ -41,15 +43,19 @@ async def gm_menu(uid, qz):
     mode = "图片回复模式" if is_image_mode() else "纯文字回复模式"
     content = "##### 🛠️ GM 管理菜单\n\n"
     content += f"管理员 UID：**{uid}**｜当前：**{mode}**\n\n"
-    content += f"{_button('GM发放物品 ', '发放物品*')} | {_button('GM发放仙玉 ', '发放仙玉*')}\n\n"
+    content += f"{_button('GM发放物品 ', '发放物品*')} | {_button('GM发放仙玉 ', '发放仙玉*')}\n"
+    content += f"{_button('GM全服发放灵石 ', '全服发灵石*')} | {_button('GM全服发放仙玉 ', '全服发仙玉*')}\n\n"
     content += f"{_button('关闭图片模式', '关闭图片')} | {_button('开启图片模式', '开启图片')}\n\n"
     content += f"{_button('GM世界消息', '世界消息库')}\n\n"
     content += "> 物品格式：GM发放物品 目标UID-物品名称或编号-数量\n"
-    content += "> 仙玉格式：GM发放仙玉 目标UID-数量\n\n"
+    content += "> 仙玉格式：GM发放仙玉 目标UID-数量\n"
+    content += "> 全服格式：GM全服发放灵石 数量，或 GM全服发放仙玉 数量\n\n"
     content += _button("主菜单", "主菜单")
     return _result(content, (
         {"command": "GM发放物品 ", "label": "发放物品*", "complete": False, "style": 1},
         {"command": "GM发放仙玉 ", "label": "发放仙玉*", "complete": False, "style": 1},
+        {"command": "GM全服发放灵石 ", "label": "全服发灵石*", "complete": False, "style": 3},
+        {"command": "GM全服发放仙玉 ", "label": "全服发仙玉*", "complete": False, "style": 3},
         ("关闭图片模式", "关闭图片"), ("开启图片模式", "开启图片"),
         ("GM世界消息", "世界消息库"),
         ("主菜单", "主菜单"),
@@ -98,6 +104,40 @@ async def gm_grant_xianyu(uid, qz, value, request_id=None):
             f"发放：**{data['amount']}仙玉**\n余额：{data['balance_before']} → **{data['balance_after']}**\n\n"
             f"{_button('GM发放仙玉 ', '继续发放*')} | {_button('GM菜单', 'GM菜单')}",
             (("GM发放仙玉 ", "继续发放*"), ("GM菜单", "GM菜单")),
+        )
+    except GMError as error:
+        return _error(error)
+
+
+@pd_reg_func
+async def gm_grant_all_lingshi(uid, qz, value, request_id=None):
+    try:
+        amount = parse_global_grant(value, "GM全服发放灵石")
+        data = await grant_all_currency(
+            operator_uid=uid, currency="lingshi", amount=amount, request_id=request_id
+        )
+        return _result(
+            f"##### ✅ GM 全服灵石发放成功\n\n每名玩家：**{data['amount_per_player']} 灵石**\n"
+            f"发放人数：**{data['recipient_count']}**\n累计发放：**{data['total_amount']} 灵石**\n\n"
+            f"{_button('GM全服发放灵石 ', '继续发放*')} | {_button('GM菜单', 'GM菜单')}",
+            (("GM全服发放灵石 ", "继续发放*"), ("GM菜单", "GM菜单")),
+        )
+    except GMError as error:
+        return _error(error)
+
+
+@pd_reg_func
+async def gm_grant_all_xianyu(uid, qz, value, request_id=None):
+    try:
+        amount = parse_global_grant(value, "GM全服发放仙玉")
+        data = await grant_all_currency(
+            operator_uid=uid, currency="xianyu", amount=amount, request_id=request_id
+        )
+        return _result(
+            f"##### ✅ GM 全服仙玉发放成功\n\n每名玩家：**{data['amount_per_player']} 仙玉**\n"
+            f"发放人数：**{data['recipient_count']}**\n累计发放：**{data['total_amount']} 仙玉**\n\n"
+            f"{_button('GM全服发放仙玉 ', '继续发放*')} | {_button('GM菜单', 'GM菜单')}",
+            (("GM全服发放仙玉 ", "继续发放*"), ("GM菜单", "GM菜单")),
         )
     except GMError as error:
         return _error(error)

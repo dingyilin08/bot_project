@@ -48,6 +48,7 @@ wuhouzhui += '|日常任务|签到|签到记录|签到奖励|攻略|开荒攻略
 youhouzhui += '|日常领取'
 youhouzhui += '|扫荡副本'
 youhouzhui += '|GM世界消息添加|GM世界消息修改|GM世界消息启用|GM世界消息停用|GM世界消息删除'
+youhouzhui += '|GM全服发放灵石|GM全服发放仙玉'
 
 world_message_value_commands = (
     'GM世界消息添加',
@@ -498,6 +499,10 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         return await gm_grant_item(uid, con_arr1, request_id=request_id)
     elif con_arr0 == 'GM发放仙玉':
         return await gm_grant_xianyu(uid, con_arr1, request_id=request_id)
+    elif con_arr0 == 'GM全服发放灵石':
+        return await gm_grant_all_lingshi(uid, con_arr1, request_id=request_id)
+    elif con_arr0 == 'GM全服发放仙玉':
+        return await gm_grant_all_xianyu(uid, con_arr1, request_id=request_id)
     elif con_arr0 == 'GM世界消息':
         return await gm_world_message_menu(uid)
     elif con_arr0 == 'GM世界消息添加':
