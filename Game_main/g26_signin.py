@@ -216,12 +216,15 @@ async def _ensure_progress(cursor, uid):
 
 
 async def _grant_reward(cursor, uid, reward):
-    await cursor.execute(
-        "UPDATE user_zt SET lingshi=lingshi+%s,xianyu=xianyu+%s WHERE id=%s",
-        (int(reward["lingshi"]), int(reward["xianyu"]), uid),
-    )
-    if cursor.rowcount != 1:
-        raise RuntimeError("玩家资产不存在，签到奖励未发放。")
+    lingshi = int(reward["lingshi"])
+    xianyu = int(reward["xianyu"])
+    if lingshi or xianyu:
+        await cursor.execute(
+            "UPDATE user_zt SET lingshi=lingshi+%s,xianyu=xianyu+%s WHERE id=%s",
+            (lingshi, xianyu, uid),
+        )
+        if cursor.rowcount != 1:
+            raise RuntimeError("玩家资产不存在，签到奖励未发放。")
     for item in reward["items"]:
         await cursor.execute(
             """

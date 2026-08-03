@@ -6,6 +6,7 @@ from Game_main.g26_signin import (
     DAILY_REWARDS,
     ITEM_NAMES,
     MILESTONE_REWARDS,
+    _grant_reward,
     combine_rewards,
     cycle_reward_total,
     milestone_for_day,
@@ -14,6 +15,15 @@ from Game_main.g26_signin import (
     signin_reward_preview,
 )
 from output_main import jiance
+
+
+class _RewardCursor:
+    def __init__(self, *, rowcount=1):
+        self.rowcount = rowcount
+        self.calls = []
+
+    async def execute(self, sql, params=None):
+        self.calls.append((" ".join(sql.split()), params))
 
 
 class SigninRuleTests(unittest.TestCase):
@@ -67,6 +77,21 @@ class SigninRuleTests(unittest.TestCase):
         self.assertIn("三十日圆满礼", content)
         self.assertIn("灵石 ×5030", content)
         self.assertIn("仙玉 ×1500", content)
+
+    def test_item_only_reward_does_not_require_currency_rowcount(self):
+        cursor = _RewardCursor(rowcount=0)
+        reward = reward_for_day(2)
+
+        asyncio.run(_grant_reward(cursor, 100001, reward))
+
+        self.assertFalse(any("UPDATE user_zt" in sql for sql, _ in cursor.calls))
+        self.assertTrue(any("INSERT INTO user_item" in sql for sql, _ in cursor.calls))
+
+    def test_currency_reward_still_rejects_missing_player_assets(self):
+        cursor = _RewardCursor(rowcount=0)
+
+        with self.assertRaisesRegex(RuntimeError, "玩家资产不存在"):
+            asyncio.run(_grant_reward(cursor, 100001, reward_for_day(1)))
 
 
 class SigninRouteTests(unittest.IsolatedAsyncioTestCase):
