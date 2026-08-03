@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 import unittest
 import asyncio
+from unittest.mock import AsyncMock, patch
 
 from Game_domain.role_special_catalog import get_role_spec, validate_role_spec
 from Game_domain.role_special_intro import render_role_special_intro
 from Game_domain.role_special_service import world_boss_contribution
+from Game_main.g22_role_special import render_target_selection, role_special_target
 from Tool.combat_system import CombatEntity, CombatManager
 from Tool.qq_keyboard import attach_keyboard, extract_keyboard
 from output_main import jiance
@@ -161,6 +163,35 @@ class QQKeyboardTests(unittest.TestCase):
         self.assertIn("keyboard", result)
         self.assertEqual(self.MARKDOWN, result["content"])
         self.assertNotIn("keyboard_commands", result)
+
+
+class RoleSpecialTargetTests(unittest.TestCase):
+    TARGET_DATA = {
+        "role_name": "萧炎",
+        "items": [
+            {"id": 101, "name": "帝炎", "rarity": 5, "enabled": True, "lore": "万火归一。"},
+            {"id": 102, "name": "佛怒火莲", "rarity": 5, "enabled": False, "lore": "暂未开放。"},
+            {"id": 103, "name": "青莲地心火", "rarity": 4, "enabled": True, "lore": "青莲之火。"},
+        ],
+    }
+
+    def test_target_selection_only_lists_enabled_five_star_abilities(self):
+        content = render_target_selection(self.TARGET_DATA)["content"]
+        self.assertIn("专属定向 101", content)
+        self.assertIn("定向·帝炎", content)
+        self.assertNotIn("专属定向 102", content)
+        self.assertNotIn("专属定向 103", content)
+
+    def test_bare_target_command_opens_selection_instead_of_parsing_empty_int(self):
+        with patch("Game_main.g22_role_special.collection", new=AsyncMock(return_value=self.TARGET_DATA)):
+            result = asyncio.run(role_special_target.__wrapped__(1, "", ""))
+        self.assertIn("五星能力定向", result["content"])
+        self.assertNotIn("invalid literal", result["content"])
+
+    def test_invalid_target_value_returns_player_facing_format_help(self):
+        result = asyncio.run(role_special_target.__wrapped__(1, "", "帝炎"))
+        self.assertEqual("定向设置失败：格式：专属定向 五星能力编号。", result["content"])
+        self.assertNotIn("invalid literal", result["content"])
 
 
 if __name__ == "__main__":
