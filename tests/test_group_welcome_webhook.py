@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import json
 import unittest
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
@@ -90,17 +91,21 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
         })
 
     @staticmethod
-    def _group_message_request(event_id="event-group-message-1"):
+    def _group_message_request(
+        event_id="event-group-message-1",
+        event_type="GROUP_AT_MESSAGE_CREATE",
+        author=None,
+    ):
         return _FakeRequest({
             "id": event_id,
             "op": 0,
-            "t": "GROUP_AT_MESSAGE_CREATE",
+            "t": event_type,
             "s": 3,
             "d": {
                 "id": "group-message-id-1",
                 "content": "menu",
                 "group_openid": "group-openid-1",
-                "author": {"union_openid": "union-openid-1"},
+                "author": author or {"union_openid": "union-openid-1"},
             },
         })
 
@@ -292,6 +297,51 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
             "私聊回复消息发送失败",
             inbox.events["event-c2c-reply-failed"]["error_message"],
         )
+
+    async def test_full_group_message_routes_with_member_openid(self):
+        inbox = InMemoryEventInbox()
+        sender = AsyncMock(return_value={"id": "sent-message-id"})
+
+        with patch.object(main, "event_inbox", inbox), patch.object(
+            main, "output_content", AsyncMock(return_value="全量回复")
+        ) as output, patch.object(main, "send_group_message", sender):
+            response = await main.handle_webhook(
+                self._group_message_request(
+                    "event-group-full-message",
+                    event_type="GROUP_MESSAGE_CREATE",
+                    author={"member_openid": "member-openid-1"},
+                )
+            )
+
+        self.assertEqual({"op": 12}, response)
+        output.assert_awaited_once_with(
+            "menu", "member-openid-1", "group-openid-1", request_id="group-message-id-1"
+        )
+        sender.assert_awaited_once_with("group-openid-1", "全量回复", "group-message-id-1")
+        self.assertEqual("GROUP_MESSAGE_CREATE", inbox.events["event-group-full-message"]["event_type"])
+        self.assertEqual("PROCESSED", inbox.events["event-group-full-message"]["status"])
+
+    async def test_full_group_message_ignores_bot_author(self):
+        inbox = InMemoryEventInbox()
+        output = AsyncMock()
+
+        with patch.object(main, "event_inbox", inbox), patch.object(main, "output_content", output):
+            response = await main.handle_webhook(
+                self._group_message_request(
+                    "event-group-bot-message",
+                    event_type="GROUP_MESSAGE_CREATE",
+                    author={"member_openid": "bot-member-openid", "bot": True},
+                )
+            )
+
+        self.assertEqual({"op": 12}, response)
+        output.assert_not_awaited()
+        self.assertEqual("PROCESSED", inbox.events["event-group-bot-message"]["status"])
+
+    def test_websocket_client_registers_full_group_message_callback(self):
+        source = (Path(__file__).resolve().parents[1] / "bot_main.py").read_text(encoding="utf-8")
+        self.assertIn("async def on_group_message_create", source)
+        self.assertIn('"GROUP_MESSAGE_CREATE"', source)
 
     async def test_group_sender_serializes_event_reply_without_msg_id(self):
         captured = {}

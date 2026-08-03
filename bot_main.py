@@ -135,15 +135,15 @@ class MyClient(botpy.Client):
         await event_inbox.mark_processed(event.event_id)
         _log.info(f"已向新添加机器人的玩家[{event.openid}]发送游戏介绍")
 
-    # 群聊消息
-    async def on_group_at_message_create(self, message: GroupMessage):
+    async def _handle_group_message(self, message: GroupMessage, event_type: str):
+        """统一处理 @ 消息与已开启全量接收后的群消息事件。"""
         user_openid = message.author.member_openid        # 用户的openid
         qun_openid = message.group_openid                 # qq群的openid
 
         if not await event_inbox.claim(
             message.id,
             source="websocket",
-            event_type="GROUP_AT_MESSAGE_CREATE",
+            event_type=event_type,
             body={"content": message.content, "group_openid": qun_openid},
         ):
             return
@@ -173,6 +173,18 @@ class MyClient(botpy.Client):
         await event_inbox.mark_processed(message.id)
 
         _log.info(f"机器人回复：{send_content}")
+
+    # 群 @ 机器人消息
+    async def on_group_at_message_create(self, message: GroupMessage):
+        await self._handle_group_message(message, "GROUP_AT_MESSAGE_CREATE")
+
+    # 开启“接收所有消息”后，群内非 @ 消息也会进入此事件。
+    # 该事件和 GROUP_AT_MESSAGE_CREATE 共享 GROUP_AND_C2C_EVENT 意图。
+    async def on_group_message_create(self, message: GroupMessage):
+        if getattr(message.author, "bot", False):
+            _log.info("忽略机器人自身的全量群消息: %s", message.id)
+            return
+        await self._handle_group_message(message, "GROUP_MESSAGE_CREATE")
 
     # 私聊消息
     async def on_c2c_message_create(self, message: C2CMessage):

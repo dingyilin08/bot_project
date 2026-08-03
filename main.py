@@ -540,10 +540,22 @@ async def handle_webhook(request: Request):
                     raise RuntimeError("好友欢迎消息发送失败")
                 logging.info(f"已向新添加机器人的玩家[{user_openid}]发送游戏介绍")
 
-            # 群聊消息处理
-            elif payload.t == "GROUP_AT_MESSAGE_CREATE":
+            # 全量群消息可能包含机器人自己的发送内容；忽略它以避免回复回环。
+            elif (
+                payload.t == "GROUP_MESSAGE_CREATE"
+                and json_data.get("author", {}).get("bot")
+            ):
+                logging.info("忽略机器人自身的全量群消息: %s", json_data.get("id"))
+
+            # 群聊消息处理。GROUP_MESSAGE_CREATE 开启“接收所有消息”后推送，
+            # 事件体与 @ 消息一致，均可使用消息 ID 被动回复。
+            elif payload.t in ("GROUP_AT_MESSAGE_CREATE", "GROUP_MESSAGE_CREATE"):
                 content = filter_message_content(json_data["content"])
-                user_openid = json_data["author"]["union_openid"]
+                author = json_data.get("author") or {}
+                # union_openid 在部分事件中可能为空；群消息稳定提供 member_openid。
+                user_openid = author.get("union_openid") or author.get("member_openid")
+                if not user_openid:
+                    raise RuntimeError("群消息缺少发送者 OpenID")
                 msg_id = json_data["id"]
                 group_openid = json_data["group_openid"]
                 logging.info(f"群聊【{group_openid}】{user_openid}：{redact_sensitive_content(content)}")
