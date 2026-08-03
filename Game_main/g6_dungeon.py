@@ -41,6 +41,45 @@ def _dungeon_reward_battle_id(uid, dungeon_id, progress, monster_index, settleme
     reward_key = f"legacy-dungeon:{uid}:{dungeon_id}:{progress_instance}:{progress['wave']}:{monster_index}"
     return str(uuid5(NAMESPACE_URL, reward_key))
 
+
+def solo_pve_effect_snapshot(causal_effect=None, season_effect=None):
+    """归一化单人副本开战加成；因果与赛季合计同属性最多 +10%。"""
+    causal_effect = causal_effect or {}
+    season_effect = season_effect or {}
+    attack_bp = min(
+        1000,
+        max(0, int(causal_effect.get("attack_bp", 0)))
+        + max(0, int(season_effect.get("attack_bp", 0))),
+    )
+    defense_bp = min(
+        1000,
+        max(0, int(causal_effect.get("defense_bp", 0)))
+        + max(0, int(season_effect.get("defense_bp", 0))),
+    )
+    speed_bp = min(1000, max(0, int(season_effect.get("speed_bp", 0))))
+    sources = []
+    if causal_effect.get("marks"):
+        sources.append("因果印记")
+    if season_effect.get("active"):
+        sources.append(f"赛季天象·{season_effect.get('name', '五行轮转')}")
+    return {
+        "rule_version": 1,
+        "attack_bp": attack_bp,
+        "defense_bp": defense_bp,
+        "speed_bp": speed_bp,
+        "sources": sources,
+    }
+
+
+def apply_solo_pve_stat_effects(attack, defense, speed, effect_snapshot):
+    """只调整本次实体数值，调用方应保留怪物难度计算用的原始属性。"""
+    effect_snapshot = effect_snapshot or {}
+    return (
+        max(1, int(attack)) * (10_000 + int(effect_snapshot.get("attack_bp", 0))) // 10_000,
+        max(1, int(defense)) * (10_000 + int(effect_snapshot.get("defense_bp", 0))) // 10_000,
+        max(1, int(speed)) * (10_000 + int(effect_snapshot.get("speed_bp", 0))) // 10_000,
+    )
+
 # ================================
 # 配置参数
 # ================================
@@ -956,6 +995,9 @@ def format_combat_result_markdown(winner, player_name, monster_name, monster_typ
             lines.append(f"🎁 **获得掉落**")
             for drop in rewards['drops']:
                 lines.append(f"> {drop}")
+        if rewards.get('sect_dungeon_extra'):
+            extra = rewards['sect_dungeon_extra']
+            lines.append(f"> 宗门秘境研究：普通材料额外 +{extra['count']}（{'、'.join(extra['items'])}）")
 
         special_drop = rewards.get('special_drop')
         if special_drop:
@@ -1408,6 +1450,48 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
             final_mingzhong = int(mingzhong) + equip_bonus.get('mingzhong', 0)
             final_pofang = int(pofang) + equip_bonus.get('pofang', 0)
             final_xixue = int(xixue) + equip_bonus.get('xixue', 0)
+            monster_scaling_attr = {
+                'gongji': final_gongji,
+                'fangyu': final_fangyu,
+                'qixue': final_qixue,
+                'sudu': final_sudu,
+                'baoji': final_baoji,
+                'baoshang': final_baoshang,
+                'shanbi': final_shanbi,
+                'mingzhong': final_mingzhong,
+            }
+
+            # 所有长期玩法效果在创建本次怪物战斗时冻结；不回写角色永久属性。
+            from Game_main.g14_estate import (
+                read_estate_levels,
+                scripture_skill_effect_bonus_bp,
+            )
+            from Game_main.g15_expedition import get_causal_mark_snapshot
+            from Game_main.g19_sect import get_active_research
+            from Game_main.g21_season import get_active_season_effect
+
+            estate_levels = await read_estate_levels(uid, cursor, ensure_rows=False)
+            causal_effect = await get_causal_mark_snapshot(uid, cursor)
+            season_effect = await get_active_season_effect(cursor)
+            active_research = await get_active_research(uid, cursor)
+            pve_effect_snapshot = solo_pve_effect_snapshot(causal_effect, season_effect)
+            final_gongji, final_fangyu, final_sudu = apply_solo_pve_stat_effects(
+                final_gongji, final_fangyu, final_sudu, pve_effect_snapshot
+            )
+            skill_effect_bonus_bp = scripture_skill_effect_bonus_bp(
+                estate_levels.get("scripture_library", 1)
+            )
+            if skill_effect_bonus_bp:
+                pve_effect_snapshot["sources"].append(
+                    f"藏经阁 Lv.{estate_levels.get('scripture_library', 1)}"
+                )
+            dungeon_research = (
+                active_research
+                if active_research and active_research.get("research_type") == "秘境"
+                else None
+            )
+            if dungeon_research:
+                pve_effect_snapshot["sources"].append("宗门秘境研究")
 
             # 应用血量继承
             hp_ratio = progress['player_hp_ratio']
@@ -1427,11 +1511,15 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                 'mingzhong': final_mingzhong,
                 'pofang': final_pofang,
                 'xixue': final_xixue,
-                'max_fali': fali
+                'max_fali': fali,
+                'pve_effect_snapshot': pve_effect_snapshot,
+                'dungeon_research': dungeon_research,
             }
             role_special = await load_battle_special(cursor, uid, role_id, role_name)
             if role_special:
                 player_role_data['role_special'] = role_special
+            from Game_main.g12_spirit_beast import get_active_beast_snapshot
+            active_beast_snapshot = await get_active_beast_snapshot(uid, cursor)
 
             # 获取玩家技能（从user_skill表获取，然后根据is_data_skill决定查询来源）
             player_skills = []
@@ -1474,6 +1562,7 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                                     item_id=skill_result[6],
                                     cooldown=skill_result[13] or 0,
                                     mana_cost=0,
+                                    effect_bonus_bp=skill_effect_bonus_bp,
                                     buff_type=skill_result[7],
                                     buff_value=skill_result[8] or 0,
                                     buff_duration=skill_result[9] or 0,
@@ -1525,6 +1614,7 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                                 item_id=0,
                                 cooldown=cooldown or 0,
                                 mana_cost=0,
+                                effect_bonus_bp=skill_effect_bonus_bp,
                                 buff_type=buff_type,
                                 buff_value=buff_value,
                                 buff_duration=buff_duration,
@@ -1548,6 +1638,7 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                     item_id=0,
                     cooldown=by_skill.get('cooldown', 0) or 0,
                     mana_cost=0,
+                    effect_bonus_bp=skill_effect_bonus_bp,
                     buff_type=by_skill.get('buff_type'),
                     buff_value=by_skill.get('buff_value', 0) or 0,
                     buff_duration=by_skill.get('buff_duration', 0) or 0,
@@ -1557,16 +1648,7 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                 ))
 
             # 生成怪物属性
-            player_base_attr = {
-                'gongji': final_gongji,
-                'fangyu': final_fangyu,
-                'qixue': final_qixue,
-                'sudu': sudu,
-                'baoji': baoji,
-                'baoshang': baoshang,
-                'shanbi': shanbi,
-                'mingzhong': mingzhong
-            }
+            player_base_attr = monster_scaling_attr
 
             monster_attr = await generate_monster_attr_by_ratio(
                 dungeon['min_level'],
@@ -1584,12 +1666,14 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                 if boss_skill:
                     monster_skills.append(boss_skill)
             boss_mechanics = await get_boss_mechanics(cursor, dungeon_id, target_monster['name']) if target_monster['type'] == 'boss' else []
+            # 赛季初始化和跨周宗门研究结算可能产生惰性记录；战斗快照创建成功前提交这些元数据。
+            await conn.commit()
 
     # 创建战斗实体（不占用数据库连接）
     player_entity = CombatEntity(role_name, player_role_data, player_skills)
     # P1：出战灵兽以可序列化 Buff 注入战斗快照，重启后不会丢失效果。
-    from Game_main.g12_spirit_beast import apply_active_beast_to_entity
-    active_beast = await apply_active_beast_to_entity(uid, player_entity)
+    from Game_main.g12_spirit_beast import apply_beast_snapshot_to_entity
+    active_beast = apply_beast_snapshot_to_entity(active_beast_snapshot, player_entity)
     monster_attr['entity_type'] = target_monster.get('type', 'normal')  # 'normal' 或 'boss'
     if boss_mechanics:
         monster_attr['boss_mechanics'] = boss_mechanics
@@ -1712,13 +1796,16 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                 selected_ids = reward_rng.sample(cl_item_ids, min(2 if is_boss else 1, len(cl_item_ids)))
                 for cl_item_id in selected_ids:
                     drop_count = reward_rng.randint(1, 3)
-                    reward_items.append(RewardItem(cl_item_id, drop_count))
+                    reward_item = RewardItem(cl_item_id, drop_count)
+                    reward_items.append(reward_item)
                     drop_specs.append({
                         'item_id': cl_item_id,
                         'item_name': None,
                         'drop_count': drop_count,
                         'monster_type': 'boss' if is_boss else 'normal',
                         'render': 'count',
+                        'normal_material': True,
+                        'reward_item': reward_item,
                     })
                 if is_boss and break_weight and reward_rng.randint(1, 100) <= min(100, break_weight):
                     bonus_item_id = reward_rng.choice(cl_item_ids)
@@ -1761,6 +1848,30 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                         'monster_type': 'completion',
                         'render': 'plain',
                     })
+
+        # 秘境研究只在本战创建时冻结为 dungeon_research；独立哈希不会改变
+        # 原掉落随机序列，也不会把装备、卷轴、本源或破境丹计入额外材料。
+        dungeon_research = combat_manager.player.role_data.get('dungeon_research') or {}
+        research_effect = dungeon_research.get('effect') or {}
+        extra_items = []
+        if (
+            dungeon_research.get('research_type') == '秘境'
+            and research_effect.get('code') == 'SECT_DUNGEON'
+        ):
+            from Game_main.g19_sect import sect_dungeon_material_extra
+            chance_bp = research_effect.get('material_extra_chance_bp', 0)
+            for spec in drop_specs:
+                if not spec.get('normal_material'):
+                    continue
+                extra = sect_dungeon_material_extra(
+                    uid, reward_battle_id, spec['item_id'], chance_bp
+                )
+                if extra:
+                    spec['drop_count'] += extra
+                    spec['reward_item'].amount += extra
+                    extra_items.append(spec['item_id'])
+            if extra_items:
+                rewards['sect_dungeon_extra'] = {'count': len(extra_items), 'items': []}
 
         item_names = await _get_item_names_by_ids(
             [spec['item_id'] for spec in drop_specs if spec.get('item_id')]
@@ -1823,6 +1934,9 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                 progress['wave'],
             )
 
+            if rewards.get('sect_dungeon_extra') and spec.get('normal_material') and spec['item_id'] in extra_items:
+                rewards['sect_dungeon_extra']['items'].append(item_name)
+
         update_result = await update_dungeon_progress(uid, dungeon_id, monster_index, next_hp_ratio, True)
 
         if update_result and update_result.get('dungeon_completed'):
@@ -1832,8 +1946,9 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
         await record_onboarding_event(uid, "BATTLE")
         from Game_main.g25_daily_tasks import record_daily_event
         await record_daily_event(uid, "DUNGEON")
-        from Game_main.g21_season import record_season_event
-        await record_season_event(uid, "DUNGEON")
+        if rewards.get('dungeon_completed'):
+            from Game_main.g21_season import record_season_event
+            await record_season_event(uid, "DUNGEON")
 
     else:
         # 战败处理 - 删除副本进度，不归还挑战次数

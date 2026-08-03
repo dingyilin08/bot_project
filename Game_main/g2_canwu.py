@@ -10,6 +10,12 @@ from Tool.tool_canwu import (
     ensure_canwu_duration_column,
     roll_canwu_duration,
 )
+from Game_main.g14_estate import (
+    apply_cultivation_duration,
+    cultivation_duration_reduction_bp,
+    format_basis_points,
+    read_estate_levels,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -76,6 +82,9 @@ async def canwu_role(uid, qz):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
             await ensure_canwu_duration_column(cursor)
+            # 建筑行先于用户状态加锁，保证与洞府升级使用同一锁顺序；
+            # 最终效果写入 cw_duration，之后升级聚灵阵不会追溯当前任务。
+            estate_levels = await read_estate_levels(uid, cursor, for_update=True)
             sql = "SELECT id, `name`, dengji, exp FROM user_role WHERE uid = %s and is_chuzhan = 1 limit 1"
             await cursor.execute(sql, (uid,))
             result = await cursor.fetchone()
@@ -110,7 +119,10 @@ async def canwu_role(uid, qz):
 
             max_exp = await up_need_exp(dengji)
             add_exp = int(random.randint(0, max_exp) * 0.25 + max_exp * 0.1)
-            duration = roll_canwu_duration()
+            base_duration = roll_canwu_duration()
+            spirit_array_level = estate_levels["spirit_array"]
+            reduction_bp = cultivation_duration_reduction_bp(spirit_array_level)
+            duration = apply_cultivation_duration(base_duration, spirit_array_level)
 
             sql = "UPDATE user_zt SET is_canwu = 1, cw_role = %s, cw_timestamp = %s, cw_duration = %s, cw_exp = %s WHERE id = %s"
             await cursor.execute(sql, (id, int(time.time()), duration, add_exp, uid))
@@ -123,6 +135,10 @@ async def canwu_role(uid, qz):
             output = f"##### 开始参悟\n\n"
             output += f"您已选择角色[{id}.{name}]参悟世界法则\n\n"
             output += f"**剩余参悟时间：** {duration}秒\n"
+            output += (
+                f"**聚灵阵快照：** Lv.{spirit_array_level}，"
+                f"时长-{format_basis_points(reduction_bp)}%（本次已冻结）\n"
+            )
             output += f"**本次参悟可获得经验：** {add_exp}\n"
 
             kj = await all_write_command(uid, ("参悟状态", "当前角色", "领取参悟经验"))

@@ -8,11 +8,20 @@ from datetime import date
 from typing import Dict, List, Optional, Sequence, Tuple
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
+import aiomysql
+
 from sql.mysql import connect_mysql
 from Game_domain.role_special_catalog import get_role_spec
 from Game_domain.role_special_asset_service import (
     RoleSpecialAssetError,
     add_fragments as add_role_special_fragments,
+)
+from Game_domain.role_special_combo_rules import (
+    COMBO_RULE_VERSION,
+    apply_combo_to_battle_special,
+    build_combo_battle_snapshot,
+    normalize_combo_multiplier_bp,
+    sanitize_combo_effect,
 )
 
 
@@ -21,9 +30,57 @@ DAILY_PRAY_LIMIT = 10
 DAILY_DROP_LIMIT = 3
 POOL_VERSION = "v1"
 
+_COMBO_EQUIPMENT_SCHEMA_READY = False
+
 
 class RoleSpecialError(Exception):
     pass
+
+
+async def ensure_combo_equipment_schema(cursor) -> None:
+    """兼容旧组合表；装备列和唯一约束仅在进程首次访问时检查。"""
+    global _COMBO_EQUIPMENT_SCHEMA_READY
+    if _COMBO_EQUIPMENT_SCHEMA_READY:
+        return
+    await cursor.execute(
+        """
+        SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA=DATABASE()
+          AND TABLE_NAME=%s AND COLUMN_NAME=%s
+        """,
+        ("user_role_special_combo", "equipped_slot"),
+    )
+    row = await cursor.fetchone()
+    if not row or int(row[0]) == 0:
+        try:
+            await cursor.execute(
+                "ALTER TABLE user_role_special_combo "
+                "ADD COLUMN equipped_slot TINYINT NULL DEFAULT NULL "
+                "COMMENT '装备槽：1=当前装备，NULL=未装备' AFTER status"
+            )
+        except aiomysql.OperationalError as error:
+            if not error.args or error.args[0] != 1060:
+                raise
+    await cursor.execute(
+        """
+        SELECT COUNT(*) FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA=DATABASE()
+          AND TABLE_NAME=%s AND INDEX_NAME=%s
+        """,
+        ("user_role_special_combo", "uk_role_combo_equipped"),
+    )
+    row = await cursor.fetchone()
+    if not row or int(row[0]) == 0:
+        try:
+            # MySQL唯一索引允许多行NULL，因而每个角色只能存在一个slot=1。
+            await cursor.execute(
+                "ALTER TABLE user_role_special_combo "
+                "ADD UNIQUE KEY uk_role_combo_equipped (uid,role_id,equipped_slot)"
+            )
+        except aiomysql.OperationalError as error:
+            if not error.args or error.args[0] != 1061:
+                raise
+    _COMBO_EQUIPMENT_SCHEMA_READY = True
 
 
 def _json(value, default=None):
@@ -129,9 +186,43 @@ async def _add_fragments(cursor, *, request_id: str, battle_id: Optional[str], u
         raise RoleSpecialError(str(exc)) from exc
 
 
+def _combo_row_to_snapshot(row) -> Optional[Dict]:
+    if not row:
+        return None
+    return build_combo_battle_snapshot({
+        "id": row[0],
+        "name": row[1],
+        "combo_type": row[2],
+        "multiplier": row[3],
+        "effect": _json(row[4]),
+    })
+
+
+async def load_equipped_combo(cursor, uid: int, role_id: int) -> Optional[Dict]:
+    """只读取当前角色唯一已装备且仍有效的组合，并立即生成规则快照。"""
+    try:
+        # 战斗创建事务中禁止执行兼容 DDL（ALTER 会隐式提交）。迁移尚未部署时
+        # 安全回退为“未装备组合”；组合页面会在任何资产写入前补齐旧表结构。
+        await cursor.execute(
+            """
+            SELECT id,custom_name,combo_type,multiplier,effect_json
+            FROM user_role_special_combo
+            WHERE uid=%s AND role_id=%s AND status='ACTIVE' AND equipped_slot=1
+            LIMIT 1
+            """,
+            (uid, role_id),
+        )
+    except aiomysql.OperationalError as error:
+        if error.args and error.args[0] == 1054:
+            return None
+        raise
+    return _combo_row_to_snapshot(await cursor.fetchone())
+
+
 async def home(uid: int) -> Dict:
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
+            await ensure_combo_equipment_schema(cursor)
             role_id, template_id, role_name = await _active_role(cursor, uid)
             await _ensure_progress(cursor, uid, role_id, template_id, role_name)
             await cursor.execute(
@@ -161,6 +252,7 @@ async def home(uid: int) -> Dict:
                 (uid, role_id),
             )
             materials = {code: int(amount) for code, amount in await cursor.fetchall()}
+            equipped_combo = await load_equipped_combo(cursor, uid, role_id)
             await conn.commit()
     spec = get_role_spec(role_name)
     today = date.today()
@@ -172,6 +264,7 @@ async def home(uid: int) -> Dict:
         "rare_pity": int(row[6]), "target_miss": int(row[7]),
         "daily_pray_count": int(row[9]) if row[8] == today else 0,
         "unlocked": unlocked, "total": total, "materials": materials, "feature": _json(row[10]),
+        "equipped_combo": equipped_combo,
     }
 
 
@@ -419,6 +512,114 @@ def _normalize_name(value: str) -> str:
     return value.casefold()
 
 
+async def list_combos(uid: int) -> Dict:
+    """返回当前出战角色的组合背包及唯一装备态。"""
+    async with connect_mysql() as conn:
+        async with conn.cursor() as cursor:
+            await ensure_combo_equipment_schema(cursor)
+            role_id, _, role_name = await _active_role(cursor, uid)
+            await cursor.execute(
+                """
+                SELECT id,custom_name,combo_type,multiplier,effect_json,
+                       equipped_slot,status,created_at
+                FROM user_role_special_combo
+                WHERE uid=%s AND role_id=%s AND status='ACTIVE'
+                ORDER BY (equipped_slot=1) DESC,id DESC
+                """,
+                (uid, role_id),
+            )
+            rows = await cursor.fetchall()
+            await conn.commit()
+    items = []
+    for row in rows:
+        snapshot = _combo_row_to_snapshot(row)
+        items.append({
+            "id": int(row[0]),
+            "name": row[1],
+            "combo_type": row[2],
+            "multiplier": snapshot["multiplier"],
+            "effect": snapshot["effect"],
+            "mode": snapshot["mode"],
+            "equipped": int(row[5] or 0) == 1,
+            "status": row[6],
+            "created_at": row[7],
+        })
+    return {
+        "role_id": role_id,
+        "role_name": role_name,
+        "spec": get_role_spec(role_name),
+        "items": items,
+        "rule_version": COMBO_RULE_VERSION,
+    }
+
+
+async def equip_combo(uid: int, combo_id: int) -> Dict:
+    """原子切换当前角色组合；重复装备同一组合不产生额外写入。"""
+    try:
+        combo_id = int(combo_id)
+    except (TypeError, ValueError) as exc:
+        raise RoleSpecialError("组合编号格式错误。") from exc
+    if combo_id <= 0:
+        raise RoleSpecialError("组合编号格式错误。")
+    async with connect_mysql() as conn:
+        async with conn.cursor() as cursor:
+            await ensure_combo_equipment_schema(cursor)
+            role_id, _, role_name = await _active_role(cursor, uid, True)
+            await cursor.execute(
+                """
+                SELECT id,custom_name,combo_type,multiplier,effect_json,
+                       equipped_slot,status
+                FROM user_role_special_combo
+                WHERE id=%s AND uid=%s AND role_id=%s
+                LIMIT 1 FOR UPDATE
+                """,
+                (combo_id, uid, role_id),
+            )
+            row = await cursor.fetchone()
+            if not row:
+                await conn.rollback()
+                raise RoleSpecialError("组合不存在，或不属于当前出战角色。")
+            if row[6] != "ACTIVE":
+                await conn.rollback()
+                raise RoleSpecialError("该组合已封存，无法装备。")
+            snapshot = _combo_row_to_snapshot(row)
+            if int(row[5] or 0) == 1:
+                await conn.commit()
+                return {
+                    "id": combo_id,
+                    "name": row[1],
+                    "role_name": role_name,
+                    "snapshot": snapshot,
+                    "idempotent": True,
+                }
+            await cursor.execute(
+                """
+                UPDATE user_role_special_combo SET equipped_slot=NULL
+                WHERE uid=%s AND role_id=%s AND equipped_slot=1
+                """,
+                (uid, role_id),
+            )
+            await cursor.execute(
+                """
+                UPDATE user_role_special_combo SET equipped_slot=1
+                WHERE id=%s AND uid=%s AND role_id=%s
+                  AND status='ACTIVE' AND equipped_slot IS NULL
+                """,
+                (combo_id, uid, role_id),
+            )
+            if cursor.rowcount != 1:
+                await conn.rollback()
+                raise RoleSpecialError("组合装备状态已变化，请重新打开组合背包。")
+            await conn.commit()
+    return {
+        "id": combo_id,
+        "name": row[1],
+        "role_name": role_name,
+        "snapshot": snapshot,
+        "idempotent": False,
+    }
+
+
 async def combine(uid: int, ids: Sequence[int], custom_name: str, scroll_id: Optional[int] = None) -> Dict:
     if len(ids) != 3 or len(set(ids)) != 3:
         raise RoleSpecialError("必须选择三种不同且已点亮的能力。")
@@ -450,7 +651,7 @@ async def combine(uid: int, ids: Sequence[int], custom_name: str, scroll_id: Opt
                 raise RoleSpecialError(f"{spec['growth_name']}达到第{combo_min_stage}阶段后才可进行{spec['combo']['type']}。")
             placeholders = ",".join(["%s"] * 3)
             await cursor.execute(
-                f"""SELECT c.id,c.collection_code,c.name,c.skill_multiplier,c.effect_json
+                f"""SELECT c.id,c.collection_code,c.name,c.skill_multiplier,c.effect_json,c.skill_type
                     FROM role_special_collection_config c JOIN user_role_special_collection u
                       ON u.collection_id=c.id AND u.uid=%s AND u.role_id=%s AND u.unlocked=1
                     WHERE c.role_template_id=%s AND c.id IN ({placeholders}) ORDER BY FIELD(c.id,{placeholders})""",
@@ -478,13 +679,18 @@ async def combine(uid: int, ids: Sequence[int], custom_name: str, scroll_id: Opt
             fixed_effect = spec.get("fixed_combos", {}).get(fixed_key)
             if fixed_effect:
                 multiplier = sum(values) / 3
-                effect = dict(fixed_effect)
-                effect["inherited_from"] = "固定连携"
+                raw_effect = dict(fixed_effect)
+                raw_effect["inherited_from"] = "固定连携"
+                raw_effect["source_kind"] = "ACTIVE"
             else:
                 multiplier = max(sum(values) / 3, rng.uniform(min(values), min(2.0, max(values) * 1.5)))
                 effect_source = rng.choice(materials)
-                effect = _json(effect_source[4])
-                effect["inherited_from"] = effect_source[2]
+                raw_effect = dict(_json(effect_source[4]))
+                raw_effect["inherited_from"] = effect_source[2]
+                raw_effect["source_kind"] = effect_source[5]
+            multiplier_bp = normalize_combo_multiplier_bp(multiplier)
+            multiplier = multiplier_bp / 10000
+            effect = sanitize_combo_effect(raw_effect)
             await cursor.execute(
                 """INSERT INTO user_role_special_combo
                    (uid,role_id,combo_type,custom_name,normalized_name,material_collection_ids_json,slot_order_json,multiplier,effect_json,seed)
@@ -590,7 +796,7 @@ async def list_scrolls(uid: int) -> List[Dict]:
 
 
 async def load_battle_special(cursor, uid: int, role_id: int, role_name: str) -> Optional[Dict]:
-    """将已装备主动/被动读入战斗快照，之后战斗断线恢复不再查询配置。"""
+    """将主动、被动和唯一组合读入战斗快照，断线恢复不再查询配置。"""
     if not get_role_spec(role_name):
         return None
     await cursor.execute(
@@ -603,12 +809,14 @@ async def load_battle_special(cursor, uid: int, role_id: int, role_name: str) ->
     row = await cursor.fetchone()
     if not row:
         return None
-    return {
+    special = {
         "role_id": role_id, "role_name": role_name, "growth_stage": int(row[0]),
         "active": None if not row[1] else {"id": int(row[1]), "name": row[2], "multiplier": float(row[3]), "effect": _json(row[4])},
         "passive": None if not row[5] else {"id": int(row[5]), "name": row[6], "effect": _json(row[7])},
         "feature": _json(row[8]),
     }
+    combo = await load_equipped_combo(cursor, uid, role_id)
+    return apply_combo_to_battle_special(special, combo)
 
 
 async def grant_battle_drop(*, battle_id: str, uid: int, role_id: int, role_name: str, is_boss: bool,
@@ -633,11 +841,15 @@ async def grant_battle_drop(*, battle_id: str, uid: int, role_id: int, role_name
             for event in special_events or []:
                 if not event.get("id"):
                     continue
+                event_id = int(event["id"])
+                # 组合使用负skill_id保持旧唯一键幂等，同时在combo_id记录真实正编号。
+                skill_id = event_id
+                combo_id = -event_id if event_id < 0 else None
                 await cursor.execute(
                     """INSERT IGNORE INTO role_special_battle_log
-                       (battle_id,uid,role_id,skill_id,trigger_round,target_id,base_value,multiplier,final_value,effect_result_json)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                    (battle_id, uid, role_id, int(event["id"]), int(event.get("round", 0)), "enemy",
+                       (battle_id,uid,role_id,skill_id,combo_id,trigger_round,target_id,base_value,multiplier,final_value,effect_result_json)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    (battle_id, uid, role_id, skill_id, combo_id, int(event.get("round", 0)), "enemy",
                      int(event.get("base_value", 0)), float(event.get("multiplier", 0)),
                      int(event.get("final_value", 0)), json.dumps(event.get("effect", {}), ensure_ascii=False)),
                 )

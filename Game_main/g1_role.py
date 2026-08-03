@@ -8,6 +8,7 @@ from Tool.tool_command import *
 from Game_main.g7_equip import calc_role_equip_bonus
 from Game_domain.role_special_intro import render_role_special_intro
 from Game_domain.role_grant_service import RoleGrantError, grant_role
+from Game_main.g21_season import cosmetic_identity, get_equipped_cosmetics
 
 
 ITEM_TYPE_NAMES = {
@@ -494,6 +495,7 @@ async def role_attr(uid, qz, role_id):
             skill_1 = await get_skill_name(cursor, skill1_id) if skill1_id is not None else "未装备"
             skill_2 = await get_skill_name(cursor, skill2_id) if skill2_id is not None else "未装备"
             skill_3 = await get_skill_name(cursor, skill3_id) if skill3_id is not None else "未装备"
+            equipped_cosmetics = await get_equipped_cosmetics(uid, cursor)
 
             max_exp = await up_need_exp(dengji)
             stage = await role_stage(role_name, dengji)
@@ -531,7 +533,10 @@ async def role_attr(uid, qz, role_id):
             elif role_name == '孟川':
                 image = f"![text #108px #60px]({IMG_BASE_URL}/mengchuan.png)"
 
-            output = f"##### [{role_id}.{role_name}]属性\n\n"
+            identity, aura = cosmetic_identity(equipped_cosmetics)
+            output = f"##### {identity}[{role_id}.{role_name}]属性\n\n"
+            if aura:
+                output += f"> ✨ 外观特效：{aura}\n\n"
             output += f"**境界：** {stage} | **等级：** {dengji}\n"
             output += f"**经验：** {exp}/{max_exp}\n\n"
             output += image
@@ -568,6 +573,7 @@ async def cz_role_attr(uid, qz):
             skill_1 = await get_skill_name(cursor, skill1_id) if skill1_id is not None else "未装备"
             skill_2 = await get_skill_name(cursor, skill2_id) if skill2_id is not None else "未装备"
             skill_3 = await get_skill_name(cursor, skill3_id) if skill3_id is not None else "未装备"
+            equipped_cosmetics = await get_equipped_cosmetics(uid, cursor)
 
             max_exp = await up_need_exp(dengji)
             stage = await role_stage(role_name, dengji)
@@ -605,7 +611,10 @@ async def cz_role_attr(uid, qz):
             elif role_name == '孟川':
                 image = f"![text #108px #60px]({IMG_BASE_URL}/mengchuan.png)"
 
-            output = f"##### [{role_id}.{role_name}]属性\n\n"
+            identity, aura = cosmetic_identity(equipped_cosmetics)
+            output = f"##### {identity}[{role_id}.{role_name}]属性\n\n"
+            if aura:
+                output += f"> ✨ 外观特效：{aura}\n\n"
             output += f"**境界：** {stage} | **等级：** {dengji}\n"
             output += f"**经验：** {exp}/{max_exp}\n\n"
             output += image
@@ -622,7 +631,7 @@ async def cz_role_attr(uid, qz):
             output += f"> 2.{skill_2}\n"
             output += f"> 3.{skill_3}\n"
 
-            kj = await all_write_command(uid, ("收回", "参悟", "角色背包", "悟道进阶", "查看本源"))
+            kj = await all_write_command(uid, ("收回", "参悟", "角色背包", "悟道进阶", "查看本源", "赛季装扮"))
 
             return {"type": "markdown", "content": output + kj}
 

@@ -24,10 +24,16 @@ def parse_formation(value):
 
 
 async def _party_for_member(uid, cursor):
+    """读取玩家仍在其中的队伍。
+
+    身份查询不能只看 ``LOBBY``：进入战斗后队伍会切换为 ``BATTLE``，此时
+    仍需允许玩家查看队伍，并对离队、布阵等操作给出准确的战中阻断提示。
+    """
     await cursor.execute("""
         SELECT p.id, p.party_code, p.group_openid, p.leader_uid, p.formation, p.state
         FROM party p JOIN party_member pm ON pm.party_id = p.id
-        WHERE pm.uid = %s AND pm.member_state = 'ACTIVE' AND p.state = 'LOBBY'
+        WHERE pm.uid = %s AND pm.member_state = 'ACTIVE'
+          AND p.state IN ('LOBBY', 'BATTLE')
         ORDER BY p.created_at DESC LIMIT 1 FOR UPDATE
     """, (uid,))
     row = await cursor.fetchone()
@@ -38,25 +44,31 @@ async def _party_for_member(uid, cursor):
 
 async def _render_party(party_id, cursor, notice=""):
     await cursor.execute("""
-        SELECT p.party_code, p.leader_uid, p.formation, pm.uid, pm.ready, pm.position
+        SELECT p.party_code, p.leader_uid, p.formation, p.state,
+               pm.uid, pm.ready, pm.position
         FROM party p JOIN party_member pm ON pm.party_id = p.id
         WHERE p.id = %s AND pm.member_state = 'ACTIVE' ORDER BY pm.joined_at
     """, (party_id,))
     rows = await cursor.fetchall()
     if not rows:
         return {"type": "markdown", "content": "队伍不存在或已解散。"}
-    code, leader_uid, formation = rows[0][0], rows[0][1], rows[0][2]
+    code, leader_uid, formation, party_state = rows[0][0], rows[0][1], rows[0][2], rows[0][3]
     output = f"##### ⚔️ 队伍 {code}\n\n"
     output += f"**阵法：{formation}**｜{FORMATIONS[formation]['summary']}\n"
+    output += f"**状态：{'战斗中' if party_state == 'BATTLE' else '整备中'}**\n"
     output += f"**成员：{len(rows)}/{MAX_MEMBERS}**\n\n"
-    for _, _, _, member_uid, ready, position in rows:
+    for _, _, _, _, member_uid, ready, position in rows:
         leader = "（队长）" if member_uid == leader_uid else ""
         output += f"> UID {member_uid}{leader}｜{position}｜{'✅ 已准备' if ready else '⌛ 未准备'}\n"
     if notice:
         output += f"\n> {notice}\n"
-    output += "\n<qqbot-cmd-input text='队伍准备' show='确认准备' /> | <qqbot-cmd-input text='队伍离开' show='离开队伍' />\n\n"
-    output += "<qqbot-cmd-input text='布阵 ' show='布阵 阵法-位置*' />\n"
-    output += "示例：布阵 玄武-前列。秘境将在队伍全部准备且至少 2 人时开放。"
+    if party_state == "BATTLE":
+        output += "\n<qqbot-cmd-input text='队伍战斗状态' show='进入战斗' />\n"
+        output += "> 战斗结束前队伍已锁定，不可进退队伍或改变阵法。"
+    else:
+        output += "\n<qqbot-cmd-input text='队伍准备' show='确认准备' /> | <qqbot-cmd-input text='队伍离开' show='离开队伍' />\n\n"
+        output += "<qqbot-cmd-input text='布阵 ' show='布阵 阵法-位置*' />\n"
+        output += "示例：布阵 玄武-前列。秘境将在队伍全部准备且至少 2 人时开放。"
     return {"type": "markdown", "content": output}
 
 
@@ -74,7 +86,7 @@ async def party_create(uid, qz, group_openid):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
             if await _party_for_member(uid, cursor):
-                return {"type": "markdown", "content": "你已在一个招募中的队伍中，请先离开或查看队伍。"}
+                return {"type": "markdown", "content": "你已在一个队伍中，请先查看队伍状态。"}
             code = uuid4().hex[:8].upper()
             await cursor.execute("INSERT INTO party (party_code, group_openid, leader_uid, formation, state, max_members) VALUES (%s, %s, %s, '锋矢', 'LOBBY', %s)", (code, group_openid, uid, MAX_MEMBERS))
             party_id = cursor.lastrowid
@@ -94,16 +106,23 @@ async def party_join(uid, qz, group_openid, code_text):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
             if await _party_for_member(uid, cursor):
-                return {"type": "markdown", "content": "你已在一个招募中的队伍中，请先离开当前队伍。"}
-            await cursor.execute("SELECT id, group_openid, max_members FROM party WHERE party_code = %s AND state = 'LOBBY' FOR UPDATE", (code,))
+                return {"type": "markdown", "content": "你已在一个队伍中；若队伍正在战斗，需等战斗结束后才能离开。"}
+            await cursor.execute("SELECT id, group_openid, max_members, state FROM party WHERE party_code = %s FOR UPDATE", (code,))
             party = await cursor.fetchone()
-            if not party or party[1] != group_openid:
+            if not party or party[1] != group_openid or party[3] not in ("LOBBY", "BATTLE"):
                 return {"type": "markdown", "content": "未找到本群可加入的招募队伍，请核对队伍码。"}
-            party_id, _, max_members = party
+            if party[3] == "BATTLE":
+                return {"type": "markdown", "content": "该队伍正在战斗，战斗结束前无法加入。"}
+            party_id, _, max_members, _ = party
             await cursor.execute("SELECT COUNT(*) FROM party_member WHERE party_id = %s AND member_state = 'ACTIVE'", (party_id,))
             if (await cursor.fetchone())[0] >= max_members:
                 return {"type": "markdown", "content": "该队伍已满，请等待新队伍。"}
-            await cursor.execute("INSERT INTO party_member (party_id, uid, ready, position, member_state) VALUES (%s, %s, 0, '后列', 'ACTIVE')", (party_id, uid))
+            await cursor.execute("""
+                INSERT INTO party_member (party_id, uid, ready, position, member_state, left_at)
+                VALUES (%s, %s, 0, '后列', 'ACTIVE', NULL)
+                ON DUPLICATE KEY UPDATE ready = 0, position = '后列',
+                                        member_state = 'ACTIVE', left_at = NULL
+            """, (party_id, uid))
             await conn.commit()
             return await _render_party(party_id, cursor, "已加入队伍，请选择阵法位置后确认准备。")
 
@@ -114,7 +133,7 @@ async def party_info(uid, qz, group_openid):
         async with conn.cursor() as cursor:
             party = await _party_for_member(uid, cursor)
             if not party:
-                return {"type": "markdown", "content": "当前没有招募中的队伍。\n<qqbot-cmd-input text='队伍创建' show='创建队伍' />"}
+                return {"type": "markdown", "content": "当前没有所在队伍。\n<qqbot-cmd-input text='队伍创建' show='创建队伍' />"}
             return await _render_party(party["id"], cursor)
 
 
@@ -125,6 +144,8 @@ async def party_ready(uid, qz, group_openid):
             party = await _party_for_member(uid, cursor)
             if not party:
                 return {"type": "markdown", "content": "当前没有可准备的队伍。"}
+            if party["state"] == "BATTLE":
+                return {"type": "markdown", "content": "队伍正在战斗，无需重复准备。\n<qqbot-cmd-input text='队伍战斗状态' show='查看战斗' />"}
             await cursor.execute("UPDATE party_member SET ready = 1 WHERE party_id = %s AND uid = %s AND member_state = 'ACTIVE'", (party["id"], uid))
             await conn.commit()
             await cursor.execute("SELECT COUNT(*), SUM(ready) FROM party_member WHERE party_id = %s AND member_state = 'ACTIVE'", (party["id"],))
@@ -146,13 +167,26 @@ async def party_formation(uid, qz, group_openid, formation_text):
             party = await _party_for_member(uid, cursor)
             if not party:
                 return {"type": "markdown", "content": "请先创建或加入队伍。"}
+            if party["state"] == "BATTLE":
+                return {"type": "markdown", "content": "战斗中阵法与站位已锁定，请在战斗结束后再布阵。"}
             if party["leader_uid"] != uid and formation != party["formation"]:
                 return {"type": "markdown", "content": "仅队长可更换阵法；所有成员均可调整自己的前后列位置。"}
+            formation_changed = party["leader_uid"] == uid and formation != party["formation"]
             if party["leader_uid"] == uid:
                 await cursor.execute("UPDATE party SET formation = %s WHERE id = %s", (formation, party["id"]))
-            await cursor.execute("UPDATE party_member SET position = %s, ready = 0 WHERE party_id = %s AND uid = %s", (position, party["id"], uid))
+            if formation_changed:
+                # 阵法是全队规则；一旦变更，原来的全员确认均失效。
+                await cursor.execute(
+                    "UPDATE party_member SET ready = 0 WHERE party_id = %s AND member_state = 'ACTIVE'",
+                    (party["id"],),
+                )
+            await cursor.execute(
+                "UPDATE party_member SET position = %s, ready = 0 WHERE party_id = %s AND uid = %s AND member_state = 'ACTIVE'",
+                (position, party["id"], uid),
+            )
             await conn.commit()
-            return await _render_party(party["id"], cursor, f"已调整为{formation}-{position}；阵法变更后需重新准备。")
+            ready_notice = "全员准备已清空" if formation_changed else "你的准备已清空"
+            return await _render_party(party["id"], cursor, f"已调整为{formation}-{position}；{ready_notice}，请重新准备。")
 
 
 @reg_xz_func
@@ -162,6 +196,8 @@ async def party_leave(uid, qz, group_openid):
             party = await _party_for_member(uid, cursor)
             if not party:
                 return {"type": "markdown", "content": "当前没有可离开的招募队伍。"}
+            if party["state"] == "BATTLE":
+                return {"type": "markdown", "content": "战斗中无法离开队伍，请先完成本场队伍战斗。"}
             await cursor.execute("UPDATE party_member SET member_state = 'LEFT', left_at = CURRENT_TIMESTAMP WHERE party_id = %s AND uid = %s", (party["id"], uid))
             await cursor.execute("SELECT uid FROM party_member WHERE party_id = %s AND member_state = 'ACTIVE' ORDER BY joined_at LIMIT 1", (party["id"],))
             successor = await cursor.fetchone()

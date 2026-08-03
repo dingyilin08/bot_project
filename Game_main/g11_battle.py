@@ -48,6 +48,14 @@ def render_battle_panel(session, notice="", events=None):
     output += f"**第 {session.round_no + 1} 回合** | 剩余决策时间：{_remaining_seconds(session)} 秒\n\n"
     output += f"**我方** {player.name}\n> HP：{max(0, player.hp)}/{player.max_hp} | 法力：{player.mana}/{player.max_mana}\n"
     output += f"> 状态：{player.get_status_summary() or '无'}\n\n"
+    pve_snapshot = player.role_data.get("pve_effect_snapshot") or {}
+    if pve_snapshot.get("sources"):
+        output += "> 本场冻结效果：" + "｜".join(pve_snapshot["sources"]) + "\n"
+        output += (
+            f"> 攻击 +{pve_snapshot.get('attack_bp', 0) / 100:g}%｜"
+            f"防御 +{pve_snapshot.get('defense_bp', 0) / 100:g}%｜"
+            f"速度 +{pve_snapshot.get('speed_bp', 0) / 100:g}%\n\n"
+        )
     dao_heart = manager.dao_heart
     output += f"> 道心：{dao_heart['value']}/{dao_heart['cap']}（{dao_heart['last_element'] or '未定'}）\n\n"
     output += f"**敌方** {enemy.name}\n> HP：{max(0, enemy.hp)}/{enemy.max_hp}\n"

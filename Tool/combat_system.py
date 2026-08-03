@@ -31,6 +31,7 @@ BUFF_TYPE_CN = {
     "all_stat_up": "全属性提升",
     "heal": "治疗",
     "heal_over_time": "持续回复",
+    "healing_down": "治疗压制",
     "damage_over_time": "持续伤害",
     "lifesteal": "吸血",
     "stun": "眩晕",
@@ -86,6 +87,9 @@ DEFAULT_BOSS_MECHANICS = (
     {"stage": "first", "threshold": 0.75, "name": "天机·护体", "counter_element": "METAL", "counter_name": "金行", "effect": "defense_up", "value": 35, "duration": 2, "drop_weight": 15},
     {"stage": "second", "threshold": 0.40, "name": "天机·蓄力", "counter_element": "WATER", "counter_name": "水行", "effect": "attack_up", "value": 30, "duration": 2, "drop_weight": 20},
 )
+
+HARD_CONTROL_TYPES = frozenset(("stun", "paralyze", "shackle"))
+BASIS_POINTS = 10000
 
 
 def _is_code_like_name(name: str) -> bool:
@@ -280,12 +284,19 @@ class Skill:
     buff_name: str = ""  # BUFF显示名称（从data_skill.buff_name获取）
     description: str = ""
     element: str = ""
+    # 洞府藏经阁只强化技能的主伤害/治疗数值，不改动 Buff 与普攻。
+    effect_bonus_bp: int = 0
 
     def __post_init__(self):
         # 旧 data_skill 曾以 0 表示“自身”。统一标准化，避免增益 Buff 落到敌方。
         self.buff_target = normalize_buff_target(self.buff_target)
         if self.buff_type:
             self.target_type = "enemy" if self.buff_target == 2 else "self"
+        self.effect_bonus_bp = max(0, min(500, int(self.effect_bonus_bp or 0)))
+
+    def effective_value(self) -> int:
+        """返回写入快照后不再依赖洞府数据的技能主数值。"""
+        return int(int(self.value) * (BASIS_POINTS + self.effect_bonus_bp) // BASIS_POINTS)
 
     def can_use(self, entity: 'CombatEntity') -> Tuple[bool, str]:
         """检查是否可以使用技能"""
@@ -327,13 +338,13 @@ class Skill:
         if self.buff_type and not result.get('is_dodge', False):
             target = attacker if self.buff_target == 1 else defender
             buff = Buff(self.buff_type, self.buff_value, self.buff_duration, self.name, self.buff_name)
-            target.add_buff(buff)
-            result['buffs_applied'].append({
-                'target': target.name,
-                'buff_type': self.buff_type,
-                'buff_name': self._get_buff_name(),
-                'duration': self.buff_duration
-            })
+            if target.add_buff(buff) is not False:
+                result['buffs_applied'].append({
+                    'target': target.name,
+                    'buff_type': self.buff_type,
+                    'buff_name': self._get_buff_name(),
+                    'duration': buff.duration
+                })
 
         return result
 
@@ -369,11 +380,6 @@ class Skill:
         if defender.has_buff('invincible') or defender.has_buff('immortal'):
             return result
 
-        # 检查护盾
-        if defender.has_buff('shield'):
-            if random.random() < 0.3:  # 30%概率格挡
-                return result
-
         # 计算伤害
         damage = self._calculate_damage(attacker, defender)
 
@@ -388,7 +394,9 @@ class Skill:
             damage *= crit_dmg
             result['is_critical'] = True
 
-        result['damage'] = int(max(1, damage))
+        damage, shield_absorbed = defender.mitigate_with_shield(int(max(1, damage)))
+        result['damage'] = damage
+        result['shield_absorbed'] = shield_absorbed
 
         # 处理反射
         if defender.has_buff('reflect'):
@@ -402,8 +410,9 @@ class Skill:
         # 吸血效果
         if self.buff_type == 'lifesteal':
             heal_amount = int(result['damage'] * self.buff_value / 100)
-            attacker.hp = min(attacker.max_hp, attacker.hp + heal_amount)
-            result['heal'] = heal_amount
+            actual_heal, healing_reduced = attacker.receive_heal(heal_amount)
+            result['heal'] = actual_heal
+            result['healing_reduced'] = healing_reduced
 
         return result
 
@@ -436,10 +445,11 @@ class Skill:
 
         base_damage = max(1, base_damage)
 
+        effective_value = self.effective_value()
         if self.is_percent:
-            skill_multiplier = self.value / 100
+            skill_multiplier = effective_value / 100
         else:
-            skill_multiplier = 1.0 + self.value / max(1, atk)
+            skill_multiplier = 1.0 + effective_value / max(1, atk)
 
         random_factor = random.uniform(0.92, 1.08)
 
@@ -459,17 +469,19 @@ class Skill:
 
     def _execute_heal(self, attacker: 'CombatEntity') -> Dict:
         """执行治疗技能"""
+        effective_value = self.effective_value()
         if self.is_percent:
-            heal_amount = int(attacker.max_hp * self.value / 100)
+            heal_amount = int(attacker.max_hp * effective_value / 100)
         else:
-            heal_amount = self.value
+            heal_amount = effective_value
 
-        attacker.hp = min(attacker.max_hp, attacker.hp + heal_amount)
+        actual_heal, healing_reduced = attacker.receive_heal(heal_amount)
 
         return {
             'skill_name': self.name,
             'damage': 0,
-            'heal': heal_amount,
+            'heal': actual_heal,
+            'healing_reduced': healing_reduced,
             'is_critical': False,
             'is_dodge': False,
             'buffs_applied': [],
@@ -499,6 +511,7 @@ class Skill:
             'buff_name': self.buff_name,
             'description': self.description,
             'element': self.element,
+            'effect_bonus_bp': self.effect_bonus_bp,
         }
 
     @classmethod
@@ -520,6 +533,7 @@ class Skill:
             buff_name=data.get('buff_name', ''),
             description=data.get('description', ''),
             element=data.get('element', ''),
+            effect_bonus_bp=data.get('effect_bonus_bp', 0),
         )
 
 
@@ -566,6 +580,13 @@ class CombatEntity:
         self.dodge_mod = 1.0
         self.hit_mod = 1.0
         self.pierce_mod = 0.0
+        # 专属职业特性使用有限次数而非隐式随机，所有状态都会进入快照。
+        self.control_resist_value = 0
+        self.control_resist_rounds = 0
+        self.control_resist_available = False
+        self.control_resist_event = None
+        self.sacred_body_control_guard = False
+        self.next_damage_penalty = 0
 
     def get_effective_attack(self) -> int:
         """获取有效攻击力"""
@@ -593,14 +614,71 @@ class CombatEntity:
 
     def add_buff(self, buff: Buff):
         """添加BUFF"""
+        if buff.buff_type in HARD_CONTROL_TYPES:
+            original_duration = max(0, int(buff.duration))
+            if self.sacred_body_control_guard:
+                self.sacred_body_control_guard = False
+                self.next_damage_penalty = max(self.next_damage_penalty, 20)
+                self.control_resist_event = {
+                    'mode': 'SACRED_BODY',
+                    'buff_type': buff.buff_type,
+                    'original_duration': original_duration,
+                    'final_duration': 0,
+                    'damage_penalty': 20,
+                }
+                return False
+            if self.control_resist_available:
+                reduction = min(original_duration, max(1, int(self.control_resist_rounds or 1)))
+                buff.duration = original_duration - reduction
+                self.control_resist_available = False
+                self.control_resist_event = {
+                    'mode': 'CONTROL_RESIST',
+                    'buff_type': buff.buff_type,
+                    'original_duration': original_duration,
+                    'final_duration': int(buff.duration),
+                    'resist_value': int(self.control_resist_value),
+                    'reduced_rounds': reduction,
+                }
+                if buff.duration <= 0:
+                    return False
         # 检查是否已有相同BUFF，有的话刷新持续时间
         for existing in self.buffs:
             if existing.buff_type == buff.buff_type:
                 existing.duration = max(existing.duration, buff.duration)
                 existing.value = max(existing.value, buff.value)
-                return
+                return True
         self.buffs.append(buff)
         self._apply_buff_modifiers()
+        return True
+
+    def consume_control_resist_event(self):
+        event = self.control_resist_event
+        self.control_resist_event = None
+        return event
+
+    def receive_heal(self, amount: int, consume_healing_down: bool = True) -> Tuple[int, int]:
+        """统一结算直接、持续与吸血回复，并消耗一次治疗压制。"""
+        amount = max(0, int(amount or 0))
+        reduction = 0
+        healing_down = next((item for item in self.buffs if item.buff_type == 'healing_down'), None)
+        if healing_down and amount:
+            reduction = max(0, min(50, int(healing_down.value or 0)))
+            amount = amount * (100 - reduction) // 100
+            if consume_healing_down:
+                self.remove_buff('healing_down')
+        actual = max(0, min(amount, self.max_hp - self.hp))
+        self.hp += actual
+        return actual, reduction
+
+    def mitigate_with_shield(self, damage: int) -> Tuple[int, int]:
+        """护盾强度是确定性减伤百分比，取最强一层且上限 40%。"""
+        damage = max(1, int(damage))
+        shields = [item for item in self.buffs if item.buff_type == 'shield']
+        if not shields:
+            return damage, 0
+        strength = max(0, min(40, int(max(item.value for item in shields))))
+        final_damage = max(1, damage * (100 - strength) // 100)
+        return final_damage, damage - final_damage
 
     def has_buff(self, buff_type: str) -> bool:
         """检查是否有指定BUFF"""
@@ -681,8 +759,8 @@ class CombatEntity:
                 total_damage += damage
             elif buff.buff_type == 'heal_over_time':
                 heal = int(self.max_hp * buff.value / 100)
-                self.hp = min(self.max_hp, self.hp + heal)
-                total_heal += heal
+                actual_heal, _ = self.receive_heal(heal)
+                total_heal += actual_heal
             elif buff.buff_type == 'death_sentence':
                 # 死亡宣告效果
                 if buff.duration == 1:
@@ -722,6 +800,10 @@ class CombatEntity:
             status.append('[攻击提升]')
         if self.has_buff('defense_up'):
             status.append('[防御提升]')
+        if self.has_buff('shield'):
+            status.append('[护盾]')
+        if self.has_buff('healing_down'):
+            status.append('[治疗压制]')
         return ''.join(status) if status else ''
 
     def to_snapshot(self) -> Dict:
@@ -755,6 +837,12 @@ class CombatEntity:
             'dodge_mod': self.dodge_mod,
             'hit_mod': self.hit_mod,
             'pierce_mod': self.pierce_mod,
+            'control_resist_value': self.control_resist_value,
+            'control_resist_rounds': self.control_resist_rounds,
+            'control_resist_available': self.control_resist_available,
+            'control_resist_event': copy.deepcopy(self.control_resist_event),
+            'sacred_body_control_guard': self.sacred_body_control_guard,
+            'next_damage_penalty': self.next_damage_penalty,
         }
 
     @classmethod
@@ -769,6 +857,8 @@ class CombatEntity:
             'dodge', 'hit', 'pierce', 'max_mana', 'mana', 'lifesteal',
             'entity_type', 'is_alive', 'can_action', 'attack_mod', 'defense_mod',
             'speed_mod', 'crit_mod', 'dodge_mod', 'hit_mod', 'pierce_mod',
+            'control_resist_value', 'control_resist_rounds', 'control_resist_available',
+            'control_resist_event', 'sacred_body_control_guard', 'next_damage_penalty',
         ):
             if attr in data:
                 setattr(entity, attr, data[attr])
@@ -799,7 +889,10 @@ class CombatManager:
         self.initialized = False
         self.combat_ended = False
         # 天机为 Boss 的可读机制预告。每个阶段只触发一次，完整写入快照。
-        self.boss_tianji = {"triggered": [], "intent": None, "broken_stages": [], "reward_weight_bonus": 0}
+        self.boss_tianji = {
+            "triggered": [], "intent": None, "broken_stages": [], "reward_weight_bonus": 0,
+            "insight": None, "insight_source": "",
+        }
         self.reaction_targets_this_round = set()
         # 道心由玩家连续施展同系技能积累，作为手动战斗的短回合资源。
         self.dao_heart = {"value": 0, "cap": 5, "last_element": "", "stored": False}
@@ -808,6 +901,14 @@ class CombatManager:
         self.role_special.setdefault("used", False)
         self.role_special.setdefault("passive_triggered", False)
         self.role_special.setdefault("events", [])
+        self.role_special.setdefault("pending_copy", None)
+        self.role_special.setdefault("sword_intent", 0)
+        self.role_special.setdefault("battle_intent", 0)
+        self.role_special.setdefault("sacred_body_guard_used", False)
+        # 灵兽与本源协同已在开战前冻结到 role_data，恢复时不再查库。
+        self.spirit_beast = copy.deepcopy(player.role_data.get("spirit_beast") or {})
+        self.spirit_beast.setdefault("triggered", 0)
+        self.spirit_beast.setdefault("events", [])
 
     def initialize(self) -> None:
         """初始化战斗顺序；可单独调用以创建可持久化的待行动战斗。"""
@@ -820,11 +921,161 @@ class CombatManager:
             f"MP={self.player.mana}/{self.player.max_mana}"
         )
         self._log("status", f"{self.enemy.name}: HP={self.enemy.hp}/{self.enemy.max_hp}")
-        self.first, self.second = self._determine_order()
-        self._log("order", f"速度判定：{self.first.name} 先手！")
+        self._apply_role_identity_traits()
         self._apply_role_special_passive()
         self._apply_role_feature()
+        # 速度被动必须先于先手判定生效。
+        self.first, self.second = self._determine_order()
+        self._log("order", f"速度判定：{self.first.name} 先手！")
         self.initialized = True
+
+    def _role_name(self) -> str:
+        return str(self.role_special.get('role_name') or self.player.name or '')
+
+    def _apply_role_identity_traits(self) -> None:
+        """接入不占主动/被动槽的职业核心特性。"""
+        role_name = self._role_name()
+        if role_name == '叶凡' and not self.role_special.get('sacred_body_guard_used'):
+            self.player.sacred_body_control_guard = True
+            self._log('role_identity', '🛡️ 圣体破禁：本场首次硬控将被化解，下一次伤害降低20%。')
+        if role_name == '孟川':
+            self._set_threat_insight('元神观敌')
+
+    def _set_threat_insight(self, source_name: str, force: bool = False) -> None:
+        if self.boss_tianji.get('insight') and not force:
+            return
+        if self.enemy.entity_type == 'boss':
+            triggered = set(self.boss_tianji.get('triggered', []))
+            available = [item for item in self._boss_mechanics() if item.get('stage') not in triggered]
+            if available:
+                next_mechanic = max(available, key=lambda item: float(item.get('threshold', 0)))
+                threshold = int(float(next_mechanic.get('threshold', 0)) * 100)
+                summary = (
+                    f"下一高威胁为「{next_mechanic['name']}」（气血≤{threshold}%），"
+                    f"以{next_mechanic['counter_name']}技能可破局"
+                )
+            else:
+                summary = '已无未触发的 Boss 机制'
+        else:
+            attack_pressure = self.enemy.get_effective_attack() / max(1, self.player.get_effective_defense())
+            if self.enemy.get_effective_speed() > self.player.get_effective_speed():
+                summary = f"最高威胁为先手压力：{self.enemy.name}速度高于我方"
+            else:
+                summary = f"最高威胁为正面攻势：攻防压力比{attack_pressure:.2f}"
+        self.boss_tianji['insight'] = {'source': source_name, 'summary': summary, 'round': self.round}
+        self.boss_tianji['insight_source'] = source_name
+        self._log('threat_insight', f"🔮 {source_name}：{summary}。")
+
+    def _log_control_resist_event(self, target: CombatEntity) -> None:
+        event = target.consume_control_resist_event()
+        if not event:
+            return
+        if event.get('mode') == 'SACRED_BODY':
+            self.role_special['sacred_body_guard_used'] = True
+            message = '🛡️ 圣体破禁化解了本场首次硬控；下一次造成的伤害降低20%。'
+        else:
+            message = (
+                f"🧠 控制抗性{event.get('resist_value', 0)}点生效，"
+                f"本场首次硬控缩短{event.get('reduced_rounds', 0)}回合。"
+            )
+        self.role_special['events'].append({'round': self.round, 'type': 'CONTROL_RESIST', **event})
+        self._log('control_resist', message)
+
+    def _apply_spirit_beast_conditional(self) -> None:
+        synergy = self.spirit_beast.get('synergy') or {}
+        if synergy.get('code') != 'REINCARNATION_HEALER' or self.spirit_beast.get('triggered', 0):
+            return
+        threshold = max(1, min(50, int(synergy.get('threshold', 30))))
+        if self.player.hp > self.player.max_hp * threshold / 100:
+            return
+        percent = max(1, min(5, int(synergy.get('heal_percent', 5))))
+        heal, healing_reduced = self.player.receive_heal(int(self.player.max_hp * percent / 100))
+        self.spirit_beast['triggered'] = 1
+        event = {'round': self.round, 'type': 'LOW_HP_HEAL', 'value': heal, 'healing_reduced': healing_reduced}
+        self.spirit_beast['events'].append(event)
+        self._log('spirit_beast_synergy', f"💚 轮回灵契激发，为{self.player.name}回复{heal}点气血。")
+
+    def _boost_first_player_shield(self) -> None:
+        synergy = self.spirit_beast.get('synergy') or {}
+        if synergy.get('code') != 'TREASURE_GUARDIAN' or self.spirit_beast.get('triggered', 0):
+            return
+        shields = [item for item in self.player.buffs if item.buff_type == 'shield']
+        if not shields:
+            return
+        bonus = max(1, min(5, int(synergy.get('shield_bonus', 5))))
+        shield = max(shields, key=lambda item: item.value)
+        before = int(shield.value)
+        shield.value = min(40, before + bonus)
+        self.spirit_beast['triggered'] = 1
+        self.spirit_beast['events'].append({
+            'round': self.round, 'type': 'SHIELD_BONUS', 'before': before, 'after': int(shield.value),
+        })
+        self._log('spirit_beast_synergy', f"🛡️ 掌天灵契加持首层护盾，减伤强度提升至{int(shield.value)}%。")
+
+    def _trigger_pending_copy(self) -> None:
+        pending = self.role_special.get('pending_copy')
+        if not pending or self.round < int(pending.get('trigger_round', self.round)):
+            return
+        damage = max(1, int(pending.get('damage', 1)))
+        if self.enemy.entity_type == 'boss':
+            damage = min(damage, max(1, int(self.enemy.max_hp * .01)))
+        damage, absorbed = self.enemy.mitigate_with_shield(damage)
+        self.enemy.hp -= damage
+        self.role_special['pending_copy'] = None
+        event = {
+            'round': self.round, 'type': 'COPY_ECHO', 'name': pending.get('name'),
+            'final_value': damage, 'shield_absorbed': absorbed,
+        }
+        self.role_special['events'].append(event)
+        self._log('role_special_effect', f"🌌 「{pending.get('name', '弱化投影')}」延迟复制，造成{damage}点伤害。")
+
+    def _gain_battle_intent(self) -> None:
+        active_effect = ((self.role_special.get('active') or {}).get('effect') or {})
+        if self._role_name() != '叶凡' and not active_effect.get('battle_intent'):
+            return
+        cap = max(1, min(5, int(active_effect.get('battle_intent', 3))))
+        before = int(self.role_special.get('battle_intent', 0))
+        after = min(cap, before + 1)
+        self.role_special['battle_intent'] = after
+        if after != before:
+            self._log('battle_intent', f"🔥 圣体战意积累至{after}/{cap}层。")
+
+    def _apply_player_damage_traits(
+        self,
+        actor: CombatEntity,
+        target: CombatEntity,
+        result: Dict,
+        *,
+        gain_intent: bool = True,
+    ) -> None:
+        """在基础伤害已扣除后统一应用有上限的职业增减伤。"""
+        if actor is not self.player or int(result.get('damage', 0)) <= 0:
+            return
+        original = int(result['damage'])
+        bonus_bp = 0
+        feature_effect = ((self.role_special.get('feature') or {}).get('effect') or {})
+        if feature_effect.get('type') == 'BOSS_DAMAGE' and target.entity_type == 'boss':
+            bonus_bp += min(1000, max(0, int(feature_effect.get('value', 0))) * 100)
+
+        sword_intent = max(0, int(self.role_special.get('sword_intent', 0)))
+        if sword_intent:
+            bonus_bp += 800
+            self.role_special['sword_intent'] = sword_intent - 1
+            self._log('sword_intent', '⚔️ 青元剑意融入本次攻击，伤害提升8%。')
+
+        penalty_bp = min(5000, max(0, int(self.player.next_damage_penalty)) * 100)
+        if penalty_bp:
+            self.player.next_damage_penalty = 0
+            self._log('role_identity', '⚠️ 圣体破禁的余震使本次伤害降低20%。')
+
+        bonus_bp = min(2500, bonus_bp)
+        final_damage = max(1, original * max(1000, BASIS_POINTS + bonus_bp - penalty_bp) // BASIS_POINTS)
+        target.hp -= final_damage - original
+        result['damage'] = final_damage
+        result['trait_bonus_bp'] = bonus_bp
+        result['trait_penalty_bp'] = penalty_bp
+        if gain_intent:
+            self._gain_battle_intent()
 
     def validate_player_action(self, action: Dict) -> Tuple[bool, str]:
         """验证手动行动，不改变战斗状态。"""
@@ -850,6 +1101,9 @@ class CombatManager:
                 return False, '当前角色尚未装备专属主动能力'
             if self.role_special.get('used'):
                 return False, '本场战斗已经施放过专属主动能力'
+            required_intent = max(0, min(5, int((active.get('effect') or {}).get('battle_intent', 0))))
+            if required_intent and int(self.role_special.get('battle_intent', 0)) < required_intent:
+                return False, f'战意不足，需要积累至{required_intent}层才能施放'
             return True, ''
         if action_type != 'SKILL':
             return False, '不支持的行动类型'
@@ -905,11 +1159,15 @@ class CombatManager:
 
     def _execute_player_action(self, action: Optional[Dict]) -> None:
         self._apply_role_special_conditional_passive()
+        self._apply_spirit_beast_conditional()
+        self._trigger_pending_copy()
+        if self.enemy.is_dead():
+            return
         if action is None or str(action.get('action_type', '')).upper() == 'AUTO':
             self._execute_turn(self.player, self.enemy)
             return
 
-        if self.player.has_buff('stun'):
+        if any(self.player.has_buff(control) for control in HARD_CONTROL_TYPES):
             self._log('stun', f"❌ {self.player.name} 被眩晕，无法行动！")
             return
 
@@ -962,6 +1220,9 @@ class CombatManager:
         skill = next(item for item in self.player.skills if item.id == skill_id)
         self._log('action', f"🎯 {self.player.name} 使用技能：{skill.name}")
         result = skill.execute(self.player, self.enemy)
+        self._log_control_resist_event(self.enemy)
+        self._apply_player_damage_traits(self.player, self.enemy, result)
+        self._boost_first_player_shield()
         self._log_skill_result(self.player, self.enemy, skill, result)
         self._apply_elemental_effect(self.player, self.enemy, skill, result)
         self._gain_dao_heart(skill, result)
@@ -1001,7 +1262,7 @@ class CombatManager:
     def _execute_turn(self, actor: CombatEntity, target: CombatEntity):
         """执行一个单位的行动回合"""
         # 检查是否被眩晕
-        if actor.has_buff('stun'):
+        if any(actor.has_buff(control) for control in HARD_CONTROL_TYPES):
             self._log("stun", f"❌ {actor.name} 被眩晕，无法行动！")
             return
 
@@ -1026,6 +1287,10 @@ class CombatManager:
             # 释放技能
             self._log("action", f"🎯 {actor.name} 使用技能：{skill.name}")
             result = skill.execute(actor, target)
+            self._log_control_resist_event(target)
+            self._apply_player_damage_traits(actor, target, result)
+            if actor is self.player:
+                self._boost_first_player_shield()
             self._log_skill_result(actor, target, skill, result)
             self._apply_elemental_effect(actor, target, skill, result)
 
@@ -1308,6 +1573,28 @@ class CombatManager:
                 if target.has_buff('wet') or target.has_buff('rooted'):
                     self._log('reaction_guard', f"🛡️ {target.name} 本回合已触发过元素反应，本次仅施加燃烧。")
                 self._log('element', f"🔥 {target.name} 被火行点燃！")
+            synergy = self.spirit_beast.get('synergy') or {}
+            if (
+                actor is self.player
+                and synergy.get('code') == 'FIRE_STRIKER'
+                and not self.spirit_beast.get('triggered', 0)
+            ):
+                burning = next((item for item in target.buffs if item.buff_type == 'burning'), None)
+                if burning:
+                    bonus = max(1, min(1, int(synergy.get('burn_duration_bonus', 1))))
+                    before = int(burning.duration)
+                    burning.duration = min(10, before + bonus)
+                    self.spirit_beast['triggered'] = 1
+                    self.spirit_beast['events'].append({
+                        'round': self.round,
+                        'type': 'BURN_DURATION',
+                        'before': before,
+                        'after': int(burning.duration),
+                    })
+                    self._log(
+                        'spirit_beast_synergy',
+                        f"🔥 异火灵契延续首个燃烧，持续时间增至{int(burning.duration)}回合。",
+                    )
         elif element == 'METAL':
             target.add_buff(Buff('defense_down', 15, 2, skill.name, '破甲'))
             self._log('element', f"⚔️ 金行破甲！{target.name} 防御降低15%。")
@@ -1366,11 +1653,23 @@ class CombatManager:
             self.boss_tianji.setdefault('broken_stages', []).append(intent['stage'])
             self.boss_tianji['reward_weight_bonus'] = self.boss_tianji.get('reward_weight_bonus', 0) + intent.get('drop_weight', 0)
             self._log('boss_break', f"✅ 「{intent['name']}」已被破局，Boss 未能获得强化。")
+            feature_effect = ((self.role_special.get('feature') or {}).get('effect') or {})
+            if feature_effect.get('type') == 'BOSS_BREAK_HEAL':
+                percent = max(1, min(10, int(feature_effect.get('value', 0))))
+                heal, healing_reduced = self.player.receive_heal(int(self.player.max_hp * percent / 100))
+                self._log(
+                    'role_feature',
+                    f"🌸 苦海种金莲回复{heal}点气血"
+                    + (f"（治疗压制{healing_reduced}%）" if healing_reduced else "") + "。",
+                )
         elif not self.enemy.is_dead():
             self.enemy.add_buff(Buff(intent['effect'], intent['value'], intent.get('duration', 2), intent['name'], intent['name']))
             effect_name = '防御' if intent['effect'] == 'defense_up' else '攻击'
             self._log('boss_resolve', f"⚠️ 天机未破！{self.enemy.name}{effect_name}提升{intent['value']}%，持续2回合。")
         self.boss_tianji['intent'] = None
+        insight_source = self.boss_tianji.get('insight_source')
+        if insight_source:
+            self._set_threat_insight(insight_source, force=True)
 
     def _execute_normal_attack(self, attacker: CombatEntity, defender: CombatEntity):
         """执行普通攻击"""
@@ -1433,8 +1732,12 @@ class CombatManager:
             damage = int(damage * crit_dmg)
             result['is_critical'] = True
 
+        damage, shield_absorbed = defender.mitigate_with_shield(damage)
         result['damage'] = damage
+        result['shield_absorbed'] = shield_absorbed
         defender.hp -= damage
+        self._apply_player_damage_traits(attacker, defender, result)
+        damage = int(result['damage'])
 
         # 处理反射
         if defender.has_buff('reflect'):
@@ -1448,9 +1751,10 @@ class CombatManager:
         # 吸血
         if attacker.lifesteal > 0:
             heal = int(damage * attacker.lifesteal)
-            attacker.hp = min(attacker.max_hp, attacker.hp + heal)
-            if heal > 0:
-                self._log("lifesteal", f"❤️ {attacker.name} 吸取了 {heal} 点生命！")
+            actual_heal, healing_reduced = attacker.receive_heal(heal)
+            if actual_heal > 0:
+                suffix = f"（治疗压制{healing_reduced}%）" if healing_reduced else ""
+                self._log("lifesteal", f"❤️ {attacker.name} 吸取了 {actual_heal} 点生命！{suffix}")
 
         self._log_damage_result(attacker, defender, result)
 
@@ -1462,8 +1766,10 @@ class CombatManager:
         if effect.get('trigger', 'BATTLE_START') != 'BATTLE_START':
             return
         effect_type = effect.get('type')
-        value = max(0, min(15, int(effect.get('value', 0))))
+        raw_value = int(effect.get('value', 0) or 0)
+        value = max(0, min(15, raw_value))
         duration = max(1, int(effect.get('duration', 1)))
+        final_value = value
         if effect_type == 'ENEMY_ATTACK_DOWN':
             self.enemy.add_buff(Buff('attack_down', value, duration, passive['name'], passive['name']))
             message = f"🔥 专属被动「{passive['name']}」压制敌方攻击{value}%，持续{duration}回合。"
@@ -1473,10 +1779,25 @@ class CombatManager:
         elif effect_type == 'PLAYER_SPEED_UP':
             self.player.add_buff(Buff('speed_up', value, duration, passive['name'], passive['name']))
             message = f"⚡ 专属被动「{passive['name']}」提升自身速度{value}%，持续{duration}回合。"
+        elif effect_type == 'CONTROL_RESIST':
+            final_value = max(0, min(30, raw_value))
+            reduced_rounds = max(1, min(2, (final_value + 9) // 15))
+            self.player.control_resist_value = final_value
+            self.player.control_resist_rounds = reduced_rounds
+            self.player.control_resist_available = True
+            message = (
+                f"🧠 专属被动「{passive['name']}」获得{final_value}点控制抗性；"
+                f"本场首次硬控缩短{reduced_rounds}回合。"
+            )
+        elif effect_type == 'THREAT_INSIGHT':
+            final_value = 0
+            self._set_threat_insight(passive['name'])
+            message = f"🔮 专属被动「{passive['name']}」已冻结本场最高威胁与下一机制提示。"
         else:
+            final_value = 0
             message = f"🔎 专属被动「{passive['name']}」已记录本场敌方威胁与破局信息。"
         self.role_special['passive_triggered'] = True
-        self.role_special['events'].append({'round': self.round, 'type': 'PASSIVE', 'id': passive.get('id'), 'name': passive['name'], 'final_value': 0})
+        self.role_special['events'].append({'round': self.round, 'type': 'PASSIVE', 'id': passive.get('id'), 'name': passive['name'], 'final_value': final_value})
         self._log('role_special_passive', message)
 
     def _apply_role_special_conditional_passive(self) -> None:
@@ -1491,11 +1812,11 @@ class CombatManager:
             return
         value = max(1, min(10, int(effect.get('value', 8))))
         if effect.get('type') == 'PLAYER_HEAL':
-            final_value = min(int(self.player.max_hp * value / 100), self.player.max_hp - self.player.hp)
-            self.player.hp += final_value
+            final_value, healing_reduced = self.player.receive_heal(int(self.player.max_hp * value / 100))
             message = f"💚 专属被动「{passive['name']}」在低血量时恢复{final_value}点生命。"
         else:
             self.player.add_buff(Buff('shield', value, 2, passive['name'], passive['name']))
+            self._boost_first_player_shield()
             final_value = value
             message = f"🛡️ 专属被动「{passive['name']}」在低血量时生成{value}%护身屏障。"
         self.role_special['passive_triggered'] = True
@@ -1507,45 +1828,117 @@ class CombatManager:
         effect = feature.get('effect') or {}
         if not feature.get('feature_name'):
             return
-        if effect.get('type') == 'PLAYER_DEFENSE_UP':
+        effect_type = effect.get('type')
+        if effect_type == 'PLAYER_DEFENSE_UP':
             value = min(15, int(effect.get('value', 0)))
             self.player.add_buff(Buff('defense_up', value, max(1, int(effect.get('duration', 1))), feature['feature_name'], feature['feature_name']))
-        elif effect.get('type') == 'PLAYER_SHIELD':
-            self.player.add_buff(Buff('shield', min(10, int(effect.get('value', 0))), 2, feature['feature_name'], feature['feature_name']))
-        self._log('role_feature', f"🌌 角色机制「{feature['feature_name']}」随战斗快照生效。")
+            detail = f"防御提升{value}%"
+        elif effect_type == 'PLAYER_SHIELD':
+            value = min(10, int(effect.get('value', 0)))
+            self.player.add_buff(Buff('shield', value, 2, feature['feature_name'], feature['feature_name']))
+            self._boost_first_player_shield()
+            detail = f"获得{value}%护盾减伤"
+        elif effect_type == 'THREAT_INSIGHT':
+            self._set_threat_insight(feature['feature_name'])
+            detail = '显示本场最高威胁与下一 Boss 机制'
+        elif effect_type == 'BOSS_DAMAGE':
+            value = min(10, int(effect.get('value', 0)))
+            detail = f'对 Boss 造成的普攻与技能伤害提升{value}%'
+        elif effect_type == 'BOSS_BREAK_HEAL':
+            value = min(10, int(effect.get('value', 0)))
+            detail = f'每次成功破解 Boss 机制恢复{value}%最大气血'
+        else:
+            detail = '本场已冻结，未使用未知数值标签'
+        self._log('role_feature', f"🌌 角色机制「{feature['feature_name']}」生效：{detail}。")
 
     def _execute_role_special(self) -> None:
         active = self.role_special.get('active') or {}
+        if not active or self.role_special.get('used'):
+            self._log('role_special', '❌ 当前没有可施放的专属能力。')
+            return
         effect = active.get('effect') or {}
+        effect_type = str(effect.get('type', 'DAMAGE')).upper()
+        required_intent = max(0, min(5, int(effect.get('battle_intent', 0))))
+        current_intent = max(0, int(self.role_special.get('battle_intent', 0)))
+        if required_intent and current_intent < required_intent:
+            self._log('role_special', f'❌ 战意不足，需要{required_intent}层才能施放。')
+            return
+        if required_intent:
+            self.role_special['battle_intent'] = current_intent - required_intent
+            self._log('battle_intent', f'🔥 消耗{required_intent}层战意发动专属能力。')
+
         multiplier = max(0.0, min(2.0, float(active.get('multiplier', 0))))
         base_value = max(1, int(self.player.get_effective_attack() * max(1.0, self.player.crit_dmg)))
         conditional_bonus = 0
         if effect.get('target_hp_below') and self.enemy.hp <= self.enemy.max_hp * int(effect['target_hp_below']) / 100:
-            conditional_bonus += min(15, int(effect.get('damage_bonus', 0)))
+            conditional_bonus += max(0, min(15, int(effect.get('damage_bonus', 0))))
         if effect.get('self_hp_above') and self.player.hp >= self.player.max_hp * int(effect['self_hp_above']) / 100:
-            conditional_bonus += min(15, int(effect.get('damage_bonus', 10)))
+            conditional_bonus += max(0, min(15, int(effect.get('damage_bonus', 10))))
         if effect.get('first_round_bonus') and self.round == 1:
-            conditional_bonus += min(15, int(effect['first_round_bonus']))
+            conditional_bonus += max(0, min(15, int(effect['first_round_bonus'])))
         if effect.get('boss_bonus') and self.enemy.entity_type == 'boss':
-            conditional_bonus += min(15, int(effect['boss_bonus']))
+            conditional_bonus += max(0, min(15, int(effect['boss_bonus'])))
         if effect.get('round_at_least') and self.round >= int(effect['round_at_least']):
-            conditional_bonus += min(15, int(effect.get('damage_bonus', 0)))
+            conditional_bonus += max(0, min(15, int(effect.get('damage_bonus', 0))))
+        if required_intent:
+            conditional_bonus += max(0, min(15, int(effect.get('damage_bonus', 0))))
+
+        shield = next((item for item in self.enemy.buffs if item.buff_type == 'shield'), None)
+        shield_break_bonus = 0
+        if shield and effect.get('shield_bonus'):
+            shield_break_bonus = max(0, min(10, int(effect.get('shield_bonus', 0))))
+            conditional_bonus += shield_break_bonus
+        conditional_bonus = min(25, conditional_bonus)
+
         raw_damage = int(base_value * (1 + multiplier) * (1 + conditional_bonus / 100))
         defense_ignore = max(0, min(15, int(effect.get('defense_ignore', 0)))) / 100
         defense = max(0, self.enemy.get_effective_defense() * (1 - defense_ignore))
         damage = max(1, int(raw_damage * (1 - defense / (defense + 800))))
-        if self.enemy.entity_type == 'boss':
-            damage = min(damage, max(1, int(self.enemy.max_hp * .03)))
+        shield_absorbed = 0
+        if not shield_break_bonus:
+            damage, shield_absorbed = self.enemy.mitigate_with_shield(damage)
         self.enemy.hp -= damage
+
+        trait_result = {'damage': damage}
+        self._apply_player_damage_traits(
+            self.player,
+            self.enemy,
+            trait_result,
+            gain_intent=False,
+        )
+        damage = int(trait_result['damage'])
+        if self.enemy.entity_type == 'boss':
+            capped_damage = min(damage, max(1, int(self.enemy.max_hp * .03)))
+            if capped_damage != damage:
+                self.enemy.hp += damage - capped_damage
+                damage = capped_damage
+
+        if shield_break_bonus and shield in self.enemy.buffs:
+            self.enemy.buffs.remove(shield)
+            self.enemy._reset_modifiers()
+            self.enemy._apply_buff_modifiers()
+            self._log(
+                'role_special_effect',
+                f"🪲 「{active.get('name')}」破除敌方护盾并获得{shield_break_bonus}%有限增伤。",
+            )
+
         self.role_special['used'] = True
         event = {
             'round': self.round, 'type': 'ACTIVE', 'id': active.get('id'), 'name': active.get('name'),
-            'base_value': base_value, 'multiplier': multiplier, 'final_value': damage, 'effect': effect,
+            'base_value': base_value,
+            'multiplier': multiplier,
+            'conditional_bonus': conditional_bonus,
+            'final_value': damage,
+            'shield_absorbed': shield_absorbed,
+            'shield_break_bonus': shield_break_bonus,
+            'intent_spent': required_intent,
+            'effect': effect,
         }
         self.role_special['events'].append(event)
         self._log('role_special', f"🌟 {self.player.name}施展专属能力「{active.get('name', '未名之力')}」，造成{damage}点伤害！")
+        if shield_absorbed:
+            self._log('shield', f"🛡️ {self.enemy.name}的护盾吸收了{shield_absorbed}点伤害。")
 
-        effect_type = effect.get('type', 'DAMAGE')
         if effect.get('burn'):
             self.enemy.add_buff(Buff('burning', 2, min(2, int(effect['burn'])), active.get('name', ''), '专属灼烧'))
             self._log('role_special_effect', f"🔥 {self.enemy.name}受到专属灼烧；该效果不触发五行反应。")
@@ -1571,6 +1964,7 @@ class CombatManager:
         if effect.get('shield_percent'):
             value = min(10, int(effect['shield_percent']))
             self.player.add_buff(Buff('shield', value, 2, active.get('name', ''), '专属护盾'))
+            self._boost_first_player_shield()
             self._log('role_special_effect', f"🛡️ {self.player.name}获得{value}%专属护盾。")
         if effect_type == 'DAMAGE_HEAL':
             if effect.get('clear_dot'):
@@ -1583,10 +1977,44 @@ class CombatManager:
             else:
                 heal = int(self.player.max_hp * min(10, int(effect.get('heal_percent', 0))) / 100)
             cap = int(self.player.max_hp * min(10, int(effect.get('heal_percent_cap', 10))) / 100)
-            heal = max(0, min(heal, cap, self.player.max_hp - self.player.hp))
+            heal, healing_reduced = self.player.receive_heal(max(0, min(heal, cap)))
             if heal:
-                self.player.hp += heal
                 self._log('role_special_effect', f"💚 专属能力为{self.player.name}恢复{heal}点生命。")
+            if healing_reduced:
+                self._log('healing_down', f"☯️ 治疗压制使本次恢复降低{healing_reduced}%。")
+
+        if effect_type == 'COPY_WEAK' or effect.get('copy_weak'):
+            copy_ratio = 35
+            echo_damage = max(1, damage * copy_ratio // 100)
+            self.role_special['pending_copy'] = {
+                'name': active.get('name', '弱化投影'),
+                'trigger_round': self.round + 1,
+                'damage': echo_damage,
+                'ratio': copy_ratio,
+            }
+            self.role_special['events'].append({
+                'round': self.round,
+                'type': 'COPY_SCHEDULE',
+                'name': active.get('name'),
+                'trigger_round': self.round + 1,
+                'damage': echo_damage,
+            })
+            self._log('role_special_effect', f"🌌 已记录弱化投影，将在下一回合复制{copy_ratio}%伤害。")
+
+        if effect.get('sword_intent'):
+            gain = max(1, min(1, int(effect.get('sword_intent', 1))))
+            before = max(0, int(self.role_special.get('sword_intent', 0)))
+            self.role_special['sword_intent'] = min(3, before + gain)
+            self.role_special['events'].append({
+                'round': self.round,
+                'type': 'SWORD_INTENT',
+                'before': before,
+                'after': self.role_special['sword_intent'],
+            })
+            self._log('sword_intent', f"⚔️ 青元剑意积累至{self.role_special['sword_intent']}/3层。")
+
+        if effect.get('threat_insight'):
+            self._set_threat_insight(active.get('name', '先见而战'), force=True)
 
     def _log_skill_result(self, actor: CombatEntity, target: CombatEntity, skill: Skill, result: Dict):
         """记录技能结果"""
@@ -1711,6 +2139,7 @@ class CombatManager:
             'reaction_targets_this_round': list(self.reaction_targets_this_round),
             'dao_heart': copy.deepcopy(self.dao_heart),
             'role_special': copy.deepcopy(self.role_special),
+            'spirit_beast': copy.deepcopy(self.spirit_beast),
         }
 
     def to_snapshot(self) -> Dict:
@@ -1740,6 +2169,7 @@ class CombatManager:
             'reaction_targets_this_round': list(self.reaction_targets_this_round),
             'dao_heart': copy.deepcopy(self.dao_heart),
             'role_special': copy.deepcopy(self.role_special),
+            'spirit_beast': copy.deepcopy(self.spirit_beast),
         }
 
     @classmethod
@@ -1758,6 +2188,7 @@ class CombatManager:
         manager.reaction_targets_this_round = set(snapshot.get('reaction_targets_this_round', []))
         manager.dao_heart = copy.deepcopy(snapshot.get('dao_heart', manager.dao_heart))
         manager.role_special = copy.deepcopy(snapshot.get('role_special', manager.role_special))
+        manager.spirit_beast = copy.deepcopy(snapshot.get('spirit_beast', manager.spirit_beast))
         first_side = snapshot.get('first_side')
         if first_side == 'player':
             manager.first, manager.second = manager.player, manager.enemy

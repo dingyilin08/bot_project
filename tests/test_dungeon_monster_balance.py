@@ -2,7 +2,12 @@ import asyncio
 import unittest
 from pathlib import Path
 
-from Game_main.g6_dungeon import DUNGEON_BASE_STATS, generate_monster_attr_by_ratio
+from Game_main.g6_dungeon import (
+    DUNGEON_BASE_STATS,
+    apply_solo_pve_stat_effects,
+    generate_monster_attr_by_ratio,
+    solo_pve_effect_snapshot,
+)
 
 
 class DungeonMonsterBalanceTests(unittest.TestCase):
@@ -32,6 +37,19 @@ class DungeonMonsterBalanceTests(unittest.TestCase):
         self.assertIn("WHERE buff_target = 0", sql)
         self.assertIn("WHEN 50 THEN 4.20", sql)
         self.assertIn("WHERE m.type = 'boss'", sql)
+
+    def test_causal_and_season_effects_are_frozen_without_scaling_monsters(self):
+        effect = solo_pve_effect_snapshot(
+            {"marks": ("遗宝因果", "丹师善缘"), "attack_bp": 300, "defense_bp": 300},
+            {"active": True, "name": "厚土", "attack_bp": 0, "defense_bp": 300, "speed_bp": 300},
+        )
+        self.assertEqual((effect["attack_bp"], effect["defense_bp"], effect["speed_bp"]), (300, 600, 300))
+        self.assertEqual(apply_solo_pve_stat_effects(100, 100, 100, effect), (103, 106, 103))
+        capped = solo_pve_effect_snapshot(
+            {"attack_bp": 9_999, "defense_bp": 9_999},
+            {"attack_bp": 9_999, "defense_bp": 9_999, "speed_bp": 9_999},
+        )
+        self.assertEqual(apply_solo_pve_stat_effects(100, 100, 100, capped), (110, 110, 110))
 
 
 if __name__ == "__main__":

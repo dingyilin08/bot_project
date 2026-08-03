@@ -1718,7 +1718,14 @@ async def lian_dan(uid, qz, param):
 
             now_ts = int(time.time())
             from Game_main.g18_alchemy_study import get_alchemy_mastery
+            from Game_main.g19_sect import get_active_research
             mastery = await get_alchemy_mastery(cursor, uid, recipe["name"])
+            active_research = await get_active_research(uid, cursor)
+            sect_research = (
+                active_research
+                if active_research and active_research["research_type"] == "丹道"
+                else None
+            )
             slots[furnace_no - 1] = {
                 "is_lz": 1,
                 "df_id": int(recipe["id"]),
@@ -1727,6 +1734,8 @@ async def lian_dan(uid, qz, param):
                 "batch_ts": now_ts,
                 "fire_style": fire_style,
                 "mastery": mastery,
+                "sect_research": sect_research,
+                "rule_version": 2,
             }
             await _save_slots(uid, slots, cursor, "user_danlu", "dl", [furnace_no])
             await conn.commit()
@@ -1744,6 +1753,8 @@ async def lian_dan(uid, qz, param):
             lines.append(f"炼制时长：{_format_seconds(ALCHEMY_SECONDS)}")
             lines.append(f"火候：{fire_style}｜当前熟练度：{mastery}")
             lines.append("成功率：保守95% / 均衡90% / 冒险83%")
+            if sect_research:
+                lines.append("> 宗门丹道研究已写入本炉快照：成功后5%概率额外成丹1枚。")
             lines.append("***")
             lines.append("<qqbot-cmd-input text='查看丹炉' show='查看丹炉' /> | <qqbot-cmd-input text='加速炼丹 ' show='加速炼丹*' />")
             return {"type": "markdown", "content": "\n".join(lines)}
@@ -1783,10 +1794,16 @@ async def shou_dan(uid, qz, param):
             if not pill:
                 return {"type": "markdown", "content": "丹炉数据异常：找不到对应丹药配置。"}
 
-            from Game_main.g18_alchemy_study import roll_alchemy_outcome
+            from Game_main.g18_alchemy_study import roll_alchemy_outcome, sect_alchemy_extra
             success, quality, output_num = roll_alchemy_outcome(
                 slot.get("fire_style", "均衡"), slot.get("mastery", 0), random.randint(1, 100)
             )
+            research_effect = (slot.get("sect_research") or {}).get("effect") or {}
+            sect_extra = sect_alchemy_extra(
+                uid, slot.get("batch_ts", slot.get("time", 0)), furnace_no,
+                research_effect.get("extra_output_chance_bp", 0),
+            ) if success else 0
+            output_num += sect_extra
             lines = []
             lines.append("##### 收丹结果")
             lines.append(f"丹炉{furnace_no} | {recipe['name']}")
@@ -1795,6 +1812,8 @@ async def shou_dan(uid, qz, param):
                 await _add_user_item(cursor, uid, pill_item_id, output_num)
                 lines.append("炼制结果：✅ 成功")
                 lines.append(f"火候品质：{quality}｜获得：{pill['name']} x {output_num}")
+                if sect_extra:
+                    lines.append("> 宗门丹道研究生效：额外成丹 +1。")
             else:
                 lines.append("炼制结果：💥 炸炉")
                 lines.append("材料尽失，无丹药产出")
@@ -1848,14 +1867,21 @@ async def yj_shoudan(uid, qz):
                     continue
 
                 pill = pill_map.get(int(recipe["pill_id"]))
-                from Game_main.g18_alchemy_study import roll_alchemy_outcome
+                from Game_main.g18_alchemy_study import roll_alchemy_outcome, sect_alchemy_extra
                 success, quality, output_num = roll_alchemy_outcome(
                     slot.get("fire_style", "均衡"), slot.get("mastery", 0), random.randint(1, 100)
                 )
+                research_effect = (slot.get("sect_research") or {}).get("effect") or {}
+                sect_extra = sect_alchemy_extra(
+                    uid, slot.get("batch_ts", slot.get("time", 0)), idx,
+                    research_effect.get("extra_output_chance_bp", 0),
+                ) if success else 0
+                output_num += sect_extra
                 if success and pill:
                     pill_item_id = _resolve_item_id(pill["id"], pill)
                     await _add_user_item(cursor, uid, pill_item_id, output_num)
-                    collected.append((idx, recipe["name"], True, f"{quality}，{pill['name']} x{output_num}"))
+                    research_text = "，宗门丹道额外+1" if sect_extra else ""
+                    collected.append((idx, recipe["name"], True, f"{quality}，{pill['name']} x{output_num}{research_text}"))
                 elif success:
                     collected.append((idx, recipe["name"], False, "丹药配置缺失"))
                 else:
@@ -1876,7 +1902,7 @@ async def yj_shoudan(uid, qz):
             lines.append("***")
             for idx, recipe_name, success, extra in collected:
                 if success:
-                    lines.append(f"丹炉{idx} | {recipe_name} | ✅ 成功，获得 {extra} x1")
+                    lines.append(f"丹炉{idx} | {recipe_name} | ✅ 成功，获得 {extra}")
                 else:
                     lines.append(f"丹炉{idx} | {recipe_name} | ❌ {extra}")
             lines.append("***")

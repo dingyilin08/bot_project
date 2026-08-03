@@ -16,6 +16,12 @@ from Game_domain.equipment_rules import (
     EQUIPMENT_QUALITY_MULTIPLIER,
     EQUIPMENT_SET_BONUS,
 )
+from Game_main.g14_estate import (
+    forge_success_bonus_bp,
+    format_basis_points,
+    read_estate_levels,
+)
+from Game_main.g19_sect import get_active_research
 
 # ================================
 # 常量定义
@@ -88,6 +94,34 @@ EQUIP_SELL_BASE_PRICE = {
 
 # 强化返还比例
 EQUIP_SELL_ENHANCE_REFUND_RATE = 0.85
+SECT_ENHANCE_DISCOUNT_CAP_BP = 500
+
+
+def get_enhance_success_rate_bp(target_level, forge_level=1):
+    """返回包含炼器台加成的强化成功率（10000基点=100%）。"""
+    base_rate_bp = int(ENHANCE_SUCCESS_RATE.get(int(target_level), 100)) * 100
+    return min(10000, max(0, base_rate_bp + forge_success_bonus_bp(forge_level)))
+
+
+def get_research_enhance_discount_bp(active_research):
+    """只接受宗门御器白名单效果，避免任意快照字段影响经济。"""
+    if not isinstance(active_research, dict) or active_research.get("research_type") != "御器":
+        return 0
+    effect = active_research.get("effect")
+    if not isinstance(effect, dict) or effect.get("code") != "SECT_ARTIFACT":
+        return 0
+    try:
+        discount_bp = int(effect.get("enhance_discount_bp", 0))
+    except (TypeError, ValueError):
+        return 0
+    return min(SECT_ENHANCE_DISCOUNT_CAP_BP, max(0, discount_bp))
+
+
+def apply_enhance_cost_discount(nominal_cost, discount_bp):
+    """强化实付向上取整且最低1灵石；出售返还继续使用标称成本。"""
+    nominal_cost = max(1, int(nominal_cost))
+    discount_bp = min(SECT_ENHANCE_DISCOUNT_CAP_BP, max(0, int(discount_bp)))
+    return max(1, (nominal_cost * (10000 - discount_bp) + 9999) // 10000)
 
 def get_enhance_cost(equip_min_level, target_level):
     """计算强化消耗 = 基础消耗 × 目标等级"""
@@ -728,7 +762,20 @@ def format_remove_result_markdown(role_info, equip, final_bonus):
     return "\n".join(lines)
 
 
-def format_enhance_result_markdown(role_info, equip, success, new_level, old_attrs, new_attrs, cost_lingshi, current_lingshi):
+def format_enhance_result_markdown(
+    role_info,
+    equip,
+    success,
+    new_level,
+    old_attrs,
+    new_attrs,
+    cost_lingshi,
+    current_lingshi,
+    success_rate_bp=None,
+    forge_level=1,
+    sect_discount_bp=0,
+    nominal_cost_lingshi=None,
+):
     """格式化强化结果"""
     lines = []
 
@@ -754,8 +801,27 @@ def format_enhance_result_markdown(role_info, equip, success, new_level, old_att
         lines.append("")
         lines.append("> 强化失败了！装备等级不变")
         if equip['level'] < 10:
-            next_rate = ENHANCE_SUCCESS_RATE.get(equip['level'] + 1, 0)
-            lines.append(f"> 下次成功率为{next_rate}%")
+            next_rate_bp = success_rate_bp
+            if next_rate_bp is None:
+                next_rate_bp = get_enhance_success_rate_bp(equip['level'] + 1, forge_level)
+            lines.append(f"> 下次成功率为{format_basis_points(next_rate_bp)}%")
+
+    if success_rate_bp is not None:
+        lines.append("")
+        lines.append("**效果来源**")
+        forge_bonus_bp = forge_success_bonus_bp(forge_level)
+        lines.append(
+            f"> 炼器台 Lv.{forge_level}：成功率 +{format_basis_points(forge_bonus_bp)}个百分点"
+            f"（本次 {format_basis_points(success_rate_bp)}%）"
+        )
+        if sect_discount_bp > 0:
+            nominal = int(nominal_cost_lingshi or cost_lingshi)
+            lines.append(
+                f"> 宗门御器：消耗 -{format_basis_points(sect_discount_bp)}%"
+                f"（标称{nominal}，实付{cost_lingshi}）"
+            )
+        else:
+            lines.append("> 宗门御器：本周未生效（按标称消耗支付）")
 
     lines.append("")
     lines.append("**属性变化**")
@@ -780,10 +846,16 @@ def format_enhance_result_markdown(role_info, equip, success, new_level, old_att
     lines.append(f"**当前灵石：** {current_lingshi}")
 
     lines.append("***")
-    if equip['level'] < 10:
-        lines.append("<qqbot-cmd-input text='强化装备 {}' show='强化装备 {}' /> | <qqbot-cmd-input text='装备详情 {}' show='装备详情 {}' />".format(equip['id'], equip['id']))
+    if new_level < 10:
+        lines.append(
+            f"<qqbot-cmd-input text='强化装备 {equip['id']}' show='强化装备 {equip['id']}' /> | "
+            f"<qqbot-cmd-input text='装备详情 {equip['id']}' show='装备详情 {equip['id']}' />"
+        )
     else:
-        lines.append("<qqbot-cmd-input text='装备详情 {}' show='装备详情 {}' /> | <qqbot-cmd-input text='当前装备' show='当前装备' />".format(equip['id']))
+        lines.append(
+            f"<qqbot-cmd-input text='装备详情 {equip['id']}' show='装备详情 {equip['id']}' /> | "
+            "<qqbot-cmd-input text='当前装备' show='当前装备' />"
+        )
 
     return "\n".join(lines)
 
@@ -1304,12 +1376,20 @@ async def enhance_equip(uid, qz, equip_instance_id):
                 lines.append(f"<qqbot-cmd-input text='装备详情 {equip_instance_id}' show='装备详情 {equip_instance_id}' /> | <qqbot-cmd-input text='当前装备' show='当前装备' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
+            # 洞府与宗门效果均在本次强化事务内读取；炼器台只改变成功率，
+            # 御器研究只改变实付，不改变出售按标称成本计算的返还。
+            estate_levels = await read_estate_levels(uid, cursor, for_update=True)
+            forge_level = estate_levels["forge_table"]
+            active_research = await get_active_research(uid, cursor)
+            sect_discount_bp = get_research_enhance_discount_bp(active_research)
+
             await cursor.execute("SELECT lingshi FROM user_zt WHERE id = %s FOR UPDATE", (uid,))
             lingshi_result = await cursor.fetchone()
             current_lingshi = lingshi_result[0] if lingshi_result else 0
 
             current_level = equip['level']
-            cost_lingshi = get_enhance_cost(equip['min_level'], current_level + 1)
+            nominal_cost_lingshi = get_enhance_cost(equip['min_level'], current_level + 1)
+            cost_lingshi = apply_enhance_cost_discount(nominal_cost_lingshi, sect_discount_bp)
 
             if current_lingshi < cost_lingshi:
                 lines = []
@@ -1317,6 +1397,11 @@ async def enhance_equip(uid, qz, equip_instance_id):
                 lines.append("")
                 lines.append(f"> 灵石不足，无法强化")
                 lines.append(f"> 需要灵石：{cost_lingshi}")
+                if sect_discount_bp > 0:
+                    lines.append(
+                        f"> 御器研究：标称{nominal_cost_lingshi}，"
+                        f"减免{format_basis_points(sect_discount_bp)}%后向上取整"
+                    )
                 lines.append(f"> 当前灵石：{current_lingshi}")
                 lines.append("***")
                 lines.append(
@@ -1326,7 +1411,7 @@ async def enhance_equip(uid, qz, equip_instance_id):
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             target_level = current_level + 1
-            success_rate = ENHANCE_SUCCESS_RATE.get(target_level, 100)
+            success_rate_bp = get_enhance_success_rate_bp(target_level, forge_level)
 
             fail_count = equip.get('enhance_fail_count', 0)
             pity_threshold = ENHANCE_PITY.get(target_level, 0)
@@ -1334,7 +1419,7 @@ async def enhance_equip(uid, qz, equip_instance_id):
                 success = True
                 is_pity = True
             else:
-                success = random.randint(1, 100) <= success_rate
+                success = random.randint(1, 10000) <= success_rate_bp
                 is_pity = False
 
             old_attrs = calc_equip_final_attrs(equip)
@@ -1360,8 +1445,9 @@ async def enhance_equip(uid, qz, equip_instance_id):
             # 强化等级、灵石扣除与战力快照一次提交。
             await conn.commit()
 
-            equip['level'] = new_level
-            new_attrs = calc_equip_final_attrs(equip)
+            result_equip = dict(equip)
+            result_equip['level'] = new_level
+            new_attrs = calc_equip_final_attrs(result_equip)
 
             await cursor.execute("SELECT lingshi FROM user_zt WHERE id = %s", (uid,))
             lingshi_result = await cursor.fetchone()
@@ -1377,7 +1463,18 @@ async def enhance_equip(uid, qz, equip_instance_id):
                 role_info = None
 
             markdown_content = format_enhance_result_markdown(
-                role_info, equip, success, new_level, old_attrs, new_attrs, cost_lingshi, current_lingshi
+                role_info,
+                equip,
+                success,
+                new_level,
+                old_attrs,
+                new_attrs,
+                cost_lingshi,
+                current_lingshi,
+                success_rate_bp=success_rate_bp,
+                forge_level=forge_level,
+                sect_discount_bp=sect_discount_bp,
+                nominal_cost_lingshi=nominal_cost_lingshi,
             )
 
             if not success and pity_threshold > 0:

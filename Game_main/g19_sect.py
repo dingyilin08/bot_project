@@ -1,12 +1,25 @@
 # -*- coding: utf-8 -*-
 """P2 宗门议事与师徒契约：无资产转移的异步协作玩法。"""
-from datetime import date
+from datetime import date, timedelta
+from hashlib import sha256
 
 from func.pd_func import reg_xz_func
 from sql.mysql import connect_mysql
 
 
-RESEARCHES = {"丹道": "炼丹产量展示加成", "阵法": "队伍战斗伤害上限加成", "御器": "装备强化灵石减免", "秘境": "副本掉落展示加成"}
+RESEARCHES = {
+    "丹道": "成功炼丹后5%概率额外获得1枚",
+    "阵法": "成员本人在队伍PVE中造成伤害+3%",
+    "御器": "装备强化实际支付灵石-5%",
+    "秘境": "普通副本材料10%概率额外+1",
+}
+RESEARCH_ORDER = tuple(RESEARCHES)
+RESEARCH_EFFECTS = {
+    "丹道": {"code": "SECT_ALCHEMY", "extra_output_chance_bp": 500},
+    "阵法": {"code": "SECT_FORMATION", "party_damage_bp": 300},
+    "御器": {"code": "SECT_ARTIFACT", "enhance_discount_bp": 500},
+    "秘境": {"code": "SECT_DUNGEON", "material_extra_chance_bp": 1000},
+}
 DAILY_CONTRIBUTION = 20
 
 
@@ -14,6 +27,27 @@ def week_key(today=None):
     today = today or date.today()
     year, week, _ = today.isocalendar()
     return f"{year}-W{week:02d}"
+
+
+def previous_week_key(today=None):
+    """返回紧邻上一 ISO 周；跨年时仍保持正确年份。"""
+    return week_key((today or date.today()) - timedelta(days=7))
+
+
+def research_effect(research_type):
+    """返回可安全写入任务快照的研究效果副本。"""
+    effect = RESEARCH_EFFECTS.get(research_type)
+    return dict(effect) if effect else {}
+
+
+def sect_dungeon_material_extra(uid, battle_id, item_id, chance_bp):
+    """宗门秘境研究的独立、可重放材料增产判定。"""
+    chance_bp = max(0, min(10_000, int(chance_bp or 0)))
+    if chance_bp <= 0:
+        return 0
+    seed = f"sect-dungeon:{int(uid)}:{battle_id}:{int(item_id)}"
+    roll = int(sha256(seed.encode("utf-8")).hexdigest()[:8], 16) % 10_000
+    return 1 if roll < chance_bp else 0
 
 
 def parse_research(value):
@@ -31,17 +65,78 @@ async def _sect_for_user(uid, cursor, lock=False):
     return await cursor.fetchone()
 
 
-async def _settle_previous_votes(sect_id, cursor):
+async def _settle_research_week(sect_id, target_week, cursor):
+    """稳定结算一个指定周；平票按公开枚举顺序决定，重复调用幂等。"""
+    await cursor.execute(
+        "SELECT research_type FROM sect_research WHERE sect_id = %s AND week_key = %s LIMIT 1",
+        (sect_id, target_week),
+    )
+    existing = await cursor.fetchone()
+    if existing:
+        return existing[0]
+    await cursor.execute(
+        """
+        SELECT research_type, COUNT(*) FROM sect_vote
+        WHERE sect_id = %s AND week_key = %s
+        GROUP BY research_type
+        """,
+        (sect_id, target_week),
+    )
+    counts = {row[0]: int(row[1]) for row in await cursor.fetchall() if row[0] in RESEARCHES}
+    if not counts:
+        return None
+    max_votes = max(counts.values())
+    winner = next(name for name in RESEARCH_ORDER if counts.get(name) == max_votes)
+    await cursor.execute(
+        """
+        INSERT INTO sect_research (sect_id, week_key, research_type, vote_count)
+        VALUES (%s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE research_type = research_type
+        """,
+        (sect_id, target_week, winner, max_votes),
+    )
+    await cursor.execute(
+        "SELECT research_type FROM sect_research WHERE sect_id = %s AND week_key = %s LIMIT 1",
+        (sect_id, target_week),
+    )
+    row = await cursor.fetchone()
+    return row[0] if row else winner
+
+
+async def _settle_previous_votes(sect_id, cursor, today=None):
     """惰性结算已过周的投票，重复调用由唯一键保证幂等。"""
-    await cursor.execute("SELECT DISTINCT week_key FROM sect_vote WHERE sect_id = %s AND week_key < %s", (sect_id, week_key()))
+    current_week = week_key(today)
+    await cursor.execute(
+        "SELECT DISTINCT week_key FROM sect_vote WHERE sect_id = %s AND week_key < %s ORDER BY week_key",
+        (sect_id, current_week),
+    )
     for (past_week,) in await cursor.fetchall():
-        await cursor.execute("SELECT id FROM sect_research WHERE sect_id = %s AND week_key = %s", (sect_id, past_week))
-        if await cursor.fetchone():
-            continue
-        await cursor.execute("SELECT research_type, COUNT(*) FROM sect_vote WHERE sect_id = %s AND week_key = %s GROUP BY research_type ORDER BY COUNT(*) DESC, research_type LIMIT 1", (sect_id, past_week))
-        winner = await cursor.fetchone()
-        if winner:
-            await cursor.execute("INSERT INTO sect_research (sect_id, week_key, research_type, vote_count) VALUES (%s, %s, %s, %s)", (sect_id, past_week, winner[0], winner[1]))
+        await _settle_research_week(sect_id, past_week, cursor)
+
+
+async def get_active_research(uid, cursor, today=None):
+    """读取玩家本周生效的宗门研究：只认紧邻上一周的赢家。"""
+    await cursor.execute(
+        """
+        SELECT sm.sect_id FROM sect_member sm
+        WHERE sm.uid = %s AND sm.member_state = 'ACTIVE' LIMIT 1
+        """,
+        (uid,),
+    )
+    member = await cursor.fetchone()
+    if not member:
+        return None
+    target_week = previous_week_key(today)
+    winner = await _settle_research_week(int(member[0]), target_week, cursor)
+    if not winner:
+        return None
+    return {
+        "sect_id": int(member[0]),
+        "vote_week": target_week,
+        "research_type": winner,
+        "effect": research_effect(winner),
+        "rule_version": 1,
+    }
 
 
 async def _render_sect(sect, cursor, notice=""):
@@ -50,14 +145,19 @@ async def _render_sect(sect, cursor, notice=""):
     member_count = (await cursor.fetchone())[0]
     await cursor.execute("SELECT research_type, COUNT(*) FROM sect_vote WHERE sect_id = %s AND week_key = %s GROUP BY research_type ORDER BY COUNT(*) DESC, research_type", (sect_id, week_key()))
     votes = await cursor.fetchall()
-    await cursor.execute("SELECT week_key, research_type FROM sect_research WHERE sect_id = %s ORDER BY week_key DESC LIMIT 1", (sect_id,))
+    await cursor.execute(
+        "SELECT week_key, research_type FROM sect_research WHERE sect_id = %s AND week_key = %s LIMIT 1",
+        (sect_id, previous_week_key()),
+    )
     latest_research = await cursor.fetchone()
     vote_text = "、".join(f"{item[0]} {item[1]}票" for item in votes) or "尚无人投票"
     output = f"##### 🏯 宗门｜{name}\n\n"
     output += f"成员：{member_count}/30｜你的贡献：{contribution}｜身份：{role}\n"
     output += f"本周议题：{vote_text}\n> 每周结算票数最高的研究，仅提供 PVE 小型便利，不影响玩家对战。\n"
     if latest_research:
-        output += f"上周研究：{latest_research[1]}（{latest_research[0]}）\n"
+        output += f"本周生效：{latest_research[1]}（投票周 {latest_research[0]}）\n> {RESEARCHES[latest_research[1]]}\n"
+    else:
+        output += "本周生效：无（上周没有有效投票）\n"
     if notice:
         output += f"\n> {notice}\n"
     output += "\n<qqbot-cmd-input text='宗门委托' show='完成宗门委托' /> | <qqbot-cmd-input text='宗门投票 丹道' show='投票：丹道' />\n"

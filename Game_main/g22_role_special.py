@@ -11,7 +11,9 @@ from Game_domain.role_special_service import (
     combine,
     create_scroll,
     equip,
+    equip_combo,
     home,
+    list_combos,
     pray,
     rank,
     list_scrolls,
@@ -29,6 +31,48 @@ def _button(command, label=None):
     return f"<qqbot-cmd-input text='{command}' show='{label or command}' />"
 
 
+def _parse_combo_action(value):
+    text = str(value or "").strip()
+    if text in ("", "背包", "列表", "查看"):
+        return "LIST", None
+    if text.startswith("装备"):
+        combo_id = text[2:].lstrip(" -—:：")
+        if not combo_id:
+            raise RoleSpecialError("格式：专属组合 装备-组合编号")
+        return "EQUIP", int(combo_id)
+    return "CREATE", text
+
+
+def _combo_effect_label(effect):
+    effect = effect if isinstance(effect, dict) else {}
+    mode = "专属主动替换·每场一次" if effect.get("mode") == "ACTIVE_OVERRIDE" else "专属被动替换·每场一次"
+    codes = " / ".join(effect.get("effect_codes") or [effect.get("effect_code", "COMBO_ACTIVE_STRIKE")])
+    return mode, codes
+
+
+def render_combo_bag(data, notice=""):
+    output = f"##### 🔥 {data['role_name']}｜专属组合背包\n\n"
+    if notice:
+        output += f"> {notice}\n\n"
+    if not data["items"]:
+        output += "> 尚未生成组合。请先选择三种已点亮能力进行组合。\n"
+    for item in data["items"]:
+        mode, codes = _combo_effect_label(item["effect"])
+        status = "✅ 当前装备" if item["equipped"] else "未装备"
+        output += f"**#{item['id']} {item['name']}**｜{item['combo_type']}｜倍率 {item['multiplier']:.1%}\n"
+        output += f"> {status}｜{mode}\n> 规则：`{codes}`\n"
+        if not item["equipped"]:
+            equip_command = f"专属组合 装备-{item['id']}"
+            output += f"> {_button(equip_command, '装备此组合')}\n"
+        output += "\n"
+    output += (
+        "组合只作用于新创建的PVE战斗快照；主动组合沿用专属主动每场一次限制，"
+        "被动组合每场触发一次。\n\n"
+    )
+    output += f"{_button('专属组合 ', '创建组合*')} | {_button('角色养成', '返回养成')}"
+    return {"type": "markdown", "content": output}
+
+
 def render_home(data):
     spec = data["spec"]
     codes = {
@@ -41,6 +85,12 @@ def render_home(data):
     output += f"本体阶段：**{_stage_name(spec, data['growth_stage'])}**（第 {data['growth_stage']} 阶）\n"
     output += f"已点亮能力：{data['unlocked']}/{data['total']}｜今日战斗掉落：{data['daily_drop_count']}/{DAILY_DROP_LIMIT}\n"
     output += f"当前主动：**{data['active_skill']}**｜当前被动：**{data['active_passive']}**\n"
+    combo = data.get("equipped_combo")
+    if combo:
+        combo_mode = "主动替换·每场一次" if combo["mode"] == "ACTIVE_OVERRIDE" else "被动替换·每场一次"
+        output += f"当前组合：**{combo['name']}**（{combo_mode}）\n"
+    else:
+        output += "当前组合：**未装备**\n"
     output += f"五星保底：{data['rare_pity']}/10｜定向偏离：{data['target_miss']}/3｜今日祈愿：{data['daily_pray_count']}/{DAILY_PRAY_LIMIT}\n\n"
     output += f"> {spec['growth_material']}：{materials.get(codes['growth'], 0)}｜{spec['essence_name']}：{materials.get(codes['essence'], 0)}｜{spec['core_name']}：{materials.get(codes['core'], 0)}\n"
     for code, name in spec.get("extra_materials", {}).items():
@@ -57,6 +107,7 @@ def render_home(data):
         _button("专属祈愿 1次", "祈愿1次"),
         _button("专属祈愿 10次", "祈愿10次"),
         _button("专属进阶", spec["growth_name"] + "进阶"),
+        _button("专属组合 背包", "组合背包"),
         _button("专属排行榜", spec["rank"]["name"]),
     ])
     return {"type": "markdown", "content": output}
@@ -80,6 +131,25 @@ def render_collection(data, notice=""):
         _button("专属定向 ", "五星定向*"),
         _button("角色养成", "返回养成"),
     ])
+    return {"type": "markdown", "content": output}
+
+
+def render_target_selection(data):
+    candidates = [
+        item for item in data["items"]
+        if item["enabled"] and item["rarity"] == 5
+    ]
+    output = f"##### 🎯 {data['role_name']}｜五星能力定向\n\n"
+    output += "> 请选择当前角色奖池中的五星能力；切换定向会将定向偏离计数重置为 0。\n\n"
+    if not candidates:
+        output += "> 当前角色暂无可定向的五星能力。\n\n"
+    for item in candidates:
+        output += f"**#{item['id']} {item['name']}**｜{'★' * item['rarity']}\n"
+        output += f"> {item['lore']}\n"
+        target_command = f"专属定向 {item['id']}"
+        target_label = f"定向·{item['name']}"
+        output += f"> {_button(target_command, target_label)}\n\n"
+    output += _button("专属图鉴", "返回图鉴")
     return {"type": "markdown", "content": output}
 
 
@@ -118,10 +188,17 @@ async def role_special_pray(uid, qz, value):
 @reg_xz_func
 async def role_special_target(uid, qz, value):
     try:
-        message = await set_target(uid, int(value))
+        target_text = str(value or "").strip()
+        if not target_text:
+            return render_target_selection(await collection(uid))
+        if not target_text.isdecimal():
+            raise RoleSpecialError("格式：专属定向 五星能力编号。")
+        message = await set_target(uid, int(target_text))
         return {"type": "markdown", "content": f"{message}\n{_button('角色养成', '返回养成')}"}
-    except (ValueError, RoleSpecialError) as error:
-        return {"type": "markdown", "content": f"定向设置失败：{error or '请输入五星能力编号。'}"}
+    except ValueError:
+        return {"type": "markdown", "content": "定向设置失败：请输入有效的五星能力编号。"}
+    except RoleSpecialError as error:
+        return {"type": "markdown", "content": f"定向设置失败：{error}"}
 
 
 @reg_xz_func
@@ -159,14 +236,29 @@ async def role_special_advance(uid, qz):
 @reg_xz_func
 async def role_special_combine(uid, qz, value):
     try:
-        parts = [item for item in str(value).split("-") if item]
+        action, payload = _parse_combo_action(value)
+        if action == "LIST":
+            return render_combo_bag(await list_combos(uid))
+        if action == "EQUIP":
+            equipped = await equip_combo(uid, payload)
+            notice = (
+                f"「{equipped['name']}」已经是当前装备，未重复写入。"
+                if equipped["idempotent"]
+                else f"已装备「{equipped['name']}」，新创建的PVE战斗将使用该组合。"
+            )
+            return render_combo_bag(await list_combos(uid), notice)
+        parts = [item for item in payload.split("-") if item]
         if len(parts) < 4:
             raise RoleSpecialError("格式：专属组合 能力1-能力2-能力3-组合名称")
         result = await combine(uid, [int(item) for item in parts[:3]], "-".join(parts[3:]))
         output = f"##### 🔥 专属组合完成｜{result['name']}\n\n"
         output += f"素材：{'、'.join(result['materials'])}\n最终倍率：**{result['multiplier']:.1%}**\n"
         output += f"继承特性来源：{result['effect'].get('inherited_from', '未知')}\n组合编号：#{result['id']}\n\n"
-        output += f"{_button('角色养成', '返回养成')} | {_button('专属排行榜', '查看排行')}"
+        equip_button = _button(f"专属组合 装备-{result['id']}", "立即装备")
+        output += (
+            f"{equip_button} | "
+            f"{_button('专属组合 背包', '组合背包')} | {_button('专属排行榜', '查看排行')}"
+        )
         return {"type": "markdown", "content": output}
     except (ValueError, RoleSpecialError) as error:
         return {"type": "markdown", "content": f"专属组合失败：{error}"}
@@ -243,7 +335,11 @@ async def role_special_scroll_combine(uid, qz, value):
         output = f"##### 🗡️ 刀势推演完成｜{result['name']}\n\n"
         output += f"绘卷：#{scroll_id}｜素材：{'、'.join(result['materials'])}\n最终倍率：{result['multiplier']:.1%}\n"
         output += f"观察/起刀/收刀的继承来源：{result['effect'].get('inherited_from', '刀势')}\n\n"
-        output += f"{_button('战斗绘卷', '绘卷收藏')} | {_button('专属排行榜', '刀道排行')}"
+        equip_button = _button(f"专属组合 装备-{result['id']}", "立即装备")
+        output += (
+            f"{equip_button} | "
+            f"{_button('专属组合 背包', '组合背包')} | {_button('专属排行榜', '刀道排行')}"
+        )
         return {"type": "markdown", "content": output}
     except (ValueError, RoleSpecialError) as error:
         return {"type": "markdown", "content": f"刀势推演失败：{error}"}

@@ -3,6 +3,7 @@ from Tool.tool_user import *
 from func.pd_func import *
 import time
 import random
+import re
 from Tool.tool_command import *
 
 
@@ -231,7 +232,7 @@ async def fuse_skills(uid, qz, skill_info):
             output += f"技能类型：{skill_type_display}\n"
             output += f"技能数值：{new_skill_value}\n"
 
-            output += f"快发送指令：技能命名 {new_skill_id}-技能名称，命名你的融合技能吧~\n"
+            output += f"<qqbot-cmd-input text='技能命名 {new_skill_id}-' show='为融合技能命名' />\n"
 
             return {"type": "markdown", "content": qz + output}
 
@@ -301,34 +302,69 @@ async def equip_skill(uid, qz, skill_info):
 
 
 # 技能命名
+def parse_skill_rename_param(skill_info):
+    """解析“技能编号-新名称”，并限制在数据库字段允许的长度内。"""
+    try:
+        skill_id_text, new_name = str(skill_info or "").split("-", 1)
+        skill_id = int(skill_id_text.strip())
+    except (TypeError, ValueError):
+        return None, None, "请输入正确指令：技能命名 技能编号-新名称\n示例：技能命名 1-烈焰斩"
+    new_name = new_name.strip()
+    if skill_id <= 0:
+        return None, None, "技能编号必须为正整数。"
+    if not new_name:
+        return None, None, "技能名称不能为空，请重新输入。"
+    if len(new_name) > 30:
+        return None, None, "技能名称最多30个字符，请缩短后重试。"
+    if not re.fullmatch(r"[\u4e00-\u9fffA-Za-z0-9·【】\[\]-]+", new_name):
+        return None, None, "技能名称仅可使用中英文、数字、连接号与书名括号。"
+    if new_name == "未命名":
+        return None, None, "“未命名”是融合技能占位名，请换一个真正的技能名称。"
+    return skill_id, new_name, None
+
+
 @reg_xz_func
 async def rename_skill(uid, qz, skill_info):
+    skill_id, new_name, error = parse_skill_rename_param(skill_info)
+    if error:
+        return {"type": "markdown", "content": qz + error}
     async with connect_mysql() as conn:
-        async with conn.cursor() as cursor:
-            try:
-                skill_id, new_name = skill_info.split("-", 1)
-            except ValueError:
-                return {"type": "markdown", "content": qz + "请输入正确指令：技能命名 技能编号-新名称\n示例：技能命名 1-烈焰斩\n"}
-            
-            if not new_name.strip():
-                return {"type": "markdown", "content": qz + "技能名称不能为空，请重新输入。\n"}
-            
-            sql = "SELECT id, skill_name, is_data_skill FROM user_skill WHERE id = %s AND uid = %s LIMIT 1"
-            await cursor.execute(sql, (skill_id, uid))
-            result = await cursor.fetchone()
-            if result is None:
-                return {"type": "markdown", "content": qz + "技能不存在，无法命名。\n"}
-            
-            user_skill_id, old_name, is_data_skill = result
-            
-            if is_data_skill == 1:
-                return {"type": "markdown", "content": qz + "基础技能无法重命名，仅融合技能可命名。\n"}
-            
-            sql = "UPDATE user_skill SET skill_name = %s WHERE id = %s AND uid = %s LIMIT 1"
-            await cursor.execute(sql, (new_name.strip(), skill_id, uid))
+        try:
+            async with conn.cursor() as cursor:
+                sql = "SELECT id, skill_name, is_data_skill FROM user_skill WHERE id = %s AND uid = %s LIMIT 1 FOR UPDATE"
+                await cursor.execute(sql, (skill_id, uid))
+                result = await cursor.fetchone()
+                if result is None:
+                    return {"type": "markdown", "content": qz + "技能不存在，无法命名。\n"}
+
+                _, old_name, is_data_skill = result
+                if is_data_skill == 1:
+                    return {"type": "markdown", "content": qz + "基础技能无法重命名，仅融合技能可命名。\n"}
+
+                await cursor.execute(
+                    "SELECT 1 FROM user_skill WHERE uid = %s AND skill_name = %s AND id <> %s LIMIT 1",
+                    (uid, new_name, skill_id),
+                )
+                if await cursor.fetchone():
+                    return {"type": "markdown", "content": qz + f"你已经拥有名为“{new_name}”的技能，请换一个名称。"}
+
+                sql = "UPDATE user_skill SET skill_name = %s WHERE id = %s AND uid = %s LIMIT 1"
+                await cursor.execute(sql, (new_name, skill_id, uid))
             await conn.commit()
-            
-            return {"type": "markdown", "content": qz + f"技能命名成功！\n原名称：{old_name}\n新名称：{new_name.strip()}\n"}
+        except Exception:
+            await conn.rollback()
+            raise
+
+    return {
+        "type": "markdown",
+        "content": qz + "\n".join((
+            "##### ✍️ 融合技能命名成功",
+            f"原名称：{old_name}",
+            f"新名称：**{new_name}**",
+            "***",
+            f"<qqbot-cmd-input text='技能装备 1-{skill_id}' show='装备到技能槽1' /> | <qqbot-cmd-input text='技能背包' show='技能背包' />",
+        )),
+    }
 
 
 # 技能卸下
@@ -437,9 +473,6 @@ async def skill_bag(uid, qz, page_num=1):
             output += pagination_controls("技能背包", page_num, total_pages) + "\n"
 
             return {"type": "markdown", "content": qz + output}
-
-
-
 
 
 

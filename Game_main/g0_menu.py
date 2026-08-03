@@ -352,10 +352,10 @@ async def show_resource_menu(uid, qz):
 async def show_activity_menu(uid, qz):
     """周期性挑战与长期目标的聚合入口。"""
     output = "##### 🌌 活动菜单\n\n"
-    output += "每日签到积累七日与三十日奖励；世界 Boss 提供贡献与专属感悟，赛季记录长期目标。\n\n"
+    output += "每日签到积累七日与三十日奖励；世界 Boss 提供贡献与专属感悟，赛季天象会影响 PVE，并可解锁可佩戴装扮。\n\n"
     output += "<qqbot-cmd-input text='签到' show='每日签到' /> | <qqbot-cmd-input text='签到记录' show='签到记录' />\n\n"
     output += "<qqbot-cmd-input text='世界BOSS' show='世界Boss' /> | <qqbot-cmd-input text='赛季' show='赛季主页' />\n\n"
-    output += "<qqbot-cmd-input text='世界排行' show='世界排行' /> | <qqbot-cmd-input text='赛季任务' show='赛季任务' />\n\n"
+    output += "<qqbot-cmd-input text='世界排行' show='世界排行' /> | <qqbot-cmd-input text='赛季任务' show='赛季任务' /> | <qqbot-cmd-input text='赛季装扮' show='赛季装扮' />\n\n"
     output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
     return {"type": "markdown", "content": output}
 
@@ -503,6 +503,10 @@ async def show_skill_menu(uid, qz):
     output += "> 如：技能装备 1-10001，则是将技能编号10001装备到当前角色的技能槽1\n"
     output += "<qqbot-cmd-input text='技能卸下 ' show='技能卸下 技能槽编号' />\n\n"
     output += "> 如：技能卸下 1，则是将当前角色的技能槽1中所装备的技能卸下\n"
+    output += "<qqbot-cmd-input text='技能融合 ' show='技能融合 技能编号A-技能编号B' />\n\n"
+    output += "> 永久消耗两个未装备的基础技能，融合为一个可由任意角色装备的新技能\n"
+    output += "<qqbot-cmd-input text='技能命名 ' show='技能命名 融合技能编号-新名称' />\n\n"
+    output += "> 为名称仍是“未命名”的融合技能正式命名\n"
 
     output += "***\n\n"
     output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
@@ -741,7 +745,7 @@ async def show_update_log(uid):
     output += "**🐾 灵兽园开放**\n> 完成副本后每日可寻访灵兽；可设置出战灵兽并获得透明的战斗灵契加成。灵兽不在商城出售。\n\n"
     output += "**🧭 三千道途开放**\n> 2~4 名已准备的同群道友可挑战 6 节异步秘境；每节投票一次，超时沿用上次偏好，节点奖励与因果印记均可追溯。\n\n"
     output += "**🏯 宗门与师徒开放**\n> 可创建或加入宗门、完成每日委托、参与周研究投票；师徒契约支持申请、收徒与共同修行，且没有资产转移。\n\n"
-    output += "**🌌 世界Boss与赛季开放**\n> 世界 Boss 提供挑战、辅助、净化三类贡献；副本、宗门委托和世界 Boss 均会累积赛季经验，可获取外观与称号资格。\n\n"
+    output += "**🌌 世界Boss与赛季开放**\n> 世界 Boss 提供挑战、辅助、净化三类贡献；副本、宗门委托和世界 Boss 均会累积赛季经验，赛季装扮领取后可实际佩戴展示。\n\n"
     output += "**✨ 操作体验改进**\n> 常用操作会以正文蓝字或底部按钮呈现：导航与列表保持贴近说明，战斗和世界 Boss 的关键操作可直接点击。\n\n"
     output += "<qqbot-cmd-input text='主菜单' show='主菜单' /> | <qqbot-cmd-input text='玩法介绍' show='玩法介绍' />"
     return {"type": "markdown", "content": output}

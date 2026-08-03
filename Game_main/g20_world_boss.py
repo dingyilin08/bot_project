@@ -4,6 +4,8 @@ from datetime import date
 
 from func.pd_func import reg_xz_func
 from sql.mysql import connect_mysql
+from Game_main.g15_expedition import get_causal_mark_snapshot
+from Game_main.g21_season import get_active_season_effect, record_season_event
 from Game_domain.role_special_service import (
     RoleSpecialError,
     grant_world_insight,
@@ -39,6 +41,27 @@ def contribution_for(action, combat_power):
     if action == "辅助":
         return 0, min(8_000, max(1_200, combat_power // 2))
     return 0, min(10_000, max(1_500, combat_power // 2 + 500))
+
+
+def apply_pve_damage_bonus(damage, *snapshots):
+    """世界 Boss 单次行动的开战快照；总攻击增幅硬限制为 10%。"""
+    total_bp = sum(max(0, int((snapshot or {}).get("attack_bp", 0))) for snapshot in snapshots)
+    total_bp = min(total_bp, 1_000)
+    return max(0, int(damage)) * (10_000 + total_bp) // 10_000, total_bp
+
+
+def apply_world_pve_bonus(damage, support, causal_effect, season_effect):
+    """把属性式开战效果映射到世界 Boss 的一次性伤害/协作贡献。"""
+    causal_effect = causal_effect or {}
+    season_effect = season_effect or {}
+    # 世界 Boss 没有持续角色血条与行动条，因此赛季防御/速度天象按同值
+    # 转为本次贡献效率；这样每一种合法天象都真实覆盖这个 PVE 入口。
+    season_bp = int(season_effect.get("value_bp", 0)) if season_effect.get("active") else 0
+    damage_bp = min(1_000, max(0, int(causal_effect.get("attack_bp", 0))) + season_bp)
+    support_bp = min(1_000, max(0, int(causal_effect.get("defense_bp", 0))) + season_bp)
+    damage = max(0, int(damage)) * (10_000 + damage_bp) // 10_000
+    support = max(0, int(support)) * (10_000 + support_bp) // 10_000
+    return damage, support, damage_bp, support_bp
 
 
 async def _active_run(cursor, lock=False):
@@ -118,6 +141,11 @@ async def world_boss_challenge(uid, qz, action_text):
                     return {"type": "markdown", "content": f"专属挑战未生效：{error}"}
             else:
                 damage, support = contribution_for(action, power)
+            causal_effect = await get_causal_mark_snapshot(uid, cursor)
+            season_effect = await get_active_season_effect(cursor)
+            damage, support, damage_bonus_bp, support_bonus_bp = apply_world_pve_bonus(
+                damage, support, causal_effect, season_effect
+            )
             phase = boss_phase(run[4], run[3])
             if action == "净化" and phase >= 2:
                 support += 800
@@ -130,9 +158,11 @@ async def world_boss_challenge(uid, qz, action_text):
             await cursor.execute("SELECT COALESCE(SUM(damage), 0), COALESCE(SUM(support), 0) FROM world_boss_contribution WHERE run_id = %s AND uid = %s", (run[0], uid))
             personal = await cursor.fetchone()
             await conn.commit()
-    from Game_main.g21_season import record_season_event
     await record_season_event(uid, "WORLD_BOSS")
     note = f"{special_note or action}成功：伤害 +{damage:,}，辅助贡献 +{support:,}。"
+    shown_bonus_bp = damage_bonus_bp if damage else support_bonus_bp
+    if shown_bonus_bp:
+        note += f" PVE 开战/贡献加成 +{shown_bonus_bp / 100:.0f}%。"
     if run[4] <= 0:
         note += " 诸天魔渊主已被讨伐！"
     return _render(run, remain - 1, personal, note)

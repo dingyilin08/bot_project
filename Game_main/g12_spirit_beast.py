@@ -12,6 +12,7 @@ from sql.mysql import connect_mysql
 MAX_BEASTS = 4  # 1 只出战 + 3 只灵兽园收藏
 TEMPERAMENTS = ("勇猛", "沉稳", "灵慧", "狡黠")
 ROLE_LABELS = {"STRIKER": "输出·追击", "GUARDIAN": "护法·护盾", "HEALER": "灵医·疗愈", "DISRUPTOR": "扰敌·迟滞"}
+SPIRIT_BEAST_SNAPSHOT_VERSION = 1
 
 
 def _clamp(value, lower, upper):
@@ -34,21 +35,55 @@ def combat_bonus(profile):
     return {"buff_type": "speed_up", "value": amount, "label": "扰敌灵契"}
 
 
-def origin_synergy(origin_name, profile):
-    """根据角色本源给灵兽被动一个可读的协同说明。"""
+def origin_synergy_effect(origin_name, profile):
+    """返回可冻结到 PVE 快照的本源协同。
+
+    协同只有四种白名单机器码，不会把玩家文本直接解释成战斗数值。
+    旧数据没有本字段时仍只保留基础灵契。
+    """
     if not profile:
-        return ""
+        return {}
     origin_name = origin_name or ""
     role = profile["role"]
     if any(word in origin_name for word in ("异火", "炎", "焰")) and role == "STRIKER":
-        return "异火协同：首个火行技能的灼烧持续时间 +1 回合。"
+        return {
+            "code": "FIRE_STRIKER",
+            "label": "异火协同：本场首个成功施加灼烧的火行技能，灼烧 +1 回合。",
+            "burn_duration_bonus": 1,
+            "max_triggers": 1,
+        }
     if "轮回" in origin_name and role == "HEALER":
-        return "轮回协同：战斗中首次濒危时获得一次小幅回春。"
+        return {
+            "code": "REINCARNATION_HEALER",
+            "label": "轮回协同：本场首次气血不高于 30% 时，回复 5% 最大气血。",
+            "threshold": 30,
+            "heal_percent": 5,
+            "max_triggers": 1,
+        }
     if any(word in origin_name for word in ("掌天", "青元")) and role == "GUARDIAN":
-        return "掌天协同：首次获得护盾时，额外提升少量护盾强度。"
+        return {
+            "code": "TREASURE_GUARDIAN",
+            "label": "掌天协同：本场首次获得护盾时，护盾减伤强度 +5 个百分点。",
+            "shield_bonus": 5,
+            "max_triggers": 1,
+        }
     if role == "DISRUPTOR":
-        return "扰敌协同：速度增益让你更容易抢到先手。"
-    return "本源协同：灵兽已提供基础灵契，切换相应本源可解锁专属联动。"
+        return {
+            "code": "DISRUPTOR_INITIATIVE",
+            "label": "扰敌协同：灵契速度增益直接参与本场开场先手判定。",
+            "max_triggers": 0,
+        }
+    return {}
+
+
+def origin_synergy(origin_name, profile):
+    """根据角色本源返回与实际战斗规则一致的展示文本。"""
+    effect = origin_synergy_effect(origin_name, profile)
+    if effect:
+        return effect["label"]
+    if not profile:
+        return ""
+    return "当前本源未触发额外协同；基础灵契仍正常生效。"
 
 
 async def _active_profile(uid, cursor):
@@ -68,19 +103,65 @@ async def _active_profile(uid, cursor):
 async def get_active_beast_profile(uid):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            return await _active_profile(uid, cursor)
+            profile = await _active_profile(uid, cursor)
+            if profile:
+                profile["origin_name"] = await _origin_name(uid, cursor)
+            return profile
+
+
+async def get_active_beast_snapshot(uid, cursor):
+    """使用调用方事务冻结出战灵兽，供单人/队伍 PVE 共用。"""
+    profile = await _active_profile(uid, cursor)
+    if not profile:
+        return None
+    origin_name = await _origin_name(uid, cursor)
+    bonus = combat_bonus(profile)
+    synergy = origin_synergy_effect(origin_name, profile)
+    return {
+        "schema_version": SPIRIT_BEAST_SNAPSHOT_VERSION,
+        "instance_id": int(profile["id"]),
+        "name": profile["name"],
+        "role": profile["role"],
+        "element": profile["element"],
+        "origin_name": origin_name,
+        "combat_bonus": dict(bonus),
+        "synergy": dict(synergy),
+        "triggered": 0,
+        "events": [],
+    }
 
 
 async def apply_active_beast_to_entity(uid, entity):
     """向战斗实体注入可序列化 Buff，供 battle_session 重启后恢复。"""
-    profile = await get_active_beast_profile(uid)
-    if not profile:
+    async with connect_mysql() as conn:
+        async with conn.cursor() as cursor:
+            snapshot = await get_active_beast_snapshot(uid, cursor)
+    return apply_beast_snapshot_to_entity(snapshot, entity)
+
+
+def apply_beast_snapshot_to_entity(snapshot, entity):
+    """将已冻结灵兽快照注入实体，避免战斗创建后再次读取实时数据库。"""
+    if not snapshot:
         return None
     from Tool.combat_system import Buff
-    bonus = combat_bonus(profile)
-    entity.add_buff(Buff(bonus["buff_type"], bonus["value"], 99, profile["name"], bonus["label"]))
-    profile["combat_bonus"] = bonus
-    return profile
+    bonus = snapshot["combat_bonus"]
+    entity.add_buff(Buff(bonus["buff_type"], bonus["value"], 99, snapshot["name"], bonus["label"]))
+    entity.role_data["spirit_beast"] = snapshot
+    return snapshot
+
+
+async def _current_capacity(uid, cursor):
+    """读取灵兽园容量；缺失洞府旧数据时安全回落到 4 只。"""
+    from Game_main.g14_estate import read_estate_levels, spirit_beast_capacity
+
+    levels = await read_estate_levels(uid, cursor, ensure_rows=False)
+    return spirit_beast_capacity(levels.get("beast_garden", 1))
+
+
+def _capacity_notice(count, capacity):
+    if int(count) <= int(capacity):
+        return ""
+    return f"已超出当前容量 {count}/{capacity}；旧灵兽会保留，扩建灵兽园前无法继续寻访。"
 
 
 async def _origin_name(uid, cursor):
@@ -116,7 +197,11 @@ async def spirit_beast_home(uid, qz):
             """, (uid,))
             rows = await cursor.fetchall()
             origin_name = await _origin_name(uid, cursor)
-    output = "##### 🐾 灵兽园\n\n" + f"收藏：{len(rows)}/{MAX_BEASTS}｜出战灵兽会在副本回合战斗中提供灵契。\n\n"
+            capacity = await _current_capacity(uid, cursor)
+    output = "##### 🐾 灵兽园\n\n" + f"收藏：{len(rows)}/{capacity}｜出战灵兽会在副本回合战斗中提供灵契。\n\n"
+    capacity_warning = _capacity_notice(len(rows), capacity)
+    if capacity_warning:
+        output += f"> ⚠️ {capacity_warning}\n\n"
     if not rows:
         output += "尚无灵兽。完成一次副本后，可每日进行一次灵兽寻访。\n\n"
     else:
@@ -136,7 +221,8 @@ async def spirit_beast_catalog(uid, qz):
         async with conn.cursor() as cursor:
             await cursor.execute("SELECT id, name, role, element, passive_name, description FROM data_spirit_beast ORDER BY id")
             rows = await cursor.fetchall()
-    output = "##### 🐾 灵兽图鉴\n\n"
+            capacity = await _current_capacity(uid, cursor)
+    output = f"##### 🐾 灵兽图鉴\n\n**当前灵兽园容量：{capacity}只**\n\n"
     for beast_id, name, role, element, passive_name, description in rows:
         output += f"**{name}**｜{ROLE_LABELS.get(role, role)}｜{element}\n> {passive_name}：{description}\n\n"
     output += "来源：完成副本后每日可进行一次灵兽寻访；灵兽不在商城出售。\n\n<qqbot-cmd-input text='灵兽' show='返回灵兽园' />"
@@ -155,9 +241,13 @@ async def seek_spirit_beast(uid, qz):
             await cursor.execute("SELECT 1 FROM user_spirit_beast_capture WHERE uid = %s AND capture_date = %s", (uid, today))
             if await cursor.fetchone():
                 return {"type": "markdown", "content": "今日已完成灵兽寻访，请明日再来。\n<qqbot-cmd-input text='灵兽' show='查看灵兽园' />"}
+            capacity = await _current_capacity(uid, cursor)
             await cursor.execute("SELECT COUNT(*) FROM user_spirit_beast WHERE uid = %s", (uid,))
-            if (await cursor.fetchone())[0] >= MAX_BEASTS:
-                return {"type": "markdown", "content": f"灵兽园已满（{MAX_BEASTS}/{MAX_BEASTS}）。后续放生功能将在灵兽园扩建版本开放。"}
+            owned_count = int((await cursor.fetchone())[0])
+            if owned_count >= capacity:
+                warning = _capacity_notice(owned_count, capacity)
+                message = warning or f"灵兽园已满（{owned_count}/{capacity}）。升级洞府灵兽园后可扩展容量。"
+                return {"type": "markdown", "content": message}
             await cursor.execute("SELECT id, name FROM data_spirit_beast ORDER BY id")
             templates = await cursor.fetchall()
             if not templates:
@@ -183,7 +273,12 @@ async def set_active_spirit_beast(uid, qz, beast_text):
             await cursor.execute("SELECT id FROM user_spirit_beast WHERE id = %s AND uid = %s", (beast_id, uid))
             if not await cursor.fetchone():
                 return {"type": "markdown", "content": "未找到这只灵兽，请从灵兽园中选择。"}
+            capacity = await _current_capacity(uid, cursor)
+            await cursor.execute("SELECT COUNT(*) FROM user_spirit_beast WHERE uid = %s", (uid,))
+            owned_count = int((await cursor.fetchone())[0])
             await cursor.execute("UPDATE user_spirit_beast SET is_active = 0 WHERE uid = %s", (uid,))
             await cursor.execute("UPDATE user_spirit_beast SET is_active = 1 WHERE id = %s AND uid = %s", (beast_id, uid))
             await conn.commit()
-    return {"type": "markdown", "content": "已设置出战灵兽；下一场新开启的副本战斗将立即获得它的灵契。\n<qqbot-cmd-input text='灵兽' show='查看灵兽园' />"}
+    warning = _capacity_notice(owned_count, capacity)
+    suffix = f"\n> ⚠️ {warning}" if warning else ""
+    return {"type": "markdown", "content": f"已设置出战灵兽；下一场新开启的副本战斗将立即获得它的灵契。{suffix}\n<qqbot-cmd-input text='灵兽' show='查看灵兽园' />"}

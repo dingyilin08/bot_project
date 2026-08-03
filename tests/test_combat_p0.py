@@ -27,6 +27,69 @@ def attack_skill(skill_id, name, element):
 
 
 class P0CombatRulesTests(unittest.TestCase):
+    def test_spirit_beast_synergies_apply_once_and_survive_snapshot(self):
+        player = entity("Player", hp=1000, skills=[attack_skill(1, "Fire Art", "FIRE")])
+        player.role_data["spirit_beast"] = {
+            "synergy": {"code": "FIRE_STRIKER", "burn_duration_bonus": 1},
+            "triggered": 0,
+            "events": [],
+        }
+        manager = CombatManager(player, entity("Target", hp=1000, speed=1, entity_type="normal"))
+        with patch("Tool.combat_system.random.random", return_value=0.5):
+            manager.resolve_round({"action_type": "SKILL", "skill_id": 1})
+        burn_event = next(event for event in manager.spirit_beast["events"] if event["type"] == "BURN_DURATION")
+        self.assertEqual(burn_event["after"], 3)
+        self.assertEqual(manager.spirit_beast["triggered"], 1)
+        restored = CombatManager.from_snapshot(manager.to_snapshot())
+        self.assertEqual(restored.spirit_beast["triggered"], 1)
+
+        reincarnation = CombatManager(entity("Player", hp=1000), entity("Target", hp=1000))
+        reincarnation.spirit_beast = {
+            "synergy": {"code": "REINCARNATION_HEALER", "threshold": 30, "heal_percent": 5},
+            "triggered": 0,
+            "events": [],
+        }
+        reincarnation.player.hp = 300
+        reincarnation._apply_spirit_beast_conditional()
+        self.assertEqual(reincarnation.player.hp, 350)
+        reincarnation._apply_spirit_beast_conditional()
+        self.assertEqual(reincarnation.player.hp, 350)
+
+        guardian = CombatManager(entity("Player"), entity("Target"))
+        guardian.spirit_beast = {
+            "synergy": {"code": "TREASURE_GUARDIAN", "shield_bonus": 5},
+            "triggered": 0,
+            "events": [],
+        }
+        guardian.player.add_buff(Buff("shield", 10, 2))
+        guardian._boost_first_player_shield()
+        self.assertEqual(next(buff.value for buff in guardian.player.buffs if buff.buff_type == "shield"), 15)
+
+    def test_role_identity_and_special_effects_are_not_display_only(self):
+        player = entity("叶凡")
+        player.role_data["role_special"] = {"role_name": "叶凡"}
+        manager = CombatManager(player, entity("Target"))
+        manager.initialize()
+        self.assertFalse(player.add_buff(Buff("stun", 0, 2)))
+        manager._log_control_resist_event(player)
+        self.assertEqual(player.next_damage_penalty, 20)
+        self.assertTrue(any(item["type"] == "control_resist" for item in manager.combat_log))
+
+        player = entity("Player")
+        player.role_data["role_special"] = {
+            "passive": {"id": 1, "name": "抗性", "effect": {"type": "CONTROL_RESIST", "value": 15}},
+            "active": {"id": 2, "name": "投影", "multiplier": 0, "effect": {"type": "COPY_WEAK"}},
+        }
+        manager = CombatManager(player, entity("Target", hp=1000, speed=1, entity_type="normal"))
+        manager.initialize()
+        self.assertTrue(player.add_buff(Buff("stun", 0, 2)))
+        manager._log_control_resist_event(player)
+        self.assertEqual(next(buff.duration for buff in player.buffs if buff.buff_type == "stun"), 1)
+        player.remove_buff("stun")
+        with patch("Tool.combat_system.random.random", return_value=0.5):
+            manager.resolve_round({"action_type": "SPECIAL"})
+            manager.resolve_round({"action_type": "DEFEND"})
+        self.assertTrue(any(event["type"] == "COPY_ECHO" for event in manager.role_special["events"]))
     def test_water_then_fire_triggers_vaporize(self):
         water = attack_skill(1, "Water Art", "WATER")
         fire = attack_skill(2, "Fire Art", "FIRE")

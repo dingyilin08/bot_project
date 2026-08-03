@@ -1,6 +1,13 @@
 import unittest
 
-from Game_main.g15_expedition import MAX_NODES, node_options, normalize_vote, outcome, resolve_choice
+from Game_main.g15_expedition import (
+    MAX_NODES,
+    causal_mark_effects,
+    node_options,
+    normalize_vote,
+    outcome,
+    resolve_choice,
+)
 
 
 class ExpeditionTests(unittest.TestCase):
@@ -21,3 +28,14 @@ class ExpeditionTests(unittest.TestCase):
         self.assertEqual(outcome(2, "救援", "session-a"), outcome(2, "救援", "session-a"))
         self.assertEqual(outcome(2, "救援", "session-a")[1], "丹师善缘")
         self.assertEqual(outcome(4, "夺宝", "session-a")[1], "遗宝因果")
+
+    def test_causal_marks_have_presence_only_pve_effects(self):
+        effects = causal_mark_effects((("丹师善缘", 9), ("遗宝因果", 3)))
+        self.assertEqual(effects["attack_bp"], 300)
+        self.assertEqual(effects["defense_bp"], 300)
+        self.assertEqual(effects["stacks"]["丹师善缘"], 9)
+
+    def test_unknown_and_duplicate_marks_cannot_inflate_stats(self):
+        effects = causal_mark_effects(("遗宝因果", "遗宝因果", "未知印记"))
+        self.assertEqual(effects["attack_bp"], 300)
+        self.assertEqual(effects["defense_bp"], 0)

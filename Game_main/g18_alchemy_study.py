@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """P1 丹道研习：公开火候品质权重与分类耐药值。"""
+from hashlib import sha256
 from func.pd_func import reg_xz_func
 from sql.mysql import connect_mysql
 
@@ -36,6 +37,16 @@ def roll_alchemy_outcome(style, mastery, roll):
         if cursor <= total:
             return True, quality, QUALITY_OUTPUT[quality]
     return True, "圆满", QUALITY_OUTPUT["圆满"]
+
+
+def sect_alchemy_extra(uid, batch_ts, furnace_no, chance_bp):
+    """使用独立确定性掷点结算宗门丹道额外产量，不扰动原炼丹 RNG。"""
+    chance_bp = max(0, min(10000, int(chance_bp or 0)))
+    if chance_bp <= 0:
+        return 0
+    seed = f"sect-alchemy:{int(uid)}:{int(batch_ts)}:{int(furnace_no)}"
+    roll = int(sha256(seed.encode("utf-8")).hexdigest()[:8], 16) % 10000
+    return 1 if roll < chance_bp else 0
 
 async def get_alchemy_mastery(cursor, uid, recipe_name):
     try:

@@ -23,6 +23,53 @@ NODES = (
     ("Boss", ("破局", "稳守")),
 )
 
+# 因果印记的层数只记录玩家经历，战斗效果按“是否持有”计算，避免重复刷取
+# 造成永久滚雪球。数值统一用基点（10000 = 100%），供各 PVE 入口快照。
+CAUSAL_MARK_EFFECTS = {
+    "丹师善缘": {
+        "defense_bp": 300,
+        "attack_bp": 0,
+        "description": "PVE 开战时防御提高 3%",
+    },
+    "遗宝因果": {
+        "defense_bp": 0,
+        "attack_bp": 300,
+        "description": "PVE 开战时攻击提高 3%",
+    },
+}
+
+
+def causal_mark_effects(mark_rows):
+    """把印记历史归一为可冻结的 PVE 加成；同名印记只生效一次。"""
+    owned = {}
+    for row in mark_rows or ():
+        if isinstance(row, str):
+            name, stacks = row, 1
+        else:
+            name = str(row[0])
+            stacks = max(1, int(row[1] or 1)) if len(row) > 1 else 1
+        if name in CAUSAL_MARK_EFFECTS:
+            owned[name] = max(owned.get(name, 0), stacks)
+
+    attack_bp = sum(CAUSAL_MARK_EFFECTS[name]["attack_bp"] for name in owned)
+    defense_bp = sum(CAUSAL_MARK_EFFECTS[name]["defense_bp"] for name in owned)
+    return {
+        "rule_version": 1,
+        "attack_bp": min(attack_bp, 300),
+        "defense_bp": min(defense_bp, 300),
+        "marks": tuple(sorted(owned)),
+        "stacks": owned,
+    }
+
+
+async def get_causal_mark_snapshot(uid, cursor):
+    """读取玩家印记并生成战斗开始时使用的不可变规则快照。"""
+    await cursor.execute(
+        "SELECT mark_name, stack_count FROM user_causal_mark WHERE uid = %s ORDER BY mark_name",
+        (uid,),
+    )
+    return causal_mark_effects(await cursor.fetchall())
+
 
 def node_options(node_no):
     """返回固定路线节点，令断线恢复时的选择与展示保持一致。"""
@@ -168,6 +215,7 @@ async def expedition_menu(uid, qz, group_openid):
     error = _need_group(group_openid)
     if error:
         return error
+    mark_rows = ()
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
             session = await _session_for_member(uid, cursor, lock=True)
@@ -176,11 +224,45 @@ async def expedition_menu(uid, qz, group_openid):
                 await conn.commit()
                 if session["state"] == "ACTIVE":
                     return await _render(session, cursor, notice)
+            await cursor.execute(
+                "SELECT mark_name, stack_count FROM user_causal_mark WHERE uid = %s ORDER BY mark_name",
+                (uid,),
+            )
+            mark_rows = await cursor.fetchall()
     output = "##### 🧭 三千道途\n\n"
     output += "2~4 名已准备的同群道友，可在 20 分钟内完成 6 个异步节点。每人每节点只需投票一次，离线时会沿用上次偏好。\n\n"
     output += "**节点：** 战斗、奇遇、药圃、遗宝、疗愈、Boss\n"
-    output += "**因果印记：** 救援丹师、夺取遗宝等选择会记录可追溯印记，并影响后续内容。\n\n"
-    output += "<qqbot-cmd-input text='道途开启' show='队长开启道途' /> | <qqbot-cmd-input text='队伍菜单' show='返回队伍菜单' />"
+    effects = causal_mark_effects(mark_rows)
+    if effects["marks"]:
+        output += "**已生效印记：** " + "、".join(effects["marks"]) + "\n"
+        output += f"> PVE 开战快照：攻击 +{effects['attack_bp'] / 100:.0f}%｜防御 +{effects['defense_bp'] / 100:.0f}%（层数只记录经历）\n\n"
+    else:
+        output += "**因果印记：** 救援丹师、夺取遗宝可留下印记，并在 PVE 开战时提供实际加成。\n\n"
+    output += "<qqbot-cmd-input text='道途开启' show='队长开启道途' /> | <qqbot-cmd-input text='因果印记' show='查看因果印记' /> | <qqbot-cmd-input text='队伍菜单' show='返回队伍菜单' />"
+    return {"type": "markdown", "content": output}
+
+
+@reg_xz_func
+async def causal_marks(uid, qz):
+    async with connect_mysql() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT mark_name, stack_count FROM user_causal_mark WHERE uid = %s ORDER BY mark_name",
+                (uid,),
+            )
+            rows = await cursor.fetchall()
+    effects = causal_mark_effects(rows)
+    output = "##### 🪶 因果印记\n\n"
+    if not rows:
+        output += "尚未留下因果印记。进入三千道途，在奇遇与遗宝节点作出选择即可获得。\n\n"
+    else:
+        for name, stacks in rows:
+            rule = CAUSAL_MARK_EFFECTS.get(name)
+            description = rule["description"] if rule else "只记录这段经历"
+            output += f"> **{name}** ×{int(stacks)}：{description}\n"
+        output += "\n印记层数会永久记录经历，但同名战斗效果不会叠加。\n\n"
+    output += f"当前 PVE 加成：攻击 +{effects['attack_bp'] / 100:.0f}%｜防御 +{effects['defense_bp'] / 100:.0f}%\n\n"
+    output += "<qqbot-cmd-input text='道途' show='返回三千道途' />"
     return {"type": "markdown", "content": output}
 
 

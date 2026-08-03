@@ -45,8 +45,11 @@ from Game_domain.gm_state import is_admin as is_gm_admin
 wuhouzhui = '收回|当前角色|参悟|参悟状态|领取参悟经验|悟道进阶|查看本源|本源升级|本源技能|战斗记录|战斗状态|查看怪物|怪物列表|放弃副本|药园|查看药田|种子背包|一键采摘|查看丹炉|一键收丹|添火次数|商城|菜单|MENU|主菜单|帮助|HELP|GM菜单|GM世界消息|角色菜单|参悟菜单|装备菜单|本源菜单|技能菜单|副本菜单|药园菜单|炼丹菜单|装备菜单|战力菜单|灵兽菜单|队伍菜单|洞府菜单|宗门菜单|专属养成菜单|祈愿菜单|资源菜单|活动菜单|问道札记|道途建议|丹道研习|药性|玩法介绍|当前装备|我的战力|战力|新手攻略|游戏指南|灵兽|灵兽图鉴|灵兽寻访|队伍|队伍创建|队伍准备|队伍离开|道途|道途状态|道途开启|道途离开|队伍战斗|队伍战斗状态|更新日志|洞府|宗门|宗门列表|宗门委托|师徒进度|师徒修行|世界BOSS|世界排行|世界奖励|赛季|赛季任务|赛季奖励|角色养成|角色碎片|祈愿记录|专属图鉴|专属进阶|专属排行榜|萧炎养成|异火图鉴|异火排行榜|王林养成|意境图鉴|问道排行榜|韩立养成|本命飞剑|法宝图鉴|剑阵排行榜|石昊养成|洞天|宝术图鉴|极境排行榜|开辟洞天|十洞天合一|叶凡养成|圣体秘境|圣体渡劫|九秘图鉴|圣体排行榜|孟川养成|元神修炼|刀法图鉴|战斗绘卷|刀道排行榜'
 youhouzhui = '注册游戏|选择角色|角色介绍|玩法介绍|角色属性|出战|角色背包|物品背包|物品信息|副本信息|副本列表|挑战副本|挑战怪物|战斗行动|激活技能|卷轴信息|技能信息|技能融合|技能装备|技能卸下|穿戴装备|卸下装备|强化装备|装备详情|出售装备|技能背包|装备背包|战力排行|排行榜|商城|购买商品|使用体力药|种子商店|购买种子|播种|一键播种|采摘|解锁药田|施肥|出售药材|丹方列表|炼丹|收丹|服丹|解锁丹炉|加速炼丹|添火|关闭图片模式|开启图片模式|GM验证|GM发放物品|GM发放仙玉|灵兽出战|队伍加入|布阵|洞府升级|洞府收取|道途投票|札记领取|队伍战斗行动|宗门创建|宗门申请|宗门投票|拜师|收徒|世界挑战|仙玉祈愿|祈愿定向|祈愿保底选择|合成角色|专属祈愿|专属定向|点亮能力|装备专属|专属组合|异火祈愿|异火定向|合成异火|装备异火|异火融合|意境祈愿|参悟意境|装备意境|本源合道|法宝祈愿|点亮法宝|法宝协同|炼制飞剑|宝术祈愿|铭刻宝术|六道轮回|九秘祈愿|参悟九秘|九秘连携|选择异象|刀法祈愿|绘制绘卷|刀势推演'
 wuhouzhui += '|日常任务|签到|签到记录|签到奖励|攻略|开荒攻略|角色攻略|战斗攻略|资源攻略'
+wuhouzhui += '|因果印记|赛季装扮'
 youhouzhui += '|日常领取'
 youhouzhui += '|扫荡副本'
+youhouzhui += '|技能命名'
+youhouzhui += '|赛季佩戴'
 youhouzhui += '|GM世界消息添加|GM世界消息修改|GM世界消息启用|GM世界消息停用|GM世界消息删除'
 youhouzhui += '|GM全服发放灵石|GM全服发放仙玉'
 
@@ -316,14 +319,16 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         return await expedition_vote(uid, group_openid, con_arr1)
     elif con_arr0 == '道途离开':
         return await expedition_leave(uid, group_openid)
+    elif con_arr0 == '因果印记':
+        return await causal_marks(uid)
     elif con_arr0 == '队伍战斗':
         return await party_battle_start(uid, group_openid)
     elif con_arr0 == '队伍战斗状态':
         return await party_battle_status(uid, group_openid)
     elif con_arr0 == '队伍战斗行动':
         if con_arr1 == "":
-            return "指令错误，正确指令：队伍战斗行动 普攻/防御/调息"
-        return await party_battle_action(uid, group_openid, con_arr1)
+            return "指令错误，正确指令：队伍战斗行动 普攻/防御/调息/技能 1-3"
+        return await party_battle_action(uid, group_openid, con_arr1, request_id=request_id)
 
     # ==================== P1 洞府生产中枢命令 ==================== #
     elif con_arr0 == '洞府':
@@ -361,6 +366,10 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         if con_arr1 == "":
             return "指令错误，正确指令：技能融合 技能1-技能2\n示例：技能融合 1-2"
         return await fuse_skills(uid, con_arr1)
+    elif con_arr0 == '技能命名':
+        if con_arr1 == "":
+            return "指令错误，正确指令：技能命名 融合技能编号-新名称\n示例：技能命名 10001-烈焰斩"
+        return await rename_skill(uid, con_arr1)
     elif con_arr0 == '技能装备':
         if con_arr1 == "":
             return "指令错误，正确指令：技能装备 技能槽-技能编号\n示例：技能装备 1-1"
@@ -638,6 +647,12 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         return await season_tasks(uid)
     elif con_arr0 == '赛季奖励':
         return await season_rewards(uid)
+    elif con_arr0 == '赛季装扮':
+        return await season_cosmetics(uid)
+    elif con_arr0 == '赛季佩戴':
+        if con_arr1 == "":
+            return "指令错误，请先发送：赛季装扮"
+        return await season_equip_cosmetic(uid, con_arr1)
     elif con_arr0 == '角色菜单':
         return await show_role_menu(uid)
     elif con_arr0 == '参悟菜单':
