@@ -7,6 +7,7 @@ from Game_main.g26_signin import (
     ITEM_NAMES,
     MILESTONE_REWARDS,
     _grant_reward,
+    _repair_signin_log_auto_increment,
     combine_rewards,
     cycle_reward_total,
     milestone_for_day,
@@ -24,6 +25,21 @@ class _RewardCursor:
 
     async def execute(self, sql, params=None):
         self.calls.append((" ".join(sql.split()), params))
+
+
+class _AutoIncrementCursor:
+    def __init__(self, *, auto_increment, max_id):
+        self.auto_increment = auto_increment
+        self.max_id = max_id
+        self.calls = []
+
+    async def execute(self, sql, params=None):
+        self.calls.append((" ".join(sql.split()), params))
+
+    async def fetchone(self):
+        if "information_schema.TABLES" in self.calls[-1][0]:
+            return (self.auto_increment,)
+        return (self.max_id,)
 
 
 class SigninRuleTests(unittest.TestCase):
@@ -92,6 +108,20 @@ class SigninRuleTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "玩家资产不存在"):
             asyncio.run(_grant_reward(cursor, 100001, reward_for_day(1)))
+
+    def test_stale_signin_log_auto_increment_is_repaired(self):
+        cursor = _AutoIncrementCursor(auto_increment=100007, max_id=100007)
+
+        asyncio.run(_repair_signin_log_auto_increment(cursor))
+
+        self.assertTrue(any("AUTO_INCREMENT = 100008" in sql for sql, _ in cursor.calls))
+
+    def test_current_signin_log_auto_increment_is_left_unchanged(self):
+        cursor = _AutoIncrementCursor(auto_increment=100008, max_id=100007)
+
+        asyncio.run(_repair_signin_log_auto_increment(cursor))
+
+        self.assertFalse(any("ALTER TABLE user_signin_log" in sql for sql, _ in cursor.calls))
 
 
 class SigninRouteTests(unittest.IsolatedAsyncioTestCase):

@@ -170,6 +170,27 @@ def _reward_json(reward):
     )
 
 
+async def _repair_signin_log_auto_increment(cursor):
+    """Repair a stale AUTO_INCREMENT value after restores or manual imports."""
+    await cursor.execute(
+        """
+        SELECT AUTO_INCREMENT
+        FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'user_signin_log'
+        """
+    )
+    auto_row = await cursor.fetchone()
+    await cursor.execute("SELECT COALESCE(MAX(id), 0) FROM user_signin_log")
+    max_row = await cursor.fetchone()
+
+    max_id = int(max_row[0] or 0) if max_row else 0
+    next_id = max_id + 1
+    current_next = auto_row[0] if auto_row else None
+    if current_next is None or int(current_next) < next_id:
+        await cursor.execute(f"ALTER TABLE user_signin_log AUTO_INCREMENT = {next_id}")
+
+
 async def ensure_signin_schema(cursor):
     """运行时兼容建表；正式部署同时提供独立 SQL 迁移。"""
     await cursor.execute(
@@ -206,6 +227,7 @@ async def ensure_signin_schema(cursor):
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='玩家_签到领奖流水'
         """
     )
+    await _repair_signin_log_auto_increment(cursor)
 
 
 async def _ensure_progress(cursor, uid):
