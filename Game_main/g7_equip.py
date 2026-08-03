@@ -885,9 +885,19 @@ def format_equip_detail_markdown(equip, final_attrs, role_info=None, equipped_in
     lines.append("***")
 
     if not equipped_info:
-        lines.append("<qqbot-cmd-input text='穿戴装备 {}' show='穿戴装备 {}' /> | <qqbot-cmd-input text='强化装备 {}' show='强化装备 {}' /> | <qqbot-cmd-input text='出售装备 {}' show='出售装备 {}' /> | <qqbot-cmd-input text='装备背包' show='装备背包' />".format(equip['id'], equip['id'], equip['id']))
+        lines.append(
+            f"<qqbot-cmd-input text='穿戴装备 {equip['id']}' show='穿戴装备 {equip['id']}' /> | "
+            f"<qqbot-cmd-input text='强化装备 {equip['id']}' show='强化装备 {equip['id']}' /> | "
+            f"<qqbot-cmd-input text='出售装备 {equip['id']}' show='出售装备 {equip['id']}' /> | "
+            "<qqbot-cmd-input text='装备背包' show='装备背包' />"
+        )
     else:
-        lines.append("<qqbot-cmd-input text='卸下装备 {}' show='卸下装备 {}' /> | <qqbot-cmd-input text='强化装备 {}' show='强化装备 {}' /> | <qqbot-cmd-input text='装备背包' show='装备背包' />".format(PART_CN.get(equip['part'], equip['part']), equip['id']))
+        part_name = PART_CN.get(equip['part'], equip['part'])
+        lines.append(
+            f"<qqbot-cmd-input text='卸下装备 {part_name}' show='卸下装备 {part_name}' /> | "
+            f"<qqbot-cmd-input text='强化装备 {equip['id']}' show='强化装备 {equip['id']}' /> | "
+            "<qqbot-cmd-input text='装备背包' show='装备背包' />"
+        )
 
     return "\n".join(lines)
 
@@ -1309,7 +1319,10 @@ async def enhance_equip(uid, qz, equip_instance_id):
                 lines.append(f"> 需要灵石：{cost_lingshi}")
                 lines.append(f"> 当前灵石：{current_lingshi}")
                 lines.append("***")
-                lines.append("<qqbot-cmd-input text='副本列表' show='副本列表' /> | <qqbot-cmd-input text='装备详情 {}' show='装备详情 {}' />".format(equip_instance_id))
+                lines.append(
+                    f"<qqbot-cmd-input text='副本列表' show='副本列表' /> | "
+                    f"<qqbot-cmd-input text='装备详情 {equip_instance_id}' show='装备详情 {equip_instance_id}' />"
+                )
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             target_level = current_level + 1
@@ -1499,7 +1512,11 @@ async def sell_equip(uid, qz, equip_instance_id):
                 lines.append("> 该装备当前处于穿戴状态，无法直接出售")
                 lines.append("> 请先卸下装备后再出售")
                 lines.append("***")
-                lines.append("<qqbot-cmd-input text='卸下装备 {}' show='卸下装备 {}' /> | <qqbot-cmd-input text='装备详情 {}' show='装备详情 {}' />".format(PART_CN.get(equip['part'], equip['part']), equip_instance_id))
+                part_name = PART_CN.get(equip['part'], equip['part'])
+                lines.append(
+                    f"<qqbot-cmd-input text='卸下装备 {part_name}' show='卸下装备 {part_name}' /> | "
+                    f"<qqbot-cmd-input text='装备详情 {equip_instance_id}' show='装备详情 {equip_instance_id}' />"
+                )
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             sell_info = calc_equip_sell_info(equip['min_level'], equip['quality'], equip['level'])
