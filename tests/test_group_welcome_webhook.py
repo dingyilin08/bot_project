@@ -95,6 +95,7 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
         event_id="event-group-message-1",
         event_type="GROUP_AT_MESSAGE_CREATE",
         author=None,
+        content="menu",
     ):
         return _FakeRequest({
             "id": event_id,
@@ -103,7 +104,7 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
             "s": 3,
             "d": {
                 "id": "group-message-id-1",
-                "content": "menu",
+                "content": content,
                 "group_openid": "group-openid-1",
                 "author": author or {"union_openid": "union-openid-1"},
             },
@@ -321,6 +322,48 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("GROUP_MESSAGE_CREATE", inbox.events["event-group-full-message"]["event_type"])
         self.assertEqual("PROCESSED", inbox.events["event-group-full-message"]["status"])
 
+    async def test_full_group_message_silently_ignores_normal_chat(self):
+        inbox = InMemoryEventInbox()
+        output = AsyncMock()
+        sender = AsyncMock()
+
+        with patch.object(main, "event_inbox", inbox), patch.object(
+            main, "output_content", output
+        ), patch.object(main, "send_group_message", sender):
+            response = await main.handle_webhook(
+                self._group_message_request(
+                    "event-group-normal-chat",
+                    event_type="GROUP_MESSAGE_CREATE",
+                    author={"member_openid": "member-openid-1"},
+                    content="大家晚上好，今天一起玩吗？",
+                )
+            )
+
+        self.assertEqual({"op": 12}, response)
+        output.assert_not_awaited()
+        sender.assert_not_awaited()
+        self.assertEqual("PROCESSED", inbox.events["event-group-normal-chat"]["status"])
+
+    async def test_group_at_message_keeps_unknown_command_feedback(self):
+        inbox = InMemoryEventInbox()
+        output = AsyncMock(return_value="指令错误，请检查指令后重试！")
+        sender = AsyncMock(return_value={"id": "sent-message-id"})
+
+        with patch.object(main, "event_inbox", inbox), patch.object(
+            main, "output_content", output
+        ), patch.object(main, "send_group_message", sender):
+            response = await main.handle_webhook(
+                self._group_message_request(
+                    "event-group-at-unknown",
+                    event_type="GROUP_AT_MESSAGE_CREATE",
+                    content="完全未知的内容",
+                )
+            )
+
+        self.assertEqual({"op": 12}, response)
+        output.assert_awaited_once()
+        sender.assert_awaited_once()
+
     async def test_full_group_message_ignores_bot_author(self):
         inbox = InMemoryEventInbox()
         output = AsyncMock()
@@ -342,6 +385,7 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
         source = (Path(__file__).resolve().parents[1] / "bot_main.py").read_text(encoding="utf-8")
         self.assertIn("async def on_group_message_create", source)
         self.assertIn('"GROUP_MESSAGE_CREATE"', source)
+        self.assertIn("should_reply_to_full_group_message", source)
 
     async def test_group_sender_serializes_event_reply_without_msg_id(self):
         captured = {}

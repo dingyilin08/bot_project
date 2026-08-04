@@ -148,6 +148,14 @@ class MyClient(botpy.Client):
         ):
             return
 
+        if (
+            event_type == "GROUP_MESSAGE_CREATE"
+            and not await should_reply_to_full_group_message(message.content, user_openid)
+        ):
+            await event_inbox.mark_processed(message.id)
+            _log.info("忽略非游戏指令的全量群消息: %s", message.id)
+            return
+
         send_content = await output_content(message.content, user_openid, qun_openid, request_id=message.id)
         send_content = await attach_rotating_reply_notice(send_content)
 

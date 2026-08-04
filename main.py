@@ -559,29 +559,36 @@ async def handle_webhook(request: Request):
                 msg_id = json_data["id"]
                 group_openid = json_data["group_openid"]
                 logging.info(f"群聊【{group_openid}】{user_openid}：{redact_sensitive_content(content)}")
-                # 发送群聊消息
-                result = await output_content(content, user_openid, group_openid, request_id=msg_id)
-
-                # 检查返回消息类型
-                if isinstance(result, dict):
-                    result_type = result.get("type")
-                    if result_type == "markdown_keyboard":
-                        # Markdown + Keyboard 消息
-                        send_result = await send_group_markdown_keyboard(
-                            group_openid, result["content"], result["keyboard"], msg_id
-                        )
-                    elif result_type == "markdown":
-                        # 纯 Markdown 消息
-                        send_result = await send_group_markdown(
-                            group_openid, result["content"], msg_id
-                        )
-                    else:
-                        # 普通文本消息
-                        send_result = await send_group_message(group_openid, result, msg_id)
+                should_reply = (
+                    payload.t == "GROUP_AT_MESSAGE_CREATE"
+                    or await should_reply_to_full_group_message(content, user_openid)
+                )
+                if not should_reply:
+                    logging.info("忽略非游戏指令的全量群消息: %s", msg_id)
                 else:
-                    send_result = await send_group_message(group_openid, result, msg_id)
-                if send_result is None:
-                    raise RuntimeError("群聊回复消息发送失败")
+                    # 发送群聊消息
+                    result = await output_content(content, user_openid, group_openid, request_id=msg_id)
+
+                    # 检查返回消息类型
+                    if isinstance(result, dict):
+                        result_type = result.get("type")
+                        if result_type == "markdown_keyboard":
+                            # Markdown + Keyboard 消息
+                            send_result = await send_group_markdown_keyboard(
+                                group_openid, result["content"], result["keyboard"], msg_id
+                            )
+                        elif result_type == "markdown":
+                            # 纯 Markdown 消息
+                            send_result = await send_group_markdown(
+                                group_openid, result["content"], msg_id
+                            )
+                        else:
+                            # 普通文本消息
+                            send_result = await send_group_message(group_openid, result, msg_id)
+                    else:
+                        send_result = await send_group_message(group_openid, result, msg_id)
+                    if send_result is None:
+                        raise RuntimeError("群聊回复消息发送失败")
 
             # 私聊消息处理
             elif payload.t == "C2C_MESSAGE_CREATE":

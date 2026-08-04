@@ -95,6 +95,26 @@ async def jiance(message):
     return zz, hz
 
 
+async def should_reply_to_full_group_message(message, user_openid=None):
+    """判断非 @ 的全量群消息是否应进入游戏指令路由。
+
+    全量群消息会包含普通聊天、表情和图片描述。只有可识别的游戏指令、菜单文件，
+    或已经进入管理员密令验证流程的输入才需要回复；其余内容应静默忽略。
+    """
+    raw_message = str(message or '').strip()
+    if not raw_message:
+        return False
+
+    if user_openid and user_openid in img_mode_pwd_pending:
+        return True
+
+    command, _ = await jiance(raw_message)
+    if command:
+        return True
+
+    return bool(await is_txt_exist(raw_message.upper()))
+
+
 async def is_txt_exist(file_name):
     """判断是否有txt文件，参数为txt文件名"""
     file_name = file_name.replace(" ", "")
