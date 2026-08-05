@@ -106,10 +106,13 @@ def render_home(data):
         _button("专属图鉴", spec["drop_name"] + "图鉴"),
         _button("专属祈愿 1次", "祈愿1次"),
         _button("专属祈愿 10次", "祈愿10次"),
+    ])
+    output += "\n\n" + " | ".join([
         _button("专属进阶", spec["growth_name"] + "进阶"),
         _button("专属组合 背包", "组合背包"),
         _button("专属排行榜", spec["rank"]["name"]),
     ])
+    output += "\n\n" + _button("专属养成菜单", "专属功能说明")
     return {"type": "markdown", "content": output}
 
 

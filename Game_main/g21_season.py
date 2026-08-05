@@ -349,8 +349,9 @@ async def season_home(uid, qz):
             for kind, item in equipped.items()
         ) + "\n"
     output += "\n进度来源：每日首次副本通关 +8、宗门委托 +5、世界 Boss +10。\n"
-    output += "奖励均为可佩戴外观，不提供永久数值。\n\n"
-    output += "<qqbot-cmd-input text='赛季任务' show='赛季任务' /> | <qqbot-cmd-input text='赛季奖励' show='领取奖励' /> | <qqbot-cmd-input text='赛季装扮' show='我的装扮' />"
+    output += "天象只影响新开启的 PVE 快照；奖励均为可佩戴外观，不提供永久数值。\n\n"
+    output += "<qqbot-cmd-input text='赛季任务' show='赛季任务' /> | <qqbot-cmd-input text='赛季奖励' show='领取奖励' /> | <qqbot-cmd-input text='赛季装扮' show='我的装扮' />\n\n"
+    output += "<qqbot-cmd-input text='活动菜单' show='返回活动菜单' />"
     return {"type": "markdown", "content": output}
 
 

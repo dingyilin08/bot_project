@@ -211,7 +211,8 @@ async def spirit_beast_home(uid, qz):
             output += ("**【出战中】**\n" if profile.pop("is_active") else "")
             output += "\n".join(_beast_lines(profile, origin_name)) + "\n\n"
     output += "<qqbot-cmd-input text='灵兽寻访' show='灵兽寻访' /> | <qqbot-cmd-input text='灵兽图鉴' show='灵兽图鉴' />\n\n"
-    output += "<qqbot-cmd-input text='灵兽出战 ' show='灵兽出战 灵兽编号*' />"
+    output += "<qqbot-cmd-input text='灵兽出战 ' show='灵兽出战 灵兽编号*' /> | <qqbot-cmd-input text='洞府' show='查看容量与升级' />\n\n"
+    output += "<qqbot-cmd-input text='灵兽菜单' show='灵兽功能说明' />"
     return {"type": "markdown", "content": output}
 
 

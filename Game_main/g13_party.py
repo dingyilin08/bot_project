@@ -67,8 +67,9 @@ async def _render_party(party_id, cursor, notice=""):
         output += "> 战斗结束前队伍已锁定，不可进退队伍或改变阵法。"
     else:
         output += "\n<qqbot-cmd-input text='队伍准备' show='确认准备' /> | <qqbot-cmd-input text='队伍离开' show='离开队伍' />\n\n"
-        output += "<qqbot-cmd-input text='布阵 ' show='布阵 阵法-位置*' />\n"
-        output += "示例：布阵 玄武-前列。秘境将在队伍全部准备且至少 2 人时开放。"
+        output += "<qqbot-cmd-input text='布阵 锋矢-前列' show='锋矢·前列伤害+8%' /> | <qqbot-cmd-input text='布阵 玄武-前列' show='玄武·全队防御+8%' />\n\n"
+        output += "<qqbot-cmd-input text='布阵 流云-后列' show='流云·全队速度+8%' /> | <qqbot-cmd-input text='队伍菜单' show='阵法与战斗说明' />\n"
+        output += "> 锋矢前列承伤 +5%；玄武速度 -3%；流云治疗 -5%。秘境将在队伍全部准备且至少 2 人时开放。"
     return {"type": "markdown", "content": output}
 
 

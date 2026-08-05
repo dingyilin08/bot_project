@@ -266,10 +266,10 @@ async def show_main_menu(uid, qz):
 async def show_spirit_beast_menu(uid, qz):
     """灵兽相关指令统一入口，避免主菜单出现操作级按钮。"""
     output = "##### 🐾 灵兽菜单\n\n"
-    output += "寻访灵兽、查看图鉴与设置出战灵兽都集中在此处；灵兽只从玩法中获得，不在商城出售。\n\n"
+    output += "出战灵兽会把基础灵契与本源协同冻结到新开启的 PVE 战斗。灵兽园容量由洞府等级决定，灵兽只从玩法中获得，不在商城出售。\n\n"
     output += "<qqbot-cmd-input text='灵兽' show='我的灵兽' /> | <qqbot-cmd-input text='灵兽图鉴' show='灵兽图鉴' />\n\n"
     output += "<qqbot-cmd-input text='灵兽寻访' show='每日寻访' /> | <qqbot-cmd-input text='灵兽出战 ' show='灵兽出战 编号*' />\n\n"
-    output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
+    output += "<qqbot-cmd-input text='洞府' show='查看灵兽园容量' /> | <qqbot-cmd-input text='主菜单' show='主菜单' />"
     return {"type": "markdown", "content": output}
 
 
@@ -277,9 +277,11 @@ async def show_spirit_beast_menu(uid, qz):
 async def show_estate_menu(uid, qz):
     """洞府建设与收取入口。洞府详情仍由原有“洞府”指令展示。"""
     output = "##### 🏡 洞府菜单\n\n"
-    output += "洞府提供离线灵气。每日可选一次稳健收取或冒险共鸣；建筑升级只消耗灵石。\n\n"
+    output += "每日可选一次稳健收取或冒险共鸣；建筑升级只消耗灵石。升级效果仅对之后新开的参悟、强化、寻访与 PVE 快照生效。\n\n"
     output += "<qqbot-cmd-input text='洞府' show='查看洞府' /> | <qqbot-cmd-input text='洞府收取 稳健' show='稳健收取' />\n\n"
     output += "<qqbot-cmd-input text='洞府收取 冒险' show='冒险共鸣' /> | <qqbot-cmd-input text='洞府升级 ' show='升级建筑*' />\n\n"
+    output += "<qqbot-cmd-input text='洞府升级 聚灵阵' show='聚灵阵·参悟减时' /> | <qqbot-cmd-input text='洞府升级 炼器台' show='炼器台·强化成功率' />\n\n"
+    output += "<qqbot-cmd-input text='洞府升级 灵兽园' show='灵兽园·扩容' /> | <qqbot-cmd-input text='洞府升级 藏经阁' show='藏经阁·PVE技能' />\n\n"
     output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
     return {"type": "markdown", "content": output}
 
@@ -288,12 +290,15 @@ async def show_estate_menu(uid, qz):
 async def show_party_menu(uid, qz):
     """群协作系统入口：队伍、阵法与三千道途。"""
     output = "##### 👥 队伍菜单\n\n"
-    output += "队伍与三千道途仅限群聊使用。先创建或加入队伍，再布阵并让全员准备。\n\n"
+    output += "队伍与三千道途仅限群聊使用。先创建或加入队伍，再布阵并让全员准备；阵法与站位会直接影响队伍 PVE 的伤害、防御、速度、治疗与承伤。\n\n"
     output += "<qqbot-cmd-input text='队伍' show='查看队伍' /> | <qqbot-cmd-input text='队伍创建' show='创建队伍' />\n\n"
     output += "<qqbot-cmd-input text='队伍加入 ' show='加入队伍 队伍码*' /> | <qqbot-cmd-input text='队伍准备' show='确认准备' />\n\n"
-    output += "<qqbot-cmd-input text='布阵 ' show='布阵 阵法-位置*' /> | <qqbot-cmd-input text='队伍离开' show='离开队伍' />\n\n"
+    output += "<qqbot-cmd-input text='布阵 锋矢-前列' show='锋矢·前列伤害+8%' /> | <qqbot-cmd-input text='布阵 玄武-前列' show='玄武·防御+8%' />\n\n"
+    output += "<qqbot-cmd-input text='布阵 流云-后列' show='流云·速度+8%' /> | <qqbot-cmd-input text='队伍离开' show='离开队伍' />\n\n"
     output += "<qqbot-cmd-input text='道途' show='三千道途' /> | <qqbot-cmd-input text='道途开启' show='队长开启道途' />\n\n"
     output += "<qqbot-cmd-input text='队伍战斗' show='开启队伍战斗' /> | <qqbot-cmd-input text='队伍战斗状态' show='队伍战斗状态' />\n\n"
+    output += "<qqbot-cmd-input text='队伍战斗行动 普攻' show='战斗普攻' /> | <qqbot-cmd-input text='队伍战斗行动 调息' show='调息回法' />\n\n"
+    output += "<qqbot-cmd-input text='队伍战斗行动 技能 1' show='施放技能1' /> | <qqbot-cmd-input text='队伍战斗行动 防御' show='防御' />\n\n"
     output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
     return {"type": "markdown", "content": output}
 
@@ -302,9 +307,11 @@ async def show_party_menu(uid, qz):
 async def show_sect_menu(uid, qz):
     """宗门与师徒的聚合入口。"""
     output = "##### 🏯 宗门菜单\n\n"
-    output += "完成每日委托获得贡献，投票决定下周 PVE 便利研究；师徒之间不转移任何装备或货币。\n\n"
+    output += "完成每日委托获得贡献。本周投票将在下周生效：丹道增产、阵法队伍伤害、御器强化折扣、秘境额外材料；师徒之间不转移任何装备或货币。\n\n"
     output += "<qqbot-cmd-input text='宗门' show='我的宗门' /> | <qqbot-cmd-input text='宗门列表' show='宗门列表' />\n\n"
     output += "<qqbot-cmd-input text='宗门创建 ' show='创建宗门*' /> | <qqbot-cmd-input text='宗门委托' show='宗门委托' />\n\n"
+    output += "<qqbot-cmd-input text='宗门投票 丹道' show='投票·丹道增产' /> | <qqbot-cmd-input text='宗门投票 阵法' show='投票·队伍伤害' />\n\n"
+    output += "<qqbot-cmd-input text='宗门投票 御器' show='投票·强化折扣' /> | <qqbot-cmd-input text='宗门投票 秘境' show='投票·材料增产' />\n\n"
     output += "<qqbot-cmd-input text='师徒进度' show='师徒进度' /> | <qqbot-cmd-input text='师徒修行' show='师徒修行' />\n\n"
     output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
     return {"type": "markdown", "content": output}
@@ -314,9 +321,10 @@ async def show_sect_menu(uid, qz):
 async def show_role_special_menu(uid, qz):
     """角色专属战斗养成入口；具体内容随当前出战角色切换。"""
     output = "##### ⚔️ 专属养成菜单\n\n"
-    output += "当前出战角色的专属材料、图鉴、进阶、组合与排行均在此处；先在副本或世界 Boss 中获得对应养成资源。\n\n"
+    output += "当前出战角色的专属材料、图鉴、进阶、组合与排行均在此处；装备的一组组合会随新创建的 PVE 快照生效。\n\n"
     output += "<qqbot-cmd-input text='角色养成' show='当前角色养成' /> | <qqbot-cmd-input text='专属图鉴' show='专属图鉴' />\n\n"
-    output += "<qqbot-cmd-input text='专属进阶' show='专属进阶' /> | <qqbot-cmd-input text='专属排行榜' show='专属排行榜' />\n\n"
+    output += "<qqbot-cmd-input text='专属进阶' show='专属进阶' /> | <qqbot-cmd-input text='专属组合 背包' show='组合背包' />\n\n"
+    output += "<qqbot-cmd-input text='专属组合 ' show='创建组合*' /> | <qqbot-cmd-input text='专属排行榜' show='专属排行榜' />\n\n"
     output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
     return {"type": "markdown", "content": output}
 
@@ -352,10 +360,11 @@ async def show_resource_menu(uid, qz):
 async def show_activity_menu(uid, qz):
     """周期性挑战与长期目标的聚合入口。"""
     output = "##### 🌌 活动菜单\n\n"
-    output += "每日签到积累七日与三十日奖励；世界 Boss 提供贡献与专属感悟，赛季天象会影响 PVE，并可解锁可佩戴装扮。\n\n"
+    output += "每日签到积累七日与三十日奖励；世界 Boss 提供贡献与专属感悟。赛季天象会影响新开启的 PVE，装扮只改变展示。\n\n"
     output += "<qqbot-cmd-input text='签到' show='每日签到' /> | <qqbot-cmd-input text='签到记录' show='签到记录' />\n\n"
     output += "<qqbot-cmd-input text='世界BOSS' show='世界Boss' /> | <qqbot-cmd-input text='赛季' show='赛季主页' />\n\n"
     output += "<qqbot-cmd-input text='世界排行' show='世界排行' /> | <qqbot-cmd-input text='赛季任务' show='赛季任务' /> | <qqbot-cmd-input text='赛季装扮' show='赛季装扮' />\n\n"
+    output += "<qqbot-cmd-input text='赛季奖励' show='领取赛季奖励' /> | <qqbot-cmd-input text='因果印记' show='查看因果印记' />\n\n"
     output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
     return {"type": "markdown", "content": output}
 

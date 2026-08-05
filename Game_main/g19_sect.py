@@ -160,8 +160,10 @@ async def _render_sect(sect, cursor, notice=""):
         output += "本周生效：无（上周没有有效投票）\n"
     if notice:
         output += f"\n> {notice}\n"
-    output += "\n<qqbot-cmd-input text='宗门委托' show='完成宗门委托' /> | <qqbot-cmd-input text='宗门投票 丹道' show='投票：丹道' />\n"
-    output += "<qqbot-cmd-input text='师徒进度' show='师徒进度' /> | <qqbot-cmd-input text='宗门列表' show='宗门列表' />"
+    output += "\n<qqbot-cmd-input text='宗门委托' show='完成宗门委托' /> | <qqbot-cmd-input text='宗门投票 丹道' show='投票·丹道增产' />\n\n"
+    output += "<qqbot-cmd-input text='宗门投票 阵法' show='投票·队伍伤害' /> | <qqbot-cmd-input text='宗门投票 御器' show='投票·强化折扣' />\n\n"
+    output += "<qqbot-cmd-input text='宗门投票 秘境' show='投票·材料增产' /> | <qqbot-cmd-input text='师徒进度' show='师徒进度' />\n\n"
+    output += "<qqbot-cmd-input text='宗门列表' show='宗门列表' /> | <qqbot-cmd-input text='宗门菜单' show='宗门说明' />"
     return {"type": "markdown", "content": output}
 
 
