@@ -345,7 +345,7 @@ async def create_monster_skill(skill_id):
 
                 if result:
                     # 根据buff_target确定target_type (1:我方/self, 2:敌方/enemy)
-                    buff_target = normalize_buff_target(result[10])
+                    buff_target = normalize_buff_target(result[10], buff_type=result[7])
                     target_type = "enemy" if buff_target == 2 else "self"
 
                     # Boss技能设置5回合冷却
@@ -1563,7 +1563,10 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                             """, (data_skill_id,))
                             skill_result = await cursor.fetchone()
                             if skill_result:
-                                buff_target = normalize_buff_target(skill_result[10])
+                                buff_target = normalize_buff_target(
+                                    skill_result[10],
+                                    buff_type=skill_result[7],
+                                )
                                 target_type = "enemy" if buff_target == 2 else "self"
 
                                 player_skills.append(Skill(
@@ -1612,7 +1615,10 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                                     buff_type = buff_result[0]
                                     buff_value = buff_result[1] or 0
                                     buff_duration = buff_result[2] or 0
-                                    buff_target = normalize_buff_target(buff_result[3])
+                                    buff_target = normalize_buff_target(
+                                        buff_result[3],
+                                        buff_type=buff_type,
+                                    )
                                     buff_desc = buff_result[4] or ""
                                     buff_name_result = buff_result[5] or ""
 
@@ -1640,7 +1646,10 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
             # 注入本源技能（独立于普通技能槽）
             benyuan_skills = await get_role_benyuan_skills_for_battle(uid, role_id, role_name, cursor)
             for by_skill in benyuan_skills:
-                buff_target = normalize_buff_target(by_skill.get('buff_target'))
+                buff_target = normalize_buff_target(
+                    by_skill.get('buff_target'),
+                    buff_type=by_skill.get('buff_type'),
+                )
                 target_type = "enemy" if buff_target == 2 else "self"
                 player_skills.append(Skill(
                     id=by_skill['id'],

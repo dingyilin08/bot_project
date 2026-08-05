@@ -204,7 +204,7 @@ async def create_monster_skill(skill_id):
                     buff_type=result[7],
                     buff_value=result[8] or 0,
                     buff_duration=result[9] or 0,
-                    buff_target=normalize_buff_target(result[10]),
+                    buff_target=normalize_buff_target(result[10], buff_type=result[7]),
                 )
             return None
 

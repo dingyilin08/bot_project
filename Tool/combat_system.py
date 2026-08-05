@@ -373,6 +373,13 @@ class Skill:
 
         # 应用BUFF效果（只有技能命中时才应用，闪避不获得buff）
         if self.buff_type and not result.get('is_dodge', False):
+            # 执行前再次按语义归一化，防止旧快照或外围逻辑在构造后改写目标。
+            self.buff_type = normalize_skill_buff_type(self.buff_type, self.name)
+            self.buff_target = normalize_buff_target(
+                self.buff_target,
+                buff_type=self.buff_type,
+            )
+            self.target_type = "self" if self.buff_target == 1 else "enemy"
             target = attacker if self.buff_target == 1 else defender
             buff = Buff(self.buff_type, self.buff_value, self.buff_duration, self.name, self.buff_name)
             if target.add_buff(buff) is not False:
