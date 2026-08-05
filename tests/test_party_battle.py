@@ -179,6 +179,59 @@ class PartyBattleTests(unittest.TestCase):
         self.assertEqual(caster["mana"], 80)
         self.assertEqual(caster["cooldowns"], {"7": 2})
 
+    def test_positive_skill_buff_ignores_stale_enemy_target(self):
+        skill = {
+            "id": 71,
+            "slot": 1,
+            "name": "草字剑诀",
+            "skill_type": 1,
+            "value": 1,
+            "is_percent": 0,
+            "buff_type": "crit_dmg_up",
+            "buff_value": 60,
+            "buff_duration": 3,
+            "buff_target": 2,
+        }
+        member = _member(1, "石昊", skills=[skill], speed=30)
+        enemy = {
+            "id": "enemy",
+            "name": "怪物",
+            "position": "前列",
+            "hp": 1000,
+            "max_hp": 1000,
+            "attack": 1,
+            "defense": 0,
+            "speed": 1,
+            "buffs": [],
+        }
+        members, enemies, _ = resolve_party_round(
+            [member],
+            {"1": {"type": "SKILL", "payload": {"skill_slot": 1}}},
+            [enemy],
+            "self-buff",
+            "锋矢",
+        )
+        self.assertIn("crit_dmg_up", {buff["type"] for buff in members[0]["buffs"]})
+        self.assertNotIn("crit_dmg_up", {buff["type"] for buff in enemies[0]["buffs"]})
+
+        skill.update({
+            "id": 70,
+            "name": "至尊骨",
+            "skill_type": 3,
+            "buff_type": "suppress",
+            "buff_value": 25,
+        })
+        member = _member(1, "石昊", hp=50, skills=[skill], speed=30)
+        members, enemies, _ = resolve_party_round(
+            [member],
+            {"1": {"type": "SKILL", "payload": {"skill_slot": 1}}},
+            [enemy],
+            "supreme-bone",
+            "锋矢",
+        )
+        self.assertIn("all_stat_up", {buff["type"] for buff in members[0]["buffs"]})
+        self.assertNotIn("suppress", {buff["type"] for buff in enemies[0]["buffs"]})
+
     def test_enemy_and_players_share_speed_order_with_stable_ids(self):
         member = _member(1, "慢修", speed=10)
         enemy = {

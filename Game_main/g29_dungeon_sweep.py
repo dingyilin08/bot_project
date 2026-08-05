@@ -19,7 +19,10 @@ from Game_main.g6_dungeon import (
     ensure_dungeon_clear_schema,
 )
 from Game_main.g7_equip import QUALITY_DROP_RATE
-from Game_main.g10_shop import DUNGEON_SWEEP_TICKET_ITEM_ID
+from Game_main.g10_shop import (
+    DUNGEON_SWEEP_TICKET_DAILY_LIMIT,
+    DUNGEON_SWEEP_TICKET_ITEM_ID,
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -392,7 +395,7 @@ async def sweep_dungeon(uid, qz, dungeon_id, request_id=None):
                     tickets = int((ticket_row or [0])[0] or 0)
                     if tickets <= 0:
                         raise DungeonSweepError(
-                            "扫荡副本券不足。商城售价800灵石，每日限购10张。\n"
+                            f"扫荡副本券不足。商城售价800灵石，每日限购{DUNGEON_SWEEP_TICKET_DAILY_LIMIT}张。\n"
                             "<qqbot-cmd-input text='购买商品 扫荡副本券' show='购买扫荡副本券' />"
                         )
 

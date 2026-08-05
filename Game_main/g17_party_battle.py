@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from func.pd_func import reg_xz_func
 from sql.mysql import connect_mysql
+from Tool.combat_system import normalize_buff_target, normalize_skill_buff_type
 
 
 SCHEMA_VERSION = 2
@@ -515,6 +516,13 @@ def _execute_skill(member, action, members, enemies, rng, formation, logs, round
                 "buff_name": skill.get("name"),
             }
         )
+    normalized_buff_type = normalize_skill_buff_type(
+        buff_skill.get("buff_type"),
+        skill.get("name"),
+    )
+    if normalized_buff_type != buff_skill.get("buff_type"):
+        buff_skill = dict(buff_skill)
+        buff_skill["buff_type"] = normalized_buff_type
     beast, synergy = _spirit_synergy(member)
     buff_type = str(buff_skill.get("buff_type") or "")
     if (
@@ -551,7 +559,11 @@ def _execute_skill(member, action, members, enemies, rng, formation, logs, round
             buff_skill = dict(buff_skill)
             buff_skill["buff_value"] = int(buff_skill.get("buff_value", 0) or 0) + shield_bonus
             logs.append(f"{member['name']}触发「{synergy.get('label', '掌天协同')}」。")
-    buff_target = member if int(buff_skill.get("buff_target", 2) or 2) == 1 else target
+    target_code = normalize_buff_target(
+        buff_skill.get("buff_target"),
+        buff_type=buff_type,
+    )
+    buff_target = member if target_code == 1 else target
     if buff_target and _append_buff(buff_target, buff_skill):
         logs.append(f"{buff_target['name']}获得「{skill.get('buff_name') or skill['name']}」效果。")
 
@@ -789,6 +801,7 @@ async def _load_skill(cursor, uid, skill_instance_id, slot, effect_bonus_bp=0):
         if detail:
             buff_type, buff_value, buff_duration, buff_target, buff_name = detail
 
+    buff_type = normalize_skill_buff_type(buff_type, skill_name)
     skill_effect_bp = BASIS_POINTS + max(0, min(450, int(effect_bonus_bp or 0)))
     return {
         "id": int(user_skill_id),
@@ -802,7 +815,7 @@ async def _load_skill(cursor, uid, skill_instance_id, slot, effect_bonus_bp=0):
         "buff_type": buff_type,
         "buff_value": apply_basis_points(_to_int(buff_value), skill_effect_bp),
         "buff_duration": max(0, _to_int(buff_duration)),
-        "buff_target": 1 if _to_int(buff_target, 2) in (0, 1) else 2,
+        "buff_target": normalize_buff_target(buff_target, buff_type=buff_type),
         "buff_name": str(buff_name or ""),
     }
 

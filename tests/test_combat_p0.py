@@ -145,6 +145,48 @@ class P0CombatRulesTests(unittest.TestCase):
         self.assertEqual(1, skill.buff_target)
         self.assertEqual("self", skill.target_type)
 
+    def test_positive_buff_semantics_override_wrong_enemy_target(self):
+        self_buff = Skill(
+            71, "草字剑诀", 1, "enemy", 20, 0,
+            buff_type="crit_dmg_up", buff_value=60, buff_duration=3, buff_target=2,
+        )
+        manager = CombatManager(
+            entity("石昊", skills=[self_buff]),
+            entity("怪物", hp=1000, speed=1, entity_type="normal"),
+        )
+        with patch("Tool.combat_system.random.random", return_value=0.5):
+            manager.resolve_round({"action_type": "SKILL", "skill_id": 71})
+        self.assertEqual(1, self_buff.buff_target)
+        self.assertTrue(manager.player.has_buff("crit_dmg_up"))
+        self.assertFalse(manager.enemy.has_buff("crit_dmg_up"))
+
+        legacy_supreme_bone = Skill(
+            70, "至尊骨", 3, "enemy", 30, 1,
+            buff_type="suppress", buff_value=25, buff_duration=3, buff_target=2,
+        )
+        self.assertEqual("all_stat_up", legacy_supreme_bone.buff_type)
+        self.assertEqual(1, legacy_supreme_bone.buff_target)
+
+    def test_zhu_yan_special_passive_buffs_player_only(self):
+        player = entity("石昊")
+        player.role_data["role_special"] = {
+            "role_name": "石昊",
+            "passive": {
+                "id": 29,
+                "name": "朱厌宝术",
+                "effect": {
+                    "type": "PLAYER_DEFENSE_UP",
+                    "value": 12,
+                    "duration": 3,
+                    "trigger": "BATTLE_START",
+                },
+            },
+        }
+        manager = CombatManager(player, entity("怪物", entity_type="normal"))
+        manager.initialize()
+        self.assertTrue(manager.player.has_buff("defense_up"))
+        self.assertFalse(manager.enemy.has_buff("defense_up"))
+
     def test_boss_telegraph_can_be_broken_by_counter_element(self):
         metal = attack_skill(1, "Metal Art", "METAL")
         manager = CombatManager(

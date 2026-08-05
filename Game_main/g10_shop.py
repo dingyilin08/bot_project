@@ -14,6 +14,7 @@ DAILY_CHALLENGE_CAP = 40
 STAMINA_POTION_ITEM_ID = 209
 STAMINA_POTION_RESTORE = 5
 DUNGEON_SWEEP_TICKET_ITEM_ID = 211
+DUNGEON_SWEEP_TICKET_DAILY_LIMIT = 20
 
 # 商品价格以当前副本、药园和炼丹的灵石产出为基准；商品均可由后续运营在
 # data_shop_item 表中调整，不在业务逻辑中硬编码价格。
@@ -31,7 +32,7 @@ DEFAULT_SHOP_ITEMS = (
         "item_id": DUNGEON_SWEEP_TICKET_ITEM_ID,
         "price": 800,
         "category": "历练",
-        "daily_limit": 10,
+        "daily_limit": DUNGEON_SWEEP_TICKET_DAILY_LIMIT,
         "description": "消耗1张可一键扫荡已通关副本，同时消耗1次副本历练次数。",
     },
     {

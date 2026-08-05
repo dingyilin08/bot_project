@@ -117,8 +117,44 @@ def _format_lore_buff_name(buff_type: str, skill_name: str = "", custom_name: st
     return buff_cn
 
 
-def normalize_buff_target(value, default: int = 2) -> int:
-    """兼容历史技能数据：0、1 均表示自身，2 表示敌方。"""
+SELF_BUFF_TYPES = frozenset({
+    "attack_up", "gongji_up", "defense_up", "fangyu_up",
+    "speed_up", "sudu_up", "crit_up", "baoji_up",
+    "crit_dmg_up", "baoshang_up", "dodge_up", "shanbi_up",
+    "hit_up", "mingzhong_up", "pierce_up", "pofang_up",
+    "all_stat_up", "heal", "heal_over_time", "hp_up", "regeneration",
+    "lifesteal", "invincible", "untargetable", "shield", "gedang",
+    "reflect", "defense_ignore", "see_through", "clone", "resurrect",
+    "immortal", "god_mode", "wudi", "immune", "transform",
+})
+
+ENEMY_BUFF_TYPES = frozenset({
+    "attack_down", "gongji_down", "defense_down", "fangyu_down",
+    "speed_down", "sudu_down", "slow", "slow_down",
+    "crit_down", "baoji_down", "dodge_down", "shanbi_down",
+    "hit_down", "mingzhong_down", "pierce_down", "pofang_down",
+    "damage_over_time", "hp_down", "burning", "poison", "healing_down",
+    "stun", "un_action", "unaction_fy_down", "stun_defense_down",
+    "silence", "disarm", "confusion", "paralyze", "blind", "shackle",
+    "rooted", "wet", "suppress", "death_sentence", "shock", "mana_burn",
+})
+
+
+def normalize_skill_buff_type(buff_type, skill_name: str = ""):
+    """兼容迁移前已经写入战斗快照的错误技能配置。"""
+    normalized_type = str(buff_type or "").strip().lower()
+    if str(skill_name or "").strip() == "至尊骨" and normalized_type == "suppress":
+        return "all_stat_up"
+    return buff_type
+
+
+def normalize_buff_target(value, default: int = 2, buff_type: str = None) -> int:
+    """按 Buff 语义确定目标，并兼容历史数据中的 0/1 自身标记。"""
+    normalized_type = str(buff_type or "").strip().lower()
+    if normalized_type in SELF_BUFF_TYPES:
+        return 1
+    if normalized_type in ENEMY_BUFF_TYPES:
+        return 2
     if value is None:
         return default
     try:
@@ -289,7 +325,8 @@ class Skill:
 
     def __post_init__(self):
         # 旧 data_skill 曾以 0 表示“自身”。统一标准化，避免增益 Buff 落到敌方。
-        self.buff_target = normalize_buff_target(self.buff_target)
+        self.buff_type = normalize_skill_buff_type(self.buff_type, self.name)
+        self.buff_target = normalize_buff_target(self.buff_target, buff_type=self.buff_type)
         if self.buff_type:
             self.target_type = "enemy" if self.buff_target == 2 else "self"
         self.effect_bonus_bp = max(0, min(500, int(self.effect_bonus_bp or 0)))

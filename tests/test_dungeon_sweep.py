@@ -1,7 +1,11 @@
 import unittest
 
 import output_main
-from Game_main.g10_shop import DEFAULT_SHOP_ITEMS, DUNGEON_SWEEP_TICKET_ITEM_ID
+from Game_main.g10_shop import (
+    DEFAULT_SHOP_ITEMS,
+    DUNGEON_SWEEP_TICKET_DAILY_LIMIT,
+    DUNGEON_SWEEP_TICKET_ITEM_ID,
+)
 from Game_main.g29_dungeon_sweep import (
     build_sweep_reward_plan,
     calculate_full_clear_currency,
@@ -18,7 +22,8 @@ class DungeonSweepTests(unittest.TestCase):
         )
         self.assertEqual(ticket["name"], "扫荡副本券")
         self.assertEqual(ticket["price"], 800)
-        self.assertEqual(ticket["daily_limit"], 10)
+        self.assertEqual(ticket["daily_limit"], DUNGEON_SWEEP_TICKET_DAILY_LIMIT)
+        self.assertEqual(ticket["daily_limit"], 20)
 
     def test_parse_dungeon_id_only_accepts_positive_integer(self):
         self.assertEqual(parse_dungeon_id(" 12 "), 12)

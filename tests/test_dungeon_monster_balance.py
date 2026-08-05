@@ -5,12 +5,17 @@ from pathlib import Path
 from Game_main.g6_dungeon import (
     DUNGEON_BASE_STATS,
     apply_solo_pve_stat_effects,
+    calculate_player_battle_hp,
     generate_monster_attr_by_ratio,
     solo_pve_effect_snapshot,
 )
 
 
 class DungeonMonsterBalanceTests(unittest.TestCase):
+    def test_inherited_hp_does_not_reduce_battle_max_hp(self):
+        self.assertEqual(calculate_player_battle_hp(10_000, 0.9), (10_000, 9_000))
+        self.assertEqual(calculate_player_battle_hp(10_000, 0.1), (10_000, 3_000))
+
     def test_monster_hp_is_deterministic_and_independent_of_player_attributes(self):
         monster = {"hp_ratio": 1.2, "atk_ratio": 1.0, "def_ratio": 1.0}
         first = asyncio.run(generate_monster_attr_by_ratio(30, monster, 30, 1, {"qixue": 1}))
@@ -57,6 +62,12 @@ class DungeonMonsterBalanceTests(unittest.TestCase):
         self.assertIn("WHEN 50 THEN 1.55", sql)
         self.assertIn("LEAST(m.atk_ratio, 1.50)", sql)
         self.assertIn("d.min_level >= 60", sql)
+
+    def test_gameplay_bugfix_migration_repairs_buff_target_and_ticket_limit(self):
+        sql = (Path(__file__).resolve().parents[1] / "数据库源文件" / "p4_gameplay_bugfixes_20260805.sql").read_text(encoding="utf-8")
+        self.assertIn("buff_type = 'all_stat_up'", sql)
+        self.assertIn("buff_target = 1", sql)
+        self.assertIn("daily_limit = 20", sql)
 
     def test_causal_and_season_effects_are_frozen_without_scaling_monsters(self):
         effect = solo_pve_effect_snapshot(

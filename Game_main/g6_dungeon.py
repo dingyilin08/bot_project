@@ -80,6 +80,19 @@ def apply_solo_pve_stat_effects(attack, defense, speed, effect_snapshot):
         max(1, int(speed)) * (10_000 + int(effect_snapshot.get("speed_bp", 0))) // 10_000,
     )
 
+
+def calculate_player_battle_hp(final_qixue, inherited_ratio):
+    """保留完整最大生命，仅用进度比例恢复当前生命。"""
+    max_hp = max(1, int(final_qixue or 0))
+    try:
+        ratio = float(inherited_ratio)
+    except (TypeError, ValueError):
+        ratio = 1.0
+    ratio = max(0.0, min(1.0, ratio))
+    current_hp = max(int(max_hp * ratio), int(max_hp * 0.3))
+    return max_hp, min(max_hp, current_hp)
+
+
 # ================================
 # 配置参数
 # ================================
@@ -1494,14 +1507,15 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                 pve_effect_snapshot["sources"].append("宗门秘境研究")
 
             # 应用血量继承
-            hp_ratio = progress['player_hp_ratio']
-            current_qixue = int(final_qixue * hp_ratio)
-            current_qixue = max(current_qixue, int(final_qixue * 0.3))
+            battle_max_qixue, current_qixue = calculate_player_battle_hp(
+                final_qixue,
+                progress['player_hp_ratio'],
+            )
 
             # 构建玩家战斗数据
             player_role_data = {
                 'name': role_name,
-                'qixue': current_qixue,
+                'qixue': battle_max_qixue,
                 'gongji': final_gongji,
                 'fangyu': final_fangyu,
                 'sudu': final_sudu,
@@ -1671,6 +1685,7 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
 
     # 创建战斗实体（不占用数据库连接）
     player_entity = CombatEntity(role_name, player_role_data, player_skills)
+    player_entity.hp = current_qixue
     # P1：出战灵兽以可序列化 Buff 注入战斗快照，重启后不会丢失效果。
     from Game_main.g12_spirit_beast import apply_beast_snapshot_to_entity
     active_beast = apply_beast_snapshot_to_entity(active_beast_snapshot, player_entity)

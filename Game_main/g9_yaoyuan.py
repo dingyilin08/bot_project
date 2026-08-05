@@ -46,6 +46,15 @@ ROLE_ALL_ATTRS = ROLE_BASE_ATTRS | ROLE_RATE_ATTRS
 _YAOYUAN_SCHEMA_READY = False
 
 
+async def _record_successful_plant(uid):
+    """播种提交后统一记录新手札记和日常任务进度。"""
+    from Game_main.g16_onboarding import record_onboarding_event
+    from Game_main.g25_daily_tasks import record_daily_event
+
+    await record_onboarding_event(uid, "FARM")
+    await record_daily_event(uid, "FARM")
+
+
 def _json_dumps(obj):
     return json.dumps(obj, ensure_ascii=False)
 
@@ -1234,10 +1243,7 @@ async def bo_zhong(uid, qz, param):
             slots[plot_no - 1] = slot
             await _save_slots(uid, slots, cursor, "user_yaotian", "yt", [plot_no])
             await conn.commit()
-            from Game_main.g16_onboarding import record_onboarding_event
-            await record_onboarding_event(uid, "FARM")
-            from Game_main.g25_daily_tasks import record_daily_event
-            await record_daily_event(uid, "FARM")
+            await _record_successful_plant(uid)
 
             lines = []
             lines.append("##### 播种成功")
@@ -1300,6 +1306,7 @@ async def yj_bozhong(uid, qz, seed_name):
                 (uid, seed["id"]),
             )
             await conn.commit()
+            await _record_successful_plant(uid)
 
             lines = []
             lines.append("##### 一键播种完成")
