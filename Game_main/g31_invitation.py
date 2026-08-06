@@ -126,7 +126,7 @@ async def bind_invitation_code(cursor, invitee_uid, invite_code):
     if inviter_uid == int(invitee_uid):
         raise InvitationError("不可填写自己的邀请码。")
     await cursor.execute(
-        "SELECT inviter_uid FROM user_invitation_profile WHERE uid = %s FOR UPDATE",
+        "SELECT inviter_uid, reward_eligible FROM user_invitation_profile WHERE uid = %s FOR UPDATE",
         (invitee_uid,),
     )
     profile = await cursor.fetchone()
@@ -134,6 +134,8 @@ async def bind_invitation_code(cursor, invitee_uid, invite_code):
         raise InvitationError("邀请码档案初始化失败，请稍后重试。")
     if profile[0] is not None:
         raise InvitationError("当前账号已绑定邀请码，不能重复填写。")
+    if not profile[1]:
+        raise InvitationError("仅本次功能上线后注册的新账号可填写邀请码。")
     await cursor.execute(
         """UPDATE user_invitation_profile
            SET inviter_uid = %s, reward_eligible = 1, bound_at = CURRENT_TIMESTAMP
@@ -206,7 +208,8 @@ async def invitation_menu(uid, qz):
         "##### ✉️ 道友邀请\n\n"
         "> 分享你的八位邀请码，邀请新道友注册时填写。双方可领取注册礼；新道友完成全部问道札记后，双方还能领取圆满礼。\n\n"
         + _buttons(("我的邀请码", "我的邀请码"), ("邀请列表", "邀请列表"), ("领取邀请奖励", "领取奖励"))
-        + "\n\n> 新道友注册格式：`注册游戏 玩家名 邀请码`。\n\n"
+        + "\n\n> 新道友注册格式：`注册游戏 玩家名 邀请码`；注册时忘填可在此补填一次。\n\n"
+        + "<qqbot-cmd-input text='填写邀请码 ' show='填写邀请码*' />\n\n"
         + _buttons(("活动菜单", "活动菜单"), ("主菜单", "主菜单"))
     )
     return {"type": "markdown", "content": content}
@@ -233,6 +236,25 @@ async def my_invitation_code(uid, qz):
         + _buttons(("邀请列表", "邀请列表"), ("领取邀请奖励", "领取奖励"), ("主菜单", "主菜单"))
     )
     return {"type": "markdown", "content": content}
+
+
+@pd_reg_func
+async def fill_invitation_code(uid, qz, invite_code):
+    if not str(invite_code or "").strip():
+        return {"type": "markdown", "content": "请填写 8 位邀请码，例如：填写邀请码 ABCDEFGH。"}
+    async with connect_mysql() as conn:
+        try:
+            async with conn.cursor() as cursor:
+                await ensure_legacy_invitation_profiles(cursor)
+                await bind_invitation_code(cursor, uid, invite_code)
+            await conn.commit()
+        except InvitationError as exc:
+            await conn.rollback()
+            return {"type": "markdown", "content": f"##### 邀请码未绑定\n\n{exc}\n\n" + _buttons(("邀请菜单", "邀请菜单"), ("我的邀请码", "我的邀请码"))}
+        except Exception:
+            await conn.rollback()
+            raise
+    return {"type": "markdown", "content": "##### ✅ 邀请码绑定成功\n\n双方各有 **500 仙玉 + 1600 灵石** 可领取；完成全部问道札记后，双方再各得 **1000 仙玉**。\n\n" + _buttons(("领取邀请奖励", "领取奖励"), ("邀请菜单", "邀请菜单"))}
 
 
 @pd_reg_func

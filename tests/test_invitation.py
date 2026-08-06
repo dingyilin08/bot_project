@@ -33,6 +33,7 @@ class InvitationRuleTests(unittest.IsolatedAsyncioTestCase):
     async def test_invitation_commands_and_registration_keep_arguments(self):
         for command in ("邀请菜单", "我的邀请码", "邀请列表", "领取邀请奖励"):
             self.assertEqual(await jiance(command), (command, ""))
+        self.assertEqual(await jiance("填写邀请码 abcdefgh"), ("填写邀请码", "ABCDEFGH"))
         self.assertEqual(
             await jiance("注册游戏 云澈 ABCDEFGH"),
             ("注册游戏", "云澈 ABCDEFGH"),
@@ -42,7 +43,7 @@ class InvitationRuleTests(unittest.IsolatedAsyncioTestCase):
         activity = (await show_activity_menu.__wrapped__(1, ""))["content"]
         self.assertIn("邀请菜单", activity)
         invitation = (await invitation_menu.__wrapped__(1, ""))["content"]
-        for command in ("我的邀请码", "邀请列表", "领取邀请奖励"):
+        for command in ("我的邀请码", "填写邀请码 ", "邀请列表", "领取邀请奖励"):
             self.assertIn(command, invitation)
         update_log = (await show_update_log(1))["content"]
         self.assertIn("v1.25", update_log)

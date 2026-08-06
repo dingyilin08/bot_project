@@ -53,6 +53,7 @@ youhouzhui += '|日常领取'
 youhouzhui += '|扫荡副本'
 youhouzhui += '|技能命名'
 youhouzhui += '|赛季佩戴'
+youhouzhui += '|填写邀请码'
 youhouzhui += '|坊市上架|坊市购买|坊市收购|坊市出售|坊市底价|坊市列表|坊市交易记录|我的摊位|撤摊|坊市'
 youhouzhui += '|GM世界消息添加|GM世界消息修改|GM世界消息启用|GM世界消息停用|GM世界消息删除'
 youhouzhui += '|GM全服发放灵石|GM全服发放仙玉'
@@ -621,6 +622,8 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         return await signin_reward_preview(uid)
     elif con_arr0 == '邀请菜单':
         return await invitation_menu(uid)
+    elif con_arr0 == '填写邀请码':
+        return await fill_invitation_code(uid, con_arr1)
     elif con_arr0 == '我的邀请码':
         return await my_invitation_code(uid)
     elif con_arr0 == '邀请列表':
