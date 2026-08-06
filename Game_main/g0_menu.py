@@ -61,6 +61,12 @@ MENU_CONFIG = {
         "description": "购买体力、药园与炼丹便利道具",
         "commands": ["商城"]
     },
+    "market": {
+        "name": "玩家坊市",
+        "icon": "🏮",
+        "description": "全服道友之间的托管挂单与收购交易",
+        "commands": ["坊市"]
+    },
     "spirit_beast": {
         "name": "灵兽园",
         "icon": "🐾",
@@ -81,9 +87,9 @@ MAIN_MENU_SECTIONS = (
     ),
     (
         "⚔️ 战斗与资源",
-        "副本挑战、背包交易、药园炼丹、灵兽与洞府生产。",
+        "副本挑战、背包与坊市交易、药园炼丹、灵兽与洞府生产。",
         (("副本菜单", "副本菜单"), ("资源菜单", "资源菜单"), ("灵兽菜单", "灵兽菜单"),
-         ("洞府菜单", "洞府菜单")),
+         ("洞府菜单", "洞府菜单"), ("坊市菜单", "玩家坊市")),
     ),
     (
         "👥 社交与活动",
@@ -349,9 +355,9 @@ async def show_wish_menu(uid, qz):
 async def show_resource_menu(uid, qz):
     """资源、背包、药园和炼丹的聚合入口。"""
     output = "##### 📦 资源菜单\n\n"
-    output += "管理物品与货币，进入药园与炼丹子菜单处理长期资源生产。\n\n"
+    output += "管理物品与货币，进入坊市、药园与炼丹子菜单处理长期资源生产。\n\n"
     output += "<qqbot-cmd-input text='物品背包' show='物品背包' /> | <qqbot-cmd-input text='商城' show='灵石商城' />\n\n"
-    output += "<qqbot-cmd-input text='药园菜单' show='药园菜单' /> | <qqbot-cmd-input text='炼丹菜单' show='炼丹菜单' />\n\n"
+    output += "<qqbot-cmd-input text='坊市菜单' show='玩家坊市' /> | <qqbot-cmd-input text='药园菜单' show='药园菜单' /> | <qqbot-cmd-input text='炼丹菜单' show='炼丹菜单' />\n\n"
     output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
     return {"type": "markdown", "content": output}
 

@@ -30,7 +30,7 @@ class MenuGroupingTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("专属组合 背包", special)
 
     async def test_new_system_menus_are_parameterless_commands(self):
-        for command in ("队伍菜单", "灵兽菜单", "洞府菜单", "专属养成菜单", "祈愿菜单", "资源菜单", "活动菜单", "道途", "道途状态"):
+        for command in ("队伍菜单", "灵兽菜单", "洞府菜单", "专属养成菜单", "祈愿菜单", "资源菜单", "坊市菜单", "活动菜单", "道途", "道途状态"):
             self.assertEqual((await jiance(command))[0], command)
 
     async def test_main_menu_uses_system_entries_not_operation_buttons(self):
@@ -49,6 +49,7 @@ class MenuGroupingTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("text='专属养成菜单'", content)
         self.assertIn("text='祈愿菜单'", content)
         self.assertIn("text='资源菜单'", content)
+        self.assertIn("text='坊市菜单'", content)
         self.assertIn("text='活动菜单'", content)
         self.assertIn("text='日常任务'", content)
         self.assertIn("text='签到'", content)

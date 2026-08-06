@@ -37,6 +37,7 @@ from Game_main.g26_signin import *          # P2 三十日签到
 from Game_main.g27_world_message import *   # GM 世界消息库
 from Game_main.g28_player_guide import *     # 玩家交互攻略
 from Game_main.g29_dungeon_sweep import *    # 已通关副本扫荡
+from Game_main.g30_market import *            # 玩家坊市
 from Game_main.g0_menu import *          # 菜单系统
 from Tool.qq_keyboard import attach_keyboard
 from Game_domain.gm_service import GMError, authenticate_admin
@@ -45,11 +46,12 @@ from Game_domain.gm_state import is_admin as is_gm_admin
 wuhouzhui = '收回|当前角色|参悟|参悟状态|领取参悟经验|悟道进阶|查看本源|本源升级|本源技能|战斗记录|战斗状态|查看怪物|怪物列表|放弃副本|药园|查看药田|种子背包|一键采摘|查看丹炉|一键收丹|添火次数|商城|菜单|MENU|主菜单|帮助|HELP|GM菜单|GM世界消息|角色菜单|参悟菜单|装备菜单|本源菜单|技能菜单|副本菜单|药园菜单|炼丹菜单|装备菜单|战力菜单|灵兽菜单|队伍菜单|洞府菜单|宗门菜单|专属养成菜单|祈愿菜单|资源菜单|活动菜单|问道札记|道途建议|丹道研习|药性|玩法介绍|当前装备|我的战力|战力|新手攻略|游戏指南|灵兽|灵兽图鉴|灵兽寻访|队伍|队伍创建|队伍准备|队伍离开|道途|道途状态|道途开启|道途离开|队伍战斗|队伍战斗状态|更新日志|洞府|宗门|宗门列表|宗门委托|师徒进度|师徒修行|世界BOSS|世界排行|世界奖励|赛季|赛季任务|赛季奖励|角色养成|角色碎片|祈愿记录|专属图鉴|专属进阶|专属排行榜|萧炎养成|异火图鉴|异火排行榜|王林养成|意境图鉴|问道排行榜|韩立养成|本命飞剑|法宝图鉴|剑阵排行榜|石昊养成|洞天|宝术图鉴|极境排行榜|开辟洞天|十洞天合一|叶凡养成|圣体秘境|圣体渡劫|九秘图鉴|圣体排行榜|孟川养成|元神修炼|刀法图鉴|战斗绘卷|刀道排行榜'
 youhouzhui = '注册游戏|选择角色|角色介绍|玩法介绍|角色属性|出战|角色背包|物品背包|物品信息|副本信息|副本列表|挑战副本|挑战怪物|战斗行动|激活技能|卷轴信息|技能信息|技能融合|技能装备|技能卸下|穿戴装备|卸下装备|强化装备|装备详情|出售装备|技能背包|装备背包|战力排行|排行榜|商城|购买商品|使用体力药|种子商店|购买种子|播种|一键播种|采摘|解锁药田|施肥|出售药材|丹方列表|炼丹|收丹|服丹|解锁丹炉|加速炼丹|添火|关闭图片模式|开启图片模式|GM验证|GM发放物品|GM发放仙玉|灵兽出战|队伍加入|布阵|洞府升级|洞府收取|道途投票|札记领取|队伍战斗行动|宗门创建|宗门申请|宗门投票|拜师|收徒|世界挑战|仙玉祈愿|祈愿定向|祈愿保底选择|合成角色|专属祈愿|专属定向|点亮能力|装备专属|专属组合|异火祈愿|异火定向|合成异火|装备异火|异火融合|意境祈愿|参悟意境|装备意境|本源合道|法宝祈愿|点亮法宝|法宝协同|炼制飞剑|宝术祈愿|铭刻宝术|六道轮回|九秘祈愿|参悟九秘|九秘连携|选择异象|刀法祈愿|绘制绘卷|刀势推演'
 wuhouzhui += '|日常任务|签到|签到记录|签到奖励|攻略|开荒攻略|角色攻略|战斗攻略|资源攻略'
-wuhouzhui += '|因果印记|赛季装扮'
+wuhouzhui += '|因果印记|赛季装扮|坊市菜单|坊市帮助'
 youhouzhui += '|日常领取'
 youhouzhui += '|扫荡副本'
 youhouzhui += '|技能命名'
 youhouzhui += '|赛季佩戴'
+youhouzhui += '|坊市上架|坊市购买|坊市收购|坊市出售|坊市底价|坊市列表|坊市交易记录|我的摊位|撤摊|坊市'
 youhouzhui += '|GM世界消息添加|GM世界消息修改|GM世界消息启用|GM世界消息停用|GM世界消息删除'
 youhouzhui += '|GM全服发放灵石|GM全服发放仙玉'
 
@@ -61,11 +63,21 @@ world_message_value_commands = (
     'GM世界消息删除',
 )
 
+# 坊市保留空格，以支持“坊市上架 物品名 数量 单价”这一玩家可读格式；
+# 其余旧指令仍沿用下方的历史清洗逻辑。
+market_value_commands = (
+    '坊市交易记录', '坊市菜单', '坊市帮助', '坊市上架', '坊市购买', '坊市收购',
+    '坊市出售', '坊市底价', '坊市列表', '我的摊位', '撤摊', '坊市',
+)
+
 user_last_call_time = {}
 
 async def jiance(message):
     raw_message = str(message or '').strip()
     upper_message = raw_message.upper()
+    for command in market_value_commands:
+        if raw_message.startswith(command):
+            return command, raw_message[len(command):].strip()
     # 世界消息正文需要保留标点和空格，必须在通用字符清洗之前解析。
     for command in world_message_value_commands:
         if upper_message.startswith(command):
@@ -252,6 +264,28 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         return await buy_shop_item(uid, con_arr1)
     elif con_arr0 == '使用体力药':
         return await use_stamina_potion(uid, con_arr1 or 1)
+    elif con_arr0 == '坊市':
+        return await market_home(uid, qz, con_arr1)
+    elif con_arr0 == '坊市帮助':
+        return await market_help(uid, qz)
+    elif con_arr0 == '坊市列表':
+        return await market_list_command(uid, qz, con_arr1)
+    elif con_arr0 == '坊市上架':
+        return await market_create_sell(uid, qz, con_arr1)
+    elif con_arr0 == '坊市购买':
+        return await market_buy(uid, qz, con_arr1)
+    elif con_arr0 == '坊市收购':
+        return await market_create_buy(uid, qz, con_arr1)
+    elif con_arr0 == '坊市出售':
+        return await market_sell_to_buy_order(uid, qz, con_arr1)
+    elif con_arr0 == '我的摊位':
+        return await market_my_orders(uid, qz, con_arr1)
+    elif con_arr0 == '撤摊':
+        return await market_cancel(uid, qz, con_arr1)
+    elif con_arr0 == '坊市底价':
+        return await market_price_floor(uid, qz, con_arr1)
+    elif con_arr0 == '坊市交易记录':
+        return await market_trade_history(uid, qz, con_arr1)
     elif con_arr0 == '角色背包':
         if con_arr1 == "":
             return await role_bag(uid, 1)
@@ -697,6 +731,8 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         return await show_wish_menu(uid)
     elif con_arr0 == '资源菜单':
         return await show_resource_menu(uid)
+    elif con_arr0 == '坊市菜单':
+        return await show_market_menu(uid)
     elif con_arr0 == '活动菜单':
         return await show_activity_menu(uid)
 
