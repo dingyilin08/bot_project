@@ -4,6 +4,7 @@ from Game_main.g30_market import (
     MARKET_EXPIRE_HOURS,
     calculate_market_fee,
     category_for_item,
+    market_help,
     parse_item_quantity_price,
     parse_order_quantity,
     show_market_menu,
@@ -46,6 +47,12 @@ class MarketTests(unittest.IsolatedAsyncioTestCase):
         for command in ("坊市列表", "坊市上架 ", "坊市购买 ", "坊市收购 ", "坊市出售 ", "我的摊位", "坊市交易记录"):
             self.assertIn(command, content)
         self.assertIn(str(MARKET_EXPIRE_HOURS), content)
+
+        help_content = (await market_help.__wrapped__(1, ""))["content"]
+        self.assertIn("蓝色指令可直接点击发送", help_content)
+        self.assertIn("text='坊市上架 '", help_content)
+        self.assertIn("text='坊市收购 '", help_content)
+        self.assertIn("text='坊市底价 '", help_content)
 
     async def test_market_dispatch_does_not_require_undefined_prefix(self):
         original_uid = output_main.openid_to_uid
