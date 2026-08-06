@@ -5,6 +5,7 @@ from Game_main.g30_market import (
     _render_order_lines,
     calculate_market_fee,
     category_for_item,
+    is_market_banned_item,
     market_help,
     parse_item_quantity_price,
     parse_order_quantity,
@@ -15,18 +16,34 @@ from output_main import jiance
 
 
 class MarketTests(unittest.IsolatedAsyncioTestCase):
-    def test_market_order_rows_only_show_category_quantity_and_unit_price(self):
+    def test_market_order_rows_show_item_names_only_in_my_market(self):
         rows = [
             (101, 10001, "SELL", "束灵符", "消耗品", 10, 500, 0, 3600),
             (102, 10001, "BUY", "渡厄丹", "丹药", 3, 800, 2400, 1800),
         ]
         content = "\n".join(_render_order_lines(rows, 10001, is_owner_view=True))
+        public_content = "\n".join(_render_order_lines(rows, 20002))
 
+        self.assertIn("**束灵符**", content)
+        self.assertIn("**渡厄丹**", content)
         self.assertIn("类别：消耗品｜数量：10｜单价：500 灵石", content)
         self.assertIn("类别：丹药｜数量：3｜单价：800 灵石", content)
         self.assertEqual(content.count("show='下架'"), 2)
-        for hidden_text in ("束灵符", "渡厄丹", "卖家：", "买家：", "剩余：", "总价："):
+        for hidden_text in ("卖家：", "买家：", "剩余：", "总价："):
             self.assertNotIn(hidden_text, content)
+        self.assertNotIn("束灵符", public_content)
+        self.assertNotIn("渡厄丹", public_content)
+
+    def test_market_bans_special_and_wish_item_markers(self):
+        for name, description, access in (
+            ("火球术卷轴", "技能卷轴", "副本掉落"),
+            ("仙品装备", "可穿戴装备", "副本掉落"),
+            ("青莲地心火髓", "本源材料", "副本掉落"),
+            ("萧炎专属碎片", "专属碎片", "仙玉祈愿"),
+            ("普通材料", "材料", "仙玉祈愿产出"),
+        ):
+            self.assertTrue(is_market_banned_item(name, description, access))
+        self.assertFalse(is_market_banned_item("束灵符", "可用于副本", "商城购买"))
 
     def test_market_fee_and_categories(self):
         self.assertEqual(calculate_market_fee(100), 8)

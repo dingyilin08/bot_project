@@ -17,7 +17,7 @@ MARKET_LISTING_COOLDOWN = 5
 MAX_ORDER_QUANTITY = 9999
 MAX_ORDER_TOTAL = 1_000_000_000
 MARKET_CATEGORIES = ("丹药", "材料", "功法", "神通", "法宝", "坐骑", "消耗品")
-BLOCKED_MARKERS = ("绑定", "任务", "轮回专属", "专属")
+BLOCKED_MARKERS = ("绑定", "任务", "轮回专属", "专属", "卷轴", "装备", "本源材料", "祈愿")
 
 
 class MarketError(ValueError):
@@ -46,6 +46,12 @@ def category_for_item(item_name, item_type):
     if item_type in (1, 2, 5, 6, 7):
         return "材料"
     return "消耗品"
+
+
+def is_market_banned_item(item_name, description="", access=""):
+    """按物品文案拦截不可交易的养成、祈愿与专属资产。"""
+    text = " ".join(str(value or "") for value in (item_name, description, access))
+    return any(marker in text for marker in BLOCKED_MARKERS)
 
 
 def parse_item_quantity_price(param, price_first=False):
@@ -241,13 +247,29 @@ async def _get_tradable_item(cursor, item_name):
     if not row:
         raise MarketError(f"未找到物品【{item_name}】，请从物品背包复制完整名称。")
     item_id, name, item_type, description, access = row
-    text = " ".join(str(value or "") for value in (name, description, access))
-    if any(marker in text for marker in BLOCKED_MARKERS):
-        raise MarketError("绑定物品、任务道具与轮回专属道具不可在坊市交易。")
+    if is_market_banned_item(name, description, access):
+        raise MarketError("技能卷轴、装备、本源材料、专属碎片、祈愿产出及绑定/任务道具不可在坊市交易。")
     if int(item_type or 0) not in (1, 2, 3, 4, 5, 6, 7):
         raise MarketError("该物品不是可堆叠的通用道具，无法在坊市交易。")
+    item_id = int(item_id)
+    await cursor.execute(
+        "SELECT 1 FROM data_herb WHERE item_id = %s UNION SELECT 1 FROM data_pill WHERE item_id = %s LIMIT 1",
+        (item_id, item_id),
+    )
+    if await cursor.fetchone():
+        raise MarketError("该物品可由仙玉祈愿产出，不可在坊市交易。")
+    await cursor.execute(
+        """
+        SELECT 1 FROM data_benyuan
+        WHERE need_item_1 = %s OR need_item_2 = %s OR need_item_3 = %s
+        LIMIT 1
+        """,
+        (str(item_id), str(item_id), str(item_id)),
+    )
+    if await cursor.fetchone():
+        raise MarketError("该物品属于本源材料且可由仙玉祈愿产出，不可在坊市交易。")
     return {
-        "id": int(item_id), "name": str(name), "category": category_for_item(name, item_type),
+        "id": item_id, "name": str(name), "category": category_for_item(name, item_type),
     }
 
 
@@ -282,7 +304,9 @@ async def _render_orders(cursor, uid, page, keyword=None, category=None, owner_u
 
 def _render_order_lines(rows, uid, is_owner_view=False):
     lines = []
-    for order_id, _owner_uid, order_type, _item_name, category, quantity, unit_price, _reserved, _left_seconds in rows:
+    for order_id, _owner_uid, order_type, item_name, category, quantity, unit_price, _reserved, _left_seconds in rows:
+        if is_owner_view:
+            lines.append(f"**{item_name}**")
         if order_type == "SELL":
             lines.append(f"> 类别：{category}｜数量：{quantity}｜单价：{unit_price} 灵石")
             if is_owner_view:
@@ -393,7 +417,7 @@ async def market_help(uid, qz):
         "",
         "**五、交易规则**",
         f"> 订单有效期为 **{MARKET_EXPIRE_HOURS} 小时**；到期自动返还余货或余款。成交从卖家收入扣除 **8%** 手续费（向下取整并销毁）。",
-        "> 仅可交易背包中的可堆叠通用物品；绑定、任务、轮回专属道具不可上架。搜索和上架设有短暂冷却，防止刷屏。",
+        "> 仅可交易背包中的可堆叠通用物品；技能卷轴、装备、本源材料、专属碎片、祈愿产出、绑定和任务道具不可上架或收购。搜索和上架设有短暂冷却，防止刷屏。",
         "***",
         _buttons(("坊市", "返回坊市"), ("坊市列表", "浏览订单")),
     ]
