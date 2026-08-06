@@ -16,7 +16,7 @@ from output_main import jiance
 
 
 class MarketTests(unittest.IsolatedAsyncioTestCase):
-    def test_market_order_rows_show_item_names_only_in_my_market(self):
+    def test_market_order_rows_show_item_names_in_public_and_my_market(self):
         rows = [
             (101, 10001, "SELL", "束灵符", "消耗品", 10, 500, 0, 3600),
             (102, 10001, "BUY", "渡厄丹", "丹药", 3, 800, 2400, 1800),
@@ -31,8 +31,8 @@ class MarketTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(content.count("show='下架'"), 2)
         for hidden_text in ("卖家：", "买家：", "剩余：", "总价："):
             self.assertNotIn(hidden_text, content)
-        self.assertNotIn("束灵符", public_content)
-        self.assertNotIn("渡厄丹", public_content)
+        self.assertIn("**束灵符**", public_content)
+        self.assertIn("**渡厄丹**", public_content)
 
     def test_market_bans_special_and_wish_item_markers(self):
         for name, description, access in (

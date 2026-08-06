@@ -303,8 +303,7 @@ async def _render_orders(cursor, uid, page, keyword=None, category=None, owner_u
 def _render_order_lines(rows, uid, is_owner_view=False):
     lines = []
     for order_id, _owner_uid, order_type, item_name, category, quantity, unit_price, _reserved, _left_seconds in rows:
-        if is_owner_view:
-            lines.append(f"**{item_name}**")
+        lines.append(f"**{item_name}**")
         if order_type == "SELL":
             lines.append(f"> 类别：{category}｜数量：{quantity}｜单价：{unit_price} 灵石")
             if is_owner_view:
