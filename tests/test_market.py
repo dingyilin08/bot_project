@@ -2,6 +2,7 @@ import unittest
 
 from Game_main.g30_market import (
     MARKET_EXPIRE_HOURS,
+    _render_order_lines,
     calculate_market_fee,
     category_for_item,
     market_help,
@@ -14,6 +15,19 @@ from output_main import jiance
 
 
 class MarketTests(unittest.IsolatedAsyncioTestCase):
+    def test_market_order_rows_only_show_category_quantity_and_unit_price(self):
+        rows = [
+            (101, 10001, "SELL", "束灵符", "消耗品", 10, 500, 0, 3600),
+            (102, 10001, "BUY", "渡厄丹", "丹药", 3, 800, 2400, 1800),
+        ]
+        content = "\n".join(_render_order_lines(rows, 10001, is_owner_view=True))
+
+        self.assertIn("类别：消耗品｜数量：10｜单价：500 灵石", content)
+        self.assertIn("类别：丹药｜数量：3｜单价：800 灵石", content)
+        self.assertEqual(content.count("show='下架'"), 2)
+        for hidden_text in ("束灵符", "渡厄丹", "卖家：", "买家：", "剩余：", "总价："):
+            self.assertNotIn(hidden_text, content)
+
     def test_market_fee_and_categories(self):
         self.assertEqual(calculate_market_fee(100), 8)
         self.assertEqual(calculate_market_fee(19), 1)

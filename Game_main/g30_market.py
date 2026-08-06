@@ -282,28 +282,17 @@ async def _render_orders(cursor, uid, page, keyword=None, category=None, owner_u
 
 def _render_order_lines(rows, uid, is_owner_view=False):
     lines = []
-    for order_id, owner_uid, order_type, item_name, category, quantity, unit_price, _reserved, left_seconds in rows:
-        hours = max(0, int(left_seconds)) // 3600
-        minutes = max(0, int(left_seconds)) % 3600 // 60
-        owner = "你" if int(owner_uid) == int(uid) else f"道友#{owner_uid}"
+    for order_id, _owner_uid, order_type, _item_name, category, quantity, unit_price, _reserved, _left_seconds in rows:
         if order_type == "SELL":
-            lines.extend((
-                f"**#{order_id}｜出售｜{item_name}**",
-                f"> {category}｜卖家：{owner}｜余量：{quantity}｜单价：{unit_price} 灵石｜总价：{int(quantity) * int(unit_price)} 灵石",
-                f"> 剩余：{hours}小时{minutes}分",
-            ))
+            lines.append(f"> 类别：{category}｜数量：{quantity}｜单价：{unit_price} 灵石")
             if is_owner_view:
-                lines.append(_buttons((f"撤摊 {order_id}", "撤回出售单")))
+                lines.append(_buttons((f"撤摊 {order_id}", "下架")))
             else:
                 lines.append(_buttons((f"坊市购买 {order_id} 1", "购买 1 件"), (f"坊市购买 {order_id} ", "购买数量*")))
         else:
-            lines.extend((
-                f"**#{order_id}｜收购｜{item_name}**",
-                f"> {category}｜买家：{owner}｜需求：{quantity}｜收购价：{unit_price} 灵石/件",
-                f"> 剩余：{hours}小时{minutes}分｜成交后卖家实得 92%（手续费 8%）",
-            ))
+            lines.append(f"> 类别：{category}｜数量：{quantity}｜单价：{unit_price} 灵石")
             if is_owner_view:
-                lines.append(_buttons((f"撤摊 {order_id}", "撤回收购单")))
+                lines.append(_buttons((f"撤摊 {order_id}", "下架")))
             else:
                 lines.append(_buttons((f"坊市出售 {order_id} 1", "交付 1 件"), (f"坊市出售 {order_id} ", "交付数量*")))
         lines.append("")
