@@ -39,6 +39,19 @@ class InvitationRuleTests(unittest.IsolatedAsyncioTestCase):
             ("注册游戏", "云澈 ABCDEFGH"),
         )
 
+    async def test_registration_name_without_invite_is_routed_directly(self):
+        from unittest.mock import AsyncMock, patch
+
+        import output_main
+
+        with patch.object(output_main, "openid_to_uid", AsyncMock(return_value=100001)), patch.object(
+            output_main, "user_zhuce", AsyncMock(return_value="注册成功")
+        ) as register:
+            result = await output_main.content("注册游戏", "云澈", "member-openid-1")
+
+        self.assertEqual("注册成功", result)
+        register.assert_awaited_once_with("member-openid-1", "云澈")
+
     async def test_activity_and_update_log_expose_invitation(self):
         activity = (await show_activity_menu.__wrapped__(1, ""))["content"]
         self.assertIn("邀请菜单", activity)

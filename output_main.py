@@ -235,7 +235,7 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
 
     elif con_arr0 == '注册游戏':
         if con_arr1 == "":
-            return "指令错误，正确指令：注册游戏 玩家名称 [邀请码]"
+            return "指令错误，正确指令：注册游戏 玩家名称（邀请码可选）"
         return await user_zhuce(openid, con_arr1)
     elif con_arr0 == '选择角色':
         if con_arr1 == "":

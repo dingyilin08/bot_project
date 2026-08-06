@@ -364,7 +364,7 @@ async def user_zhuce(openid, player_name):
                 line.append("**邀请码已绑定：** 双方各有 500仙玉 + 1600灵石 可领取；完成全部新手札记后，双方再各得 1000仙玉。")
                 line.append("<qqbot-cmd-input text='领取邀请奖励' show='领取邀请奖励' /> | <qqbot-cmd-input text='邀请列表' show='邀请进度' />")
             else:
-                line.append("> 未填写邀请码；邀请码仅可在注册时绑定。可发送“我的邀请码”查看自己的邀请码。")
+                line.append("> 未填写邀请码；邀请码为可选项，不影响注册和游玩。之后可发送“填写邀请码”补填一次。")
             line.append(f"**待选角色：**")
             line.append("◇ <qqbot-cmd-input text='角色介绍 萧炎' show='角色介绍 萧炎' />：异火焚天/斗帝传承")
             line.append("◇ <qqbot-cmd-input text='角色介绍 王林' show='角色介绍 王林' />：禁制大师/生死轮回")
