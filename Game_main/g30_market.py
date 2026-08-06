@@ -18,6 +18,10 @@ MAX_ORDER_QUANTITY = 9999
 MAX_ORDER_TOTAL = 1_000_000_000
 MARKET_CATEGORIES = ("丹药", "材料", "功法", "神通", "法宝", "坐骑", "消耗品")
 BLOCKED_MARKERS = ("绑定", "任务", "轮回专属", "专属", "卷轴", "装备", "本源材料", "祈愿")
+MARKET_PRICE_ROUNDING = 10
+MATERIAL_TIER_FLOORS = {1: 100, 2: 300, 3: 900, 4: 2700}
+PILL_CATEGORY_FLOORS = {1: 1500, 2: 5000, 3: 15000}
+DEFAULT_MARKET_FLOOR = 10
 
 
 class MarketError(ValueError):
@@ -27,6 +31,48 @@ class MarketError(ValueError):
 def calculate_market_fee(gross):
     """成交手续费按卖方收入的 8% 向下取整，避免灵石小数。"""
     return max(0, int(gross) * MARKET_FEE_BP // 10000)
+
+
+def _round_market_price_up(value):
+    """将灵石价格向上取整到十位，避免手续费使卖方收益低于成本。"""
+    value = max(1, int(value or 0))
+    return ((value + MARKET_PRICE_ROUNDING - 1) // MARKET_PRICE_ROUNDING) * MARKET_PRICE_ROUNDING
+
+
+def calculate_market_min_price(item):
+    """按药材回收价、材料品阶或丹方成本计算坊市最低单价。"""
+    item_type = int(item.get("type") or 0)
+    category = str(item.get("category") or "")
+    tier = int(item.get("rarity_tier") or 0)
+    npc_sell_price = int(item.get("npc_sell_price") or 0)
+    recipe_cost = int(item.get("recipe_cost") or 0)
+    ingredient_value = int(item.get("ingredient_value") or 0)
+
+    if npc_sell_price > 0:
+        # 8% 手续费后卖方至少拿到 NPC 回收价。
+        return _round_market_price_up(math.ceil(npc_sell_price * 10000 / (10000 - MARKET_FEE_BP)))
+    if recipe_cost > 0 or ingredient_value > 0:
+        # 丹药底价覆盖丹方灵石消耗和全部药材的 NPC 回收价值。
+        craft_cost = recipe_cost + ingredient_value
+        return _round_market_price_up(math.ceil(craft_cost * 10000 / (10000 - MARKET_FEE_BP)))
+    if category == "材料" or item_type == 1:
+        return MATERIAL_TIER_FLOORS.get(tier, MATERIAL_TIER_FLOORS[1])
+    if category == "丹药" or item_type == 4:
+        return PILL_CATEGORY_FLOORS.get(tier, PILL_CATEGORY_FLOORS[1])
+    return DEFAULT_MARKET_FLOOR
+
+
+def market_price_basis(item):
+    """返回给玩家展示的底价依据。"""
+    if int(item.get("npc_sell_price") or 0) > 0:
+        return f"{item.get('rarity_name', '材料')} NPC 回收价与 8% 手续费"
+    if int(item.get("recipe_cost") or 0) > 0 or int(item.get("ingredient_value") or 0) > 0:
+        return "丹方灵石消耗与所需药材回收价"
+    if item.get("category") == "材料":
+        return f"{item.get('rarity_name', '凡品')}材料保底"
+    if item.get("category") == "丹药":
+        return "丹药品类保底"
+    return "基础交易保底"
 
 
 def category_for_item(item_name, item_type):
@@ -240,6 +286,50 @@ async def _check_cooldown(cursor, uid, action_name, seconds):
     )
 
 
+async def _get_market_valuation(cursor, item_id, item_type, category):
+    """读取药园目录中的稀有度和配方，供坊市价格下限使用。"""
+    valuation = {
+        "type": int(item_type), "category": category, "rarity_tier": 0,
+        "npc_sell_price": 0, "recipe_cost": 0, "ingredient_value": 0,
+    }
+    if int(item_type) == 1:
+        await cursor.execute(
+            "SELECT sell_price, tier FROM data_herb WHERE item_id = %s LIMIT 1",
+            (item_id,),
+        )
+        row = await cursor.fetchone()
+        if row:
+            valuation["npc_sell_price"] = int(row[0] or 0)
+            valuation["rarity_tier"] = int(row[1] or 0)
+    elif int(item_type) == 4:
+        await cursor.execute(
+            """
+            SELECT dr.ingredients, dr.need_num, dr.cost, dp.category
+            FROM data_pill dp
+            LEFT JOIN data_recipe dr ON dr.pill_id = dp.id
+            WHERE dp.item_id = %s
+            ORDER BY dr.id ASC
+            LIMIT 1
+            """,
+            (item_id,),
+        )
+        row = await cursor.fetchone()
+        if row:
+            ingredients, need_num, recipe_cost, pill_category = row
+            valuation["rarity_tier"] = int(pill_category or 0)
+            valuation["recipe_cost"] = int(recipe_cost or 0)
+            herb_ids = [int(value) for value in re.findall(r"\d+", str(ingredients or ""))]
+            if herb_ids:
+                placeholders = ", ".join("%s" for _ in herb_ids)
+                await cursor.execute(
+                    f"SELECT id, sell_price FROM data_herb WHERE id IN ({placeholders})",
+                    tuple(herb_ids),
+                )
+                prices = {int(row[0]): int(row[1] or 0) for row in await cursor.fetchall()}
+                valuation["ingredient_value"] = sum(prices.get(herb_id, 0) for herb_id in herb_ids) * int(need_num or 0)
+    return valuation
+
+
 async def _get_tradable_item(cursor, item_name):
     await cursor.execute(
         "SELECT id, name, type, `desc`, access FROM data_item WHERE name = %s LIMIT 1",
@@ -266,8 +356,15 @@ async def _get_tradable_item(cursor, item_name):
         )
         if await cursor.fetchone():
             raise MarketError("该物品属于本源材料且可由仙玉祈愿产出，不可在坊市交易。")
+    category = category_for_item(name, item_type)
+    valuation = await _get_market_valuation(cursor, item_id, item_type, category)
+    valuation["rarity_name"] = {1: "凡品", 2: "良品", 3: "精品", 4: "仙品"}.get(
+        valuation["rarity_tier"], "普通"
+    )
+    minimum_price = calculate_market_min_price(valuation)
     return {
-        "id": item_id, "name": str(name), "category": category_for_item(name, item_type),
+        "id": item_id, "name": str(name), "category": category,
+        "minimum_price": minimum_price, "price_basis": market_price_basis(valuation),
     }
 
 
@@ -371,7 +468,7 @@ async def market_home(uid, qz, param=""):
         "",
         "**出售道具**",
         _buttons(("坊市上架 ", "坊市上架 物品名 数量 单价")),
-        "> 从背包托管物品上架；示例：坊市上架 束灵符 10 500000。",
+        "> 从背包托管物品上架；药材按品阶/NPC 回收价、丹药按炼制成本设有最低单价。",
         "",
         "**发布收购**",
         _buttons(("坊市收购 ", "坊市收购 物品名 单价 数量")),
@@ -396,7 +493,7 @@ async def market_help(uid, qz):
         "",
         "**二、出售与购买**",
         _buttons(("坊市上架 ", "坊市上架 物品名 数量 单价")),
-        "> 示例：坊市上架 束灵符 10 500000。上架后物品进入系统托管。",
+        "> 示例：坊市上架 束灵符 10 500000。最低单价会在上架前校验，上架后物品进入系统托管。",
         _buttons(("坊市购买 ", "坊市购买 摊位号 数量")),
         "> 在出售订单下点击“购买”更方便；出售单不能自行购买。",
         "",
@@ -410,11 +507,12 @@ async def market_help(uid, qz):
         _buttons(("我的摊位", "我的摊位"), ("撤摊 ", "撤摊 摊位号"), ("坊市交易记录", "坊市交易记录")),
         "> 撤摊会返还未成交的出售余货或收购余款。",
         _buttons(("坊市底价 ", "坊市底价 物品名")),
-        "> 查看近 14 日的成交均价、最低价和最高价。",
+        "> 查看系统最低单价，以及近 14 日的成交均价、最低价和最高价。",
         "",
         "**五、交易规则**",
         f"> 订单有效期为 **{MARKET_EXPIRE_HOURS} 小时**；到期自动返还余货或余款。成交从卖家收入扣除 **8%** 手续费（向下取整并销毁）。",
         "> 药材与丹药可自由上架或收购（含祈愿产出）；技能卷轴、装备、本源材料、专属碎片及其他祈愿/绑定/任务道具不可交易。搜索和上架设有短暂冷却，防止刷屏。",
+        "> 药材底价按品阶和 NPC 回收价（计入 8% 手续费）计算；丹药底价覆盖丹方灵石消耗与所需药材回收价，出售与收购单均须遵守。",
         "***",
         _buttons(("坊市", "返回坊市"), ("坊市列表", "浏览订单")),
     ]
@@ -463,6 +561,10 @@ async def market_create_sell(uid, qz, param):
                 await _check_cooldown(cursor, uid, "LIST", MARKET_LISTING_COOLDOWN)
                 await _expire_orders(cursor)
                 item = await _get_tradable_item(cursor, item_name)
+                if unit_price < item["minimum_price"]:
+                    raise MarketError(
+                        f"【{item['name']}】最低单价为 {item['minimum_price']} 灵石（{item['price_basis']}），请提高报价后再上架。"
+                    )
                 if not await _deduct_item(cursor, uid, item["id"], quantity):
                     raise MarketError(f"背包中【{item['name']}】数量不足，无法上架 {quantity} 件。")
                 await cursor.execute(
@@ -481,7 +583,7 @@ async def market_create_sell(uid, qz, param):
         "type": "markdown",
         "content": "\n".join((
             "##### 坊市上架成功", f"摊位：#{order_id}｜{item['name']} x {quantity}",
-            f"单价：{unit_price} 灵石｜有效期：{MARKET_EXPIRE_HOURS} 小时", "***",
+            f"单价：{unit_price} 灵石｜系统底价：{item['minimum_price']} 灵石｜有效期：{MARKET_EXPIRE_HOURS} 小时", "***",
             _buttons(("我的摊位", "我的摊位"), ("坊市列表", "浏览坊市")),
         )),
     }
@@ -499,6 +601,10 @@ async def market_create_buy(uid, qz, param):
                 await _check_cooldown(cursor, uid, "LIST", MARKET_LISTING_COOLDOWN)
                 await _expire_orders(cursor)
                 item = await _get_tradable_item(cursor, item_name)
+                if unit_price < item["minimum_price"]:
+                    raise MarketError(
+                        f"【{item['name']}】最低单价为 {item['minimum_price']} 灵石（{item['price_basis']}），请提高收购价后再发布。"
+                    )
                 await cursor.execute(
                     "UPDATE user_zt SET lingshi = lingshi - %s WHERE id = %s AND lingshi >= %s",
                     (total, uid, total),
@@ -522,7 +628,7 @@ async def market_create_buy(uid, qz, param):
         "type": "markdown",
         "content": "\n".join((
             "##### 坊市收购单已发布", f"收购单：#{order_id}｜{item['name']} x {quantity}",
-            f"收购价：{unit_price} 灵石/件｜预存：{total} 灵石｜有效期：{MARKET_EXPIRE_HOURS} 小时", "***",
+            f"收购价：{unit_price} 灵石/件｜系统底价：{item['minimum_price']} 灵石｜预存：{total} 灵石｜有效期：{MARKET_EXPIRE_HOURS} 小时", "***",
             _buttons(("我的摊位", "我的摊位"), ("坊市列表", "浏览坊市")),
         )),
     }
@@ -731,27 +837,35 @@ async def market_price_floor(uid, qz, param):
     item_name = str(param or "").strip()
     if not item_name:
         return _market_error("指令格式错误，应为：坊市底价 物品名。")
-    async with connect_mysql() as conn:
-        async with conn.cursor() as cursor:
-            await _ensure_market_schema(cursor)
-            await _expire_orders(cursor)
-            await cursor.execute(
-                """
-                SELECT COUNT(*), AVG(unit_price), MIN(unit_price), MAX(unit_price)
-                FROM user_market_trade
-                WHERE item_name = %s AND created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 14 DAY)
-                """,
-                (item_name,),
-            )
-            count, average, minimum, maximum = await cursor.fetchone()
-            await conn.commit()
+    try:
+        async with connect_mysql() as conn:
+            async with conn.cursor() as cursor:
+                await _ensure_market_schema(cursor)
+                await _expire_orders(cursor)
+                item = await _get_tradable_item(cursor, item_name)
+                await cursor.execute(
+                    """
+                    SELECT COUNT(*), AVG(unit_price), MIN(unit_price), MAX(unit_price)
+                    FROM user_market_trade
+                    WHERE item_name = %s AND created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 14 DAY)
+                    """,
+                    (item["name"],),
+                )
+                count, average, minimum, maximum = await cursor.fetchone()
+                await conn.commit()
+    except MarketError as error:
+        return _market_error(error)
     if not count:
         text = "> 近 14 日暂无成交记录，暂时无法提供价格参考。"
     else:
         text = f"> 近 14 日成交 {count} 笔｜均价：**{int(average)}** 灵石｜最低：{minimum}｜最高：{maximum}"
     return {
         "type": "markdown",
-        "content": f"##### 坊市价格看板｜{item_name}\n{text}\n***\n" + _buttons(("坊市列表", "浏览坊市"), ("坊市", "坊市首页")),
+        "content": (
+            f"##### 坊市价格看板｜{item['name']}\n"
+            f"> 系统最低单价：**{item['minimum_price']}** 灵石（{item['price_basis']}）\n"
+            f"{text}\n***\n" + _buttons(("坊市列表", "浏览坊市"), ("坊市", "坊市首页"))
+        ),
     }
 
 
@@ -808,9 +922,9 @@ async def show_market_menu(uid, qz):
         "",
         "**发布订单**",
         _buttons(("坊市上架 ", "坊市上架 物品名 数量 单价")),
-        "> 出售格式：物品名、数量、单价。",
+        "> 出售格式：物品名、数量、单价；系统会校验最低单价。",
         _buttons(("坊市收购 ", "坊市收购 物品名 单价 数量")),
-        "> 收购格式：物品名、单价、数量；发布时预存灵石。",
+        "> 收购格式：物品名、单价、数量；发布时预存灵石，单价也须达到系统底价。",
         "",
         "**成交操作**",
         _buttons(("坊市购买 ", "坊市购买 摊位号 数量"), ("坊市出售 ", "坊市出售 收购单号 数量")),

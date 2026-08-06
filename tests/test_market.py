@@ -4,6 +4,7 @@ from Game_main.g30_market import (
     MARKET_EXPIRE_HOURS,
     _render_order_lines,
     calculate_market_fee,
+    calculate_market_min_price,
     category_for_item,
     is_market_banned_item,
     market_help,
@@ -54,6 +55,24 @@ class MarketTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(category_for_item("赤焰砂", 2), "材料")
         self.assertEqual(category_for_item("束灵符", 3), "消耗品")
         self.assertEqual(category_for_item("火球术卷轴", 3), "神通")
+
+    def test_market_min_prices_cover_material_rarity_and_crafting_cost(self):
+        self.assertEqual(
+            calculate_market_min_price({"type": 1, "category": "材料", "rarity_tier": 1, "npc_sell_price": 60}),
+            70,
+        )
+        self.assertEqual(
+            calculate_market_min_price({"type": 1, "category": "材料", "rarity_tier": 4, "npc_sell_price": 2400}),
+            2610,
+        )
+        self.assertEqual(
+            calculate_market_min_price({"type": 4, "category": "丹药", "recipe_cost": 400, "ingredient_value": 840}),
+            1350,
+        )
+        self.assertEqual(
+            calculate_market_min_price({"type": 1, "category": "材料", "rarity_tier": 3}),
+            900,
+        )
 
     def test_listing_and_purchase_order_parameter_formats(self):
         self.assertEqual(parse_item_quantity_price("束灵符 10 500000"), ("束灵符", 10, 500000))
