@@ -368,6 +368,7 @@ async def show_activity_menu(uid, qz):
     output = "##### 🌌 活动菜单\n\n"
     output += "每日签到积累七日与三十日奖励；世界 Boss 提供贡献与专属感悟。赛季天象会影响新开启的 PVE，装扮只改变展示。\n\n"
     output += "<qqbot-cmd-input text='签到' show='每日签到' /> | <qqbot-cmd-input text='签到记录' show='签到记录' />\n\n"
+    output += "<qqbot-cmd-input text='我的邀请码' show='我的邀请码' /> | <qqbot-cmd-input text='邀请列表' show='邀请列表' /> | <qqbot-cmd-input text='领取邀请奖励' show='邀请奖励' />\n\n"
     output += "<qqbot-cmd-input text='世界BOSS' show='世界Boss' /> | <qqbot-cmd-input text='赛季' show='赛季主页' />\n\n"
     output += "<qqbot-cmd-input text='世界排行' show='世界排行' /> | <qqbot-cmd-input text='赛季任务' show='赛季任务' /> | <qqbot-cmd-input text='赛季装扮' show='赛季装扮' />\n\n"
     output += "<qqbot-cmd-input text='赛季奖励' show='领取赛季奖励' /> | <qqbot-cmd-input text='因果印记' show='查看因果印记' />\n\n"
@@ -751,7 +752,8 @@ async def show_help(uid):
 
 async def show_update_log(uid):
     """显示当前线上版本的玩家可见更新内容。"""
-    output = "##### 📜 更新日志｜v1.24\n\n"
+    output = "##### 📜 更新日志｜v1.25\n\n"
+    output += "**✉️ 道友邀请开放**\n> 发送“我的邀请码”分享八位邀请码；新道友注册时填写后，双方可领取注册礼，完成全部新手札记后还能领取圆满礼。\n\n"
     output += "**📚 玩家攻略阁开放**\n> 发送“攻略”可阅读开荒、角色、战斗与资源四篇攻略；正文关键操作可直接点击发送。\n\n"
     output += "**☀️ 三十日签到开放**\n> 每个自然日可签到一次，漏签不清零；第7、14、21、28日追加七日礼，第30日领取圆满大奖并开启新一期。\n\n"
     output += "**⚔️ 角色专属战斗养成开放**\n> 萧炎、王林、韩立、石昊、叶凡、孟川均拥有独立成长路线、专属能力与组合玩法。发送“玩法介绍 角色名”可查看详细说明。\n\n"

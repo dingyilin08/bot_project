@@ -38,6 +38,7 @@ from Game_main.g27_world_message import *   # GM 世界消息库
 from Game_main.g28_player_guide import *     # 玩家交互攻略
 from Game_main.g29_dungeon_sweep import *    # 已通关副本扫荡
 from Game_main.g30_market import *            # 玩家坊市
+from Game_main.g31_invitation import *        # 玩家邀请码
 from Game_main.g0_menu import *          # 菜单系统
 from Tool.qq_keyboard import attach_keyboard
 from Game_domain.gm_service import GMError, authenticate_admin
@@ -47,6 +48,7 @@ wuhouzhui = '收回|当前角色|参悟|参悟状态|领取参悟经验|悟道�
 youhouzhui = '注册游戏|选择角色|角色介绍|玩法介绍|角色属性|出战|角色背包|物品背包|物品信息|副本信息|副本列表|挑战副本|挑战怪物|战斗行动|激活技能|卷轴信息|技能信息|技能融合|技能装备|技能卸下|穿戴装备|卸下装备|强化装备|装备详情|出售装备|技能背包|装备背包|战力排行|排行榜|商城|购买商品|使用体力药|种子商店|购买种子|播种|一键播种|采摘|解锁药田|施肥|出售药材|丹方列表|炼丹|收丹|服丹|解锁丹炉|加速炼丹|添火|关闭图片模式|开启图片模式|GM验证|GM发放物品|GM发放仙玉|灵兽出战|队伍加入|布阵|洞府升级|洞府收取|道途投票|札记领取|队伍战斗行动|宗门创建|宗门申请|宗门投票|拜师|收徒|世界挑战|仙玉祈愿|祈愿定向|祈愿保底选择|合成角色|专属祈愿|专属定向|点亮能力|装备专属|专属组合|异火祈愿|异火定向|合成异火|装备异火|异火融合|意境祈愿|参悟意境|装备意境|本源合道|法宝祈愿|点亮法宝|法宝协同|炼制飞剑|宝术祈愿|铭刻宝术|六道轮回|九秘祈愿|参悟九秘|九秘连携|选择异象|刀法祈愿|绘制绘卷|刀势推演'
 wuhouzhui += '|日常任务|签到|签到记录|签到奖励|攻略|开荒攻略|角色攻略|战斗攻略|资源攻略'
 wuhouzhui += '|因果印记|赛季装扮|坊市菜单|坊市帮助'
+wuhouzhui += '|我的邀请码|邀请列表|领取邀请奖励'
 youhouzhui += '|日常领取'
 youhouzhui += '|扫荡副本'
 youhouzhui += '|技能命名'
@@ -69,12 +71,16 @@ market_value_commands = (
     '坊市交易记录', '坊市菜单', '坊市帮助', '坊市上架', '坊市购买', '坊市收购',
     '坊市出售', '坊市底价', '坊市列表', '我的摊位', '撤摊', '坊市',
 )
+registration_value_commands = ('注册游戏',)
 
 user_last_call_time = {}
 
 async def jiance(message):
     raw_message = str(message or '').strip()
     upper_message = raw_message.upper()
+    for command in registration_value_commands:
+        if raw_message.startswith(command):
+            return command, raw_message[len(command):].strip()
     for command in market_value_commands:
         if raw_message.startswith(command):
             return command, raw_message[len(command):].strip()
@@ -228,7 +234,7 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
 
     elif con_arr0 == '注册游戏':
         if con_arr1 == "":
-            return "指令错误，正确指令：注册游戏 玩家名称"
+            return "指令错误，正确指令：注册游戏 玩家名称 [邀请码]"
         return await user_zhuce(openid, con_arr1)
     elif con_arr0 == '选择角色':
         if con_arr1 == "":
@@ -613,6 +619,12 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         return await signin_home(uid)
     elif con_arr0 == '签到奖励':
         return await signin_reward_preview(uid)
+    elif con_arr0 == '我的邀请码':
+        return await my_invitation_code(uid)
+    elif con_arr0 == '邀请列表':
+        return await invitation_list(uid)
+    elif con_arr0 == '领取邀请奖励':
+        return await claim_invitation_rewards(uid)
     elif con_arr0 == '札记领取':
         if con_arr1 == "":
             return "指令错误，正确指令：札记领取 任务编号"

@@ -95,6 +95,14 @@ def is_admin(uid: int) -> bool:
         return False
 
 
+def get_admin_uids() -> tuple:
+    """返回当前永久管理员 UID，用于需要归属系统管理员的玩法初始化。"""
+    try:
+        return tuple(load_state()["admins"])
+    except GMStateError:
+        return ()
+
+
 def grant_admin(uid: int) -> bool:
     uid = int(uid)
     if uid <= 0:

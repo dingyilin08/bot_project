@@ -1,4 +1,11 @@
 from sql.mysql import *
+from Game_main.g31_invitation import (
+    InvitationError,
+    bind_invitation_code,
+    create_new_invitation_profile,
+    ensure_legacy_invitation_profiles,
+    parse_registration_input,
+)
 from Tool.tool_user import *
 from func.pd_func import *
 from config import IMG_BASE_URL
@@ -319,23 +326,45 @@ async def user_zhuce(openid, player_name):
                 line.append(f"您已注册过本游戏，请勿重复注册！感谢您对本游戏的支持~")
                 line.append("<qqbot-cmd-input text='选择角色 ' show='选择角色' /> | <qqbot-cmd-input text='角色介绍 ' show='角色介绍*' />")
                 return {"type": "markdown", "content": "\n".join(line)}
+            try:
+                player_name, invite_code = parse_registration_input(player_name)
+            except InvitationError as exc:
+                return {"type": "markdown", "content": f"##### 注册失败\n\n{exc}"}
             if player_name == "":
-                line.append(f"指令错误，正确指令：注册游戏 苍穹")
+                line.append(f"指令错误，正确指令：注册游戏 苍穹 [邀请码]")
                 line.append("<qqbot-cmd-input text='注册游戏' show='注册游戏' /> | <qqbot-cmd-input text='主菜单' show='主菜单' />")
                 return {"type": "markdown", "content": "\n".join(line)}
             if len(player_name) > 8 or len(player_name) < 1:
                 line.append(f"注意！！玩家名称长度需要在1-8个字符之间噢~")
                 line.append('<qqbot-cmd-input text="注册游戏" show="注册游戏" /> | <qqbot-cmd-input text="主菜单" show="主菜单" />')
                 return {"type": "markdown", "content": "\n".join(line)}
-            sql = "SELECT COUNT(*) FROM user_zt"
-            await cursor.execute(sql)
-            result = await cursor.fetchone()
-            uid = result[0] + 100000 + 1
-            sql = "INSERT INTO user_zt (id, openid, `name`, is_chushi) VALUES (%s, %s, %s, 0)"
-            await cursor.execute(sql, (uid, openid, player_name))
-            await conn.commit()
+            try:
+                # 先将功能上线前的账号无奖励归属到当前管理员，再创建新玩家档案。
+                await ensure_legacy_invitation_profiles(cursor)
+                sql = "SELECT COUNT(*) FROM user_zt"
+                await cursor.execute(sql)
+                result = await cursor.fetchone()
+                uid = result[0] + 100000 + 1
+                sql = "INSERT INTO user_zt (id, openid, `name`, is_chushi) VALUES (%s, %s, %s, 0)"
+                await cursor.execute(sql, (uid, openid, player_name))
+                await create_new_invitation_profile(cursor, uid)
+                inviter_uid = None
+                if invite_code:
+                    inviter_uid = await bind_invitation_code(cursor, uid, invite_code)
+                await conn.commit()
+            except InvitationError as exc:
+                await conn.rollback()
+                return {"type": "markdown", "content": f"##### 注册失败\n\n{exc}"}
+            except Exception:
+                await conn.rollback()
+                return {"type": "markdown", "content": "##### 注册失败\n\n邀请码功能尚未完成数据迁移，请联系管理员执行 p2_invitation.sql。"}
             line.append("##### 注册成功！")
             line.append(f"**您的UID：** {uid}")
+            if inviter_uid:
+                line.append("**邀请码已绑定：** 双方各有 500仙玉 + 1600灵石 可领取；完成全部新手札记后，双方再各得 1000仙玉。")
+                line.append("<qqbot-cmd-input text='领取邀请奖励' show='领取邀请奖励' /> | <qqbot-cmd-input text='邀请列表' show='邀请进度' />")
+            else:
+                line.append("> 未填写邀请码；邀请码仅可在注册时绑定。可发送“我的邀请码”查看自己的邀请码。")
             line.append(f"**待选角色：**")
             line.append("◇ <qqbot-cmd-input text='角色介绍 萧炎' show='角色介绍 萧炎' />：异火焚天/斗帝传承")
             line.append("◇ <qqbot-cmd-input text='角色介绍 王林' show='角色介绍 王林' />：禁制大师/生死轮回")

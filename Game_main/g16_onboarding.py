@@ -3,6 +3,7 @@
 
 from func.pd_func import reg_xz_func
 from sql.mysql import connect_mysql
+from Game_main.g31_invitation import sync_onboarding_invitation_rewards
 import json
 
 
@@ -44,6 +45,7 @@ async def record_onboarding_event(uid, code):
                     ON DUPLICATE KEY UPDATE completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
                 """, (uid, code))
                 await conn.commit()
+        await sync_onboarding_invitation_rewards(uid)
         return True
     except Exception:
         return False
