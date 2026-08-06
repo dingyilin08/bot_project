@@ -99,6 +99,13 @@ async def ensure_legacy_invitation_profiles(cursor):
             continue
         inviter_uid = admin_uid if admin_uid and uid != admin_uid else None
         await _create_profile(cursor, uid, inviter_uid=inviter_uid, reward_eligible=False)
+    if admin_uid:
+        await cursor.execute(
+            """UPDATE user_invitation_profile
+               SET inviter_uid = %s, bound_at = CURRENT_TIMESTAMP
+               WHERE reward_eligible = 0 AND inviter_uid IS NULL AND uid <> %s""",
+            (admin_uid, admin_uid),
+        )
     return admin_uid
 
 
