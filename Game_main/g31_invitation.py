@@ -199,6 +199,19 @@ def _buttons(*entries):
     return " | ".join(f"<qqbot-cmd-input text='{command}' show='{label}' />" for command, label in entries)
 
 
+@pd_reg_func
+async def invitation_menu(uid, qz):
+    """道友邀请的统一入口，注册后未选择初始角色也可查看。"""
+    content = (
+        "##### ✉️ 道友邀请\n\n"
+        "> 分享你的八位邀请码，邀请新道友注册时填写。双方可领取注册礼；新道友完成全部问道札记后，双方还能领取圆满礼。\n\n"
+        + _buttons(("我的邀请码", "我的邀请码"), ("邀请列表", "邀请列表"), ("领取邀请奖励", "领取奖励"))
+        + "\n\n> 新道友注册格式：`注册游戏 玩家名 邀请码`。\n\n"
+        + _buttons(("活动菜单", "活动菜单"), ("主菜单", "主菜单"))
+    )
+    return {"type": "markdown", "content": content}
+
+
 async def _ensure_profiles_and_commit(cursor, conn):
     await ensure_legacy_invitation_profiles(cursor)
     await conn.commit()

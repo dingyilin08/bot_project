@@ -10,6 +10,7 @@ from Game_main.g31_invitation import (
     parse_registration_input,
 )
 from Game_main.g0_menu import show_activity_menu, show_update_log
+from Game_main.g31_invitation import invitation_menu
 from output_main import jiance
 
 
@@ -30,7 +31,7 @@ class InvitationRuleTests(unittest.IsolatedAsyncioTestCase):
             parse_registration_input("云澈 ABC")
 
     async def test_invitation_commands_and_registration_keep_arguments(self):
-        for command in ("我的邀请码", "邀请列表", "领取邀请奖励"):
+        for command in ("邀请菜单", "我的邀请码", "邀请列表", "领取邀请奖励"):
             self.assertEqual(await jiance(command), (command, ""))
         self.assertEqual(
             await jiance("注册游戏 云澈 ABCDEFGH"),
@@ -39,8 +40,10 @@ class InvitationRuleTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_activity_and_update_log_expose_invitation(self):
         activity = (await show_activity_menu.__wrapped__(1, ""))["content"]
-        self.assertIn("我的邀请码", activity)
-        self.assertIn("领取邀请奖励", activity)
+        self.assertIn("邀请菜单", activity)
+        invitation = (await invitation_menu.__wrapped__(1, ""))["content"]
+        for command in ("我的邀请码", "邀请列表", "领取邀请奖励"):
+            self.assertIn(command, invitation)
         update_log = (await show_update_log(1))["content"]
         self.assertIn("v1.25", update_log)
         self.assertIn("道友邀请开放", update_log)

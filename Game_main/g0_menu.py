@@ -95,7 +95,7 @@ MAIN_MENU_SECTIONS = (
         "👥 社交与活动",
         "队伍协作、宗门师徒、世界 Boss、赛季与排行榜。",
         (("队伍菜单", "队伍菜单"), ("宗门菜单", "宗门菜单"), ("活动菜单", "活动菜单"),
-         ("战力菜单", "战力菜单")),
+         ("邀请菜单", "道友邀请"), ("战力菜单", "战力菜单")),
     ),
     (
         "📚 指引与记录",
@@ -368,7 +368,7 @@ async def show_activity_menu(uid, qz):
     output = "##### 🌌 活动菜单\n\n"
     output += "每日签到积累七日与三十日奖励；世界 Boss 提供贡献与专属感悟。赛季天象会影响新开启的 PVE，装扮只改变展示。\n\n"
     output += "<qqbot-cmd-input text='签到' show='每日签到' /> | <qqbot-cmd-input text='签到记录' show='签到记录' />\n\n"
-    output += "<qqbot-cmd-input text='我的邀请码' show='我的邀请码' /> | <qqbot-cmd-input text='邀请列表' show='邀请列表' /> | <qqbot-cmd-input text='领取邀请奖励' show='邀请奖励' />\n\n"
+    output += "<qqbot-cmd-input text='邀请菜单' show='道友邀请' />\n\n"
     output += "<qqbot-cmd-input text='世界BOSS' show='世界Boss' /> | <qqbot-cmd-input text='赛季' show='赛季主页' />\n\n"
     output += "<qqbot-cmd-input text='世界排行' show='世界排行' /> | <qqbot-cmd-input text='赛季任务' show='赛季任务' /> | <qqbot-cmd-input text='赛季装扮' show='赛季装扮' />\n\n"
     output += "<qqbot-cmd-input text='赛季奖励' show='领取赛季奖励' /> | <qqbot-cmd-input text='因果印记' show='查看因果印记' />\n\n"
