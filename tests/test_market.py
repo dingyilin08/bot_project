@@ -44,6 +44,8 @@ class MarketTests(unittest.IsolatedAsyncioTestCase):
         ):
             self.assertTrue(is_market_banned_item(name, description, access))
         self.assertFalse(is_market_banned_item("束灵符", "可用于副本", "商城购买"))
+        self.assertFalse(is_market_banned_item("紫灵草", "药材", "仙玉祈愿产出", 1))
+        self.assertFalse(is_market_banned_item("破境丹", "丹药", "仙玉祈愿产出", 4))
 
     def test_market_fee_and_categories(self):
         self.assertEqual(calculate_market_fee(100), 8)

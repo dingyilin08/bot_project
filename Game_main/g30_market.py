@@ -48,8 +48,10 @@ def category_for_item(item_name, item_type):
     return "消耗品"
 
 
-def is_market_banned_item(item_name, description="", access=""):
+def is_market_banned_item(item_name, description="", access="", item_type=None):
     """按物品文案拦截不可交易的养成、祈愿与专属资产。"""
+    if int(item_type or 0) in (1, 4):
+        return False
     text = " ".join(str(value or "") for value in (item_name, description, access))
     return any(marker in text for marker in BLOCKED_MARKERS)
 
@@ -247,27 +249,23 @@ async def _get_tradable_item(cursor, item_name):
     if not row:
         raise MarketError(f"未找到物品【{item_name}】，请从物品背包复制完整名称。")
     item_id, name, item_type, description, access = row
-    if is_market_banned_item(name, description, access):
-        raise MarketError("技能卷轴、装备、本源材料、专属碎片、祈愿产出及绑定/任务道具不可在坊市交易。")
-    if int(item_type or 0) not in (1, 2, 3, 4, 5, 6, 7):
+    item_type = int(item_type or 0)
+    if item_type not in (1, 2, 3, 4, 5, 6, 7):
         raise MarketError("该物品不是可堆叠的通用道具，无法在坊市交易。")
+    if is_market_banned_item(name, description, access, item_type):
+        raise MarketError("技能卷轴、装备、本源材料、专属碎片、祈愿产出及绑定/任务道具不可在坊市交易。")
     item_id = int(item_id)
-    await cursor.execute(
-        "SELECT 1 FROM data_herb WHERE item_id = %s UNION SELECT 1 FROM data_pill WHERE item_id = %s LIMIT 1",
-        (item_id, item_id),
-    )
-    if await cursor.fetchone():
-        raise MarketError("该物品可由仙玉祈愿产出，不可在坊市交易。")
-    await cursor.execute(
-        """
-        SELECT 1 FROM data_benyuan
-        WHERE need_item_1 = %s OR need_item_2 = %s OR need_item_3 = %s
-        LIMIT 1
-        """,
-        (str(item_id), str(item_id), str(item_id)),
-    )
-    if await cursor.fetchone():
-        raise MarketError("该物品属于本源材料且可由仙玉祈愿产出，不可在坊市交易。")
+    if item_type not in (1, 4):
+        await cursor.execute(
+            """
+            SELECT 1 FROM data_benyuan
+            WHERE need_item_1 = %s OR need_item_2 = %s OR need_item_3 = %s
+            LIMIT 1
+            """,
+            (str(item_id), str(item_id), str(item_id)),
+        )
+        if await cursor.fetchone():
+            raise MarketError("该物品属于本源材料且可由仙玉祈愿产出，不可在坊市交易。")
     return {
         "id": item_id, "name": str(name), "category": category_for_item(name, item_type),
     }
@@ -417,7 +415,7 @@ async def market_help(uid, qz):
         "",
         "**五、交易规则**",
         f"> 订单有效期为 **{MARKET_EXPIRE_HOURS} 小时**；到期自动返还余货或余款。成交从卖家收入扣除 **8%** 手续费（向下取整并销毁）。",
-        "> 仅可交易背包中的可堆叠通用物品；技能卷轴、装备、本源材料、专属碎片、祈愿产出、绑定和任务道具不可上架或收购。搜索和上架设有短暂冷却，防止刷屏。",
+        "> 药材与丹药可自由上架或收购（含祈愿产出）；技能卷轴、装备、本源材料、专属碎片及其他祈愿/绑定/任务道具不可交易。搜索和上架设有短暂冷却，防止刷屏。",
         "***",
         _buttons(("坊市", "返回坊市"), ("坊市列表", "浏览订单")),
     ]
