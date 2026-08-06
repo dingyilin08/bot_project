@@ -322,6 +322,49 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("GROUP_MESSAGE_CREATE", inbox.events["event-group-full-message"]["event_type"])
         self.assertEqual("PROCESSED", inbox.events["event-group-full-message"]["status"])
 
+    async def test_full_group_at_message_strips_qq_mention_before_parsing(self):
+        inbox = InMemoryEventInbox()
+        sender = AsyncMock(return_value={"id": "sent-message-id"})
+
+        with patch.object(main, "event_inbox", inbox), patch.object(
+            main, "output_content", AsyncMock(return_value="艾特指令回复")
+        ) as output, patch.object(main, "send_group_message", sender):
+            response = await main.handle_webhook(
+                self._group_message_request(
+                    "event-group-full-at-message",
+                    event_type="GROUP_MESSAGE_CREATE",
+                    content="<@!bot-member-openid>菜单",
+                    author={"member_openid": "member-openid-1"},
+                )
+            )
+
+        self.assertEqual({"op": 12}, response)
+        output.assert_awaited_once_with(
+            "菜单", "member-openid-1", "group-openid-1", request_id="group-message-id-1"
+        )
+        sender.assert_awaited_once_with("group-openid-1", "艾特指令回复", "group-message-id-1")
+
+    async def test_full_group_at_message_strips_visible_mention_before_parsing(self):
+        inbox = InMemoryEventInbox()
+        sender = AsyncMock(return_value={"id": "sent-message-id"})
+
+        with patch.object(main, "event_inbox", inbox), patch.object(
+            main, "output_content", AsyncMock(return_value="艾特指令回复")
+        ) as output, patch.object(main, "send_group_message", sender):
+            response = await main.handle_webhook(
+                self._group_message_request(
+                    "event-group-visible-at-message",
+                    event_type="GROUP_MESSAGE_CREATE",
+                    content="@机器人 菜单",
+                    author={"member_openid": "member-openid-1"},
+                )
+            )
+
+        self.assertEqual({"op": 12}, response)
+        output.assert_awaited_once_with(
+            "菜单", "member-openid-1", "group-openid-1", request_id="group-message-id-1"
+        )
+
     async def test_full_group_message_silently_ignores_normal_chat(self):
         inbox = InMemoryEventInbox()
         output = AsyncMock()

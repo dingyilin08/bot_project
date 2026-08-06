@@ -8,6 +8,7 @@ import logging
 import uvicorn
 import json
 import hashlib
+import re
 import aiohttp
 import os
 from output_main import *
@@ -401,6 +402,42 @@ def filter_message_content(content: str) -> str:
     return content.replace("/", "")
 
 
+def filter_group_message_content(content: str) -> str:
+    """清理 QQ 群 Webhook 消息中的 @ 前缀，再交给指令解析器。
+
+    开启群全量消息后，用户 @ 机器人发出的消息可能以
+    ``<@!member_openid>菜单``、``@机器人 菜单`` 等形式出现在
+    ``GROUP_MESSAGE_CREATE`` 的 ``content`` 中。旧逻辑只移除了 ``/``，
+    会把艾特标记和指令拼在一起，导致 ``jiance`` 无法识别。
+    """
+    if not content:
+        return content
+
+    filtered = filter_message_content(str(content)).strip()
+
+    # QQ 的结构化艾特标记；连续艾特时全部移除。
+    mention_pattern = re.compile(
+        r"^(?:\s*(?:<@!?[^>\s]+>|\[CQ:at,[^\]]+\])\s*)+",
+        re.UNICODE,
+    )
+    filtered = mention_pattern.sub("", filtered, count=1).strip()
+
+    # 部分全量群消息会将艾特渲染成可见的“@昵称”。有空格时可安全移除
+    # 首个艾特词；没有空格时，按已注册指令定位指令起点，兼容“@昵称菜单”。
+    text_mention = re.match(r"^@[^\s@]+\s+", filtered)
+    if text_mention:
+        filtered = filtered[text_mention.end():].lstrip()
+    elif filtered.startswith("@"):
+        commands = [item for item in (wuhouzhui + "|" + youhouzhui).split("|") if item]
+        for command in sorted(set(commands), key=len, reverse=True):
+            command_start = filtered.find(command, 1)
+            if command_start > 1 and not re.search(r"\s", filtered[1:command_start]):
+                filtered = filtered[command_start:]
+                break
+
+    return filtered.strip()
+
+
 # Ed25519签名计算函数（按照QQ机器人文档实现）
 def generate_signature(bot_secret: str, event_ts: str, plain_token: str) -> str:
     """
@@ -550,7 +587,7 @@ async def handle_webhook(request: Request):
             # 群聊消息处理。GROUP_MESSAGE_CREATE 开启“接收所有消息”后推送，
             # 事件体与 @ 消息一致，均可使用消息 ID 被动回复。
             elif payload.t in ("GROUP_AT_MESSAGE_CREATE", "GROUP_MESSAGE_CREATE"):
-                content = filter_message_content(json_data["content"])
+                content = filter_group_message_content(json_data.get("content", ""))
                 author = json_data.get("author") or {}
                 # union_openid 在部分事件中可能为空；群消息稳定提供 member_openid。
                 user_openid = author.get("union_openid") or author.get("member_openid")
