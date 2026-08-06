@@ -8,6 +8,7 @@ from Game_main.g30_market import (
     parse_order_quantity,
     show_market_menu,
 )
+import output_main
 from output_main import jiance
 
 
@@ -45,3 +46,23 @@ class MarketTests(unittest.IsolatedAsyncioTestCase):
         for command in ("坊市列表", "坊市上架 ", "坊市购买 ", "坊市收购 ", "坊市出售 ", "我的摊位", "坊市交易记录"):
             self.assertIn(command, content)
         self.assertIn(str(MARKET_EXPIRE_HOURS), content)
+
+    async def test_market_dispatch_does_not_require_undefined_prefix(self):
+        original_uid = output_main.openid_to_uid
+        original_home = output_main.market_home
+
+        async def fake_uid(_openid):
+            return 10001
+
+        async def fake_home(uid, param):
+            self.assertEqual((uid, param), (10001, ""))
+            return {"type": "markdown", "content": "ok"}
+
+        output_main.openid_to_uid = fake_uid
+        output_main.market_home = fake_home
+        try:
+            result = await output_main.content("坊市", "", "test-openid")
+        finally:
+            output_main.openid_to_uid = original_uid
+            output_main.market_home = original_home
+        self.assertEqual(result["content"], "ok")

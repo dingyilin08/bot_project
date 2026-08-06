@@ -265,27 +265,27 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
     elif con_arr0 == '使用体力药':
         return await use_stamina_potion(uid, con_arr1 or 1)
     elif con_arr0 == '坊市':
-        return await market_home(uid, qz, con_arr1)
+        return await market_home(uid, con_arr1)
     elif con_arr0 == '坊市帮助':
-        return await market_help(uid, qz)
+        return await market_help(uid)
     elif con_arr0 == '坊市列表':
-        return await market_list_command(uid, qz, con_arr1)
+        return await market_list_command(uid, con_arr1)
     elif con_arr0 == '坊市上架':
-        return await market_create_sell(uid, qz, con_arr1)
+        return await market_create_sell(uid, con_arr1)
     elif con_arr0 == '坊市购买':
-        return await market_buy(uid, qz, con_arr1)
+        return await market_buy(uid, con_arr1)
     elif con_arr0 == '坊市收购':
-        return await market_create_buy(uid, qz, con_arr1)
+        return await market_create_buy(uid, con_arr1)
     elif con_arr0 == '坊市出售':
-        return await market_sell_to_buy_order(uid, qz, con_arr1)
+        return await market_sell_to_buy_order(uid, con_arr1)
     elif con_arr0 == '我的摊位':
-        return await market_my_orders(uid, qz, con_arr1)
+        return await market_my_orders(uid, con_arr1)
     elif con_arr0 == '撤摊':
-        return await market_cancel(uid, qz, con_arr1)
+        return await market_cancel(uid, con_arr1)
     elif con_arr0 == '坊市底价':
-        return await market_price_floor(uid, qz, con_arr1)
+        return await market_price_floor(uid, con_arr1)
     elif con_arr0 == '坊市交易记录':
-        return await market_trade_history(uid, qz, con_arr1)
+        return await market_trade_history(uid, con_arr1)
     elif con_arr0 == '角色背包':
         if con_arr1 == "":
             return await role_bag(uid, 1)
