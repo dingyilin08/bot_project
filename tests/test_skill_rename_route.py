@@ -179,6 +179,89 @@ class SkillInfoTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("继承BUFF：雨界意境", content)
         self.assertIn("BUFF描述：无视敌方40%防御，持续2回合", content)
 
+    async def test_base_skill_name_returns_catalog_details(self):
+        cursor = _BaseSkillInfoCursor(found=True)
+        conn = _FusionConnection(cursor)
+        original_connect = g5_skill.connect_mysql
+        g5_skill.connect_mysql = lambda: conn
+        try:
+            result = await g5_skill.skill_info.__wrapped__(70001, "", "吸掌")
+        finally:
+            g5_skill.connect_mysql = original_connect
+
+        content = result["content"]
+        self.assertIn("基础技能【吸掌】信息", content)
+        self.assertIn("可装备角色：萧炎", content)
+        self.assertIn("技能BUFF：破甲", content)
+
+    async def test_unknown_skill_name_guides_player_to_skill_bag_id(self):
+        cursor = _BaseSkillInfoCursor(found=False)
+        conn = _FusionConnection(cursor)
+        original_connect = g5_skill.connect_mysql
+        g5_skill.connect_mysql = lambda: conn
+        try:
+            result = await g5_skill.skill_info.__wrapped__(70001, "", "我的融合技")
+        finally:
+            g5_skill.connect_mysql = original_connect
+
+        self.assertIn("技能信息 技能编号", result["content"])
+        self.assertIn("技能信息 31", result["content"])
+
+
+class _BaseSkillInfoCursor:
+    def __init__(self, found):
+        self.found = found
+        self._row = None
+
+    async def execute(self, sql, params=None):
+        statement = " ".join(sql.split())
+        if statement.startswith("SELECT role_name, skill_type, `value`"):
+            self._row = ("萧炎", 4, "30", 1, 2, "破甲", "破防提升30%，持续2回合") if self.found else None
+        else:
+            raise AssertionError(f"未预期的基础技能信息 SQL：{statement}")
+
+    async def fetchone(self):
+        return self._row
+
+
+class _SkillBagCursor:
+    def __init__(self):
+        self._row = None
+        self._rows = []
+
+    async def execute(self, sql, params=None):
+        statement = " ".join(sql.split())
+        if statement.startswith("SELECT COUNT(*) FROM user_skill"):
+            self._row = (1,)
+        elif statement.startswith("SELECT id, is_data_skill, skill_name, skill_type FROM user_skill"):
+            self._rows = [(34, 0, "万象斩", 1)]
+        elif statement.startswith("SELECT lingshi, xianyu FROM user_zt"):
+            self._row = (1000, 100)
+        else:
+            raise AssertionError(f"未预期的技能背包 SQL：{statement}")
+
+    async def fetchone(self):
+        return self._row
+
+    async def fetchall(self):
+        return self._rows
+
+
+class SkillBagDisplayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_skill_bag_button_shows_name_and_submits_skill_id(self):
+        cursor = _SkillBagCursor()
+        conn = _FusionConnection(cursor)
+        original_connect = g5_skill.connect_mysql
+        g5_skill.connect_mysql = lambda: conn
+        try:
+            result = await g5_skill.skill_bag.__wrapped__(70001, "", 1)
+        finally:
+            g5_skill.connect_mysql = original_connect
+
+        content = result["content"]
+        self.assertIn("text='技能信息 34' show='万象斩'", content)
+        self.assertIn("〔34〕", content)
+
 
 class SkillRenameRouteTests(unittest.IsolatedAsyncioTestCase):
     async def test_command_parser_preserves_name_separator(self):

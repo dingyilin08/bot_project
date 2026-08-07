@@ -129,11 +129,41 @@ def _display_skill_value(value, is_percent):
 
 @reg_xz_func
 async def skill_info(uid, qz, skill_info):
-    skill_id = parse_skill_info_id(skill_info)
-    if skill_id is None:
-        return {"type": "markdown", "content": qz + "指令错误，正确指令：技能信息 技能编号\n示例：技能信息 31\n"}
+    skill_param = str(skill_info or "").strip()
+    if not skill_param:
+        return {"type": "markdown", "content": qz + "指令错误，正确指令：技能信息 技能名称/技能编号\n示例：技能信息 吸掌 或 技能信息 31\n"}
+    skill_id = parse_skill_info_id(skill_param)
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
+            if skill_id is None:
+                await cursor.execute(
+                    """
+                    SELECT role_name, skill_type, `value`, is_percent, cooldown, buff_name, buff_desc
+                    FROM data_skill WHERE skill_name = %s LIMIT 1
+                    """,
+                    (skill_param,),
+                )
+                data_skill = await cursor.fetchone()
+                if data_skill is None:
+                    return {
+                        "type": "markdown",
+                        "content": qz + (
+                            f"未找到基础技能【{skill_param}】。\n"
+                            "若要查询自己的融合技能或已激活技能，请发送：技能信息 技能编号\n"
+                            "示例：技能信息 31\n"
+                        ),
+                    }
+                role_name, skill_type, value, is_percent, cooldown, buff_name, buff_desc = data_skill
+                output = f"**基础技能【{skill_param}】信息：**\n"
+                output += f"可装备角色：{role_name}\n"
+                output += f"技能类型：{_display_skill_type(skill_type)}\n"
+                output += f"技能数值：{_display_skill_value(value, is_percent)}\n"
+                output += f"技能冷却：{cooldown}回合\n"
+                output += f"技能BUFF：{buff_name}\n"
+                output += f"BUFF描述：{buff_desc}\n"
+                output += "> 已激活技能与融合技能请使用技能背包编号查询，例如：技能信息 31\n"
+                return {"type": "markdown", "content": qz + output}
+
             await cursor.execute(
                 """
                 SELECT id, skill_name, skill_type, `value`, is_percent, skill_id, skill_1, skill_2,
@@ -533,10 +563,10 @@ async def skill_bag(uid, qz, page_num=1):
                 elif skill_type == 4 or skill_type == '4':
                     skill_type = "穿透型"
 
-                skill_bt = f"<qqbot-cmd-input text='技能信息 {skill_id}' show='技能信息 {skill_id}' />"
+                skill_bt = f"<qqbot-cmd-input text='技能信息 {skill_id}' show='{skill_name}' />"
                 output += f"〔{skill_id}〕{skill_bt}『{skill_type}』{biaoshi}\n"
 
-            output += "> 点击蓝字可查看该技能信息噢~\n"
+            output += "> 点击技能名称查看详情；实际查询会使用该技能在背包中的编号。\n"
 
             output += "***\n"
 
@@ -550,6 +580,5 @@ async def skill_bag(uid, qz, page_num=1):
             output += pagination_controls("技能背包", page_num, total_pages) + "\n"
 
             return {"type": "markdown", "content": qz + output}
-
 
 
