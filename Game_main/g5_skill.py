@@ -147,13 +147,26 @@ async def skill_info(uid, qz, skill_name):
 
 
 # 技能融合
+def parse_fusion_skill_ids(skill_info):
+    """解析“技能编号A-技能编号B”，避免非法编号进入融合事务。"""
+    parts = str(skill_info or "").strip().split("-")
+    if len(parts) != 2:
+        return None, None
+    try:
+        skill_1_id, skill_2_id = (int(part.strip()) for part in parts)
+    except (TypeError, ValueError):
+        return None, None
+    if skill_1_id <= 0 or skill_2_id <= 0 or skill_1_id == skill_2_id:
+        return None, None
+    return skill_1_id, skill_2_id
+
+
 @reg_xz_func
 async def fuse_skills(uid, qz, skill_info):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            try:
-                skill_1_id, skill_2_id = skill_info.split("-")
-            except ValueError:
+            skill_1_id, skill_2_id = parse_fusion_skill_ids(skill_info)
+            if skill_1_id is None:
                 return {"type": "markdown", "content": qz + "技能融合格式错误，请检查技能融合格式是否正确。\n示例：技能融合 欲融合技能1-欲融合技能2"}
             # 检查两个技能是否存在
             sql = "SELECT skill_name, skill_type, `value`, is_percent, is_data_skill, is_zb, skill_id, cooldown FROM user_skill WHERE id = %s AND uid = %s LIMIT 1"
@@ -188,6 +201,12 @@ async def fuse_skills(uid, qz, skill_info):
                 return {"type": "markdown", "content": qz + "技能类型不一致，无法融合。\n"}
             if is_percent_1 != is_percent_2:
                 return {"type": "markdown", "content": qz + "百分比数值与普通数值类型不一致，无法融合。\n"}
+
+            try:
+                value_1 = int(value_1)
+                value_2 = int(value_2)
+            except (TypeError, ValueError):
+                return {"type": "markdown", "content": qz + "技能数值异常，暂时无法融合，请联系管理员处理。\n"}
 
             if value_1 < value_2:
                 new_skill_value = random.randint(int(value_1 * 1.5), int(value_2 * 2))
@@ -473,7 +492,6 @@ async def skill_bag(uid, qz, page_num=1):
             output += pagination_controls("技能背包", page_num, total_pages) + "\n"
 
             return {"type": "markdown", "content": qz + output}
-
 
 
 
