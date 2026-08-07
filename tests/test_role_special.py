@@ -3,10 +3,11 @@ import unittest
 import asyncio
 from unittest.mock import AsyncMock, patch
 
+import output_main
 from Game_domain.role_special_catalog import get_role_spec, validate_role_spec
 from Game_domain.role_special_intro import render_role_special_intro
 from Game_domain.role_special_service import world_boss_contribution
-from Game_main.g22_role_special import render_target_selection, role_special_target
+from Game_main.g22_role_special import render_collection, render_target_selection, role_special_target
 from Tool.combat_system import CombatEntity, CombatManager
 from Tool.qq_keyboard import attach_keyboard, extract_keyboard
 from output_main import jiance
@@ -192,6 +193,56 @@ class RoleSpecialTargetTests(unittest.TestCase):
         result = asyncio.run(role_special_target.__wrapped__(1, "", "帝炎"))
         self.assertEqual("定向设置失败：格式：专属定向 五星能力编号。", result["content"])
         self.assertNotIn("invalid literal", result["content"])
+
+
+class RoleSpecialCollectionRenderTests(unittest.TestCase):
+    COLLECTION_DATA = {
+        "role_name": "萧炎",
+        "spec": {"drop_name": "异火"},
+        "items": [
+            {"id": 101, "name": "帝炎", "rarity": 5, "kind": "ACTIVE", "multiplier": 2.0,
+             "lore": "万火归一。", "fragments": 10, "cost": 10, "unlocked": True, "slot": "ACTIVE", "enabled": True},
+            {"id": 102, "name": "佛怒火莲", "rarity": 5, "kind": "ACTIVE", "multiplier": 1.8,
+             "lore": "火莲绽放。", "fragments": 4, "cost": 10, "unlocked": False, "slot": None, "enabled": True},
+            {"id": 103, "name": "青莲地心火", "rarity": 4, "kind": "PASSIVE", "multiplier": 0.5,
+             "lore": "青莲之火。", "fragments": 0, "cost": 6, "unlocked": False, "slot": None, "enabled": True},
+            {"id": 104, "name": "陨落心炎", "rarity": 4, "kind": "PASSIVE", "multiplier": 0.6,
+             "lore": "心火淬体。", "fragments": 6, "cost": 6, "unlocked": True, "slot": "PASSIVE", "enabled": True},
+            {"id": 105, "name": "虚无吞炎", "rarity": 5, "kind": "PASSIVE", "multiplier": 0.9,
+             "lore": "吞纳万物。", "fragments": 0, "cost": 10, "unlocked": False, "slot": None, "enabled": True},
+        ],
+    }
+
+    def test_collection_uses_compact_cards_and_only_renders_requested_page(self):
+        content = render_collection(self.COLLECTION_DATA, page=2)["content"]
+
+        self.assertIn("收集进度：**2/5** 已点亮｜第 **2/2** 页", content)
+        self.assertIn("**#105｜虚无吞炎**｜★★★★★", content)
+        self.assertIn("碎片 0/10", content)
+        self.assertNotIn("#101｜帝炎", content)
+        self.assertIn("text='专属图鉴 1'", content)
+        self.assertIn("text='专属图鉴 2'", content)
+
+    def test_collection_marks_equipped_slot_and_clamps_invalid_page(self):
+        first_page = render_collection(self.COLLECTION_DATA, page=0)["content"]
+        last_page = render_collection(self.COLLECTION_DATA, page=999)["content"]
+
+        self.assertIn("装备：主动槽", first_page)
+        self.assertIn("装备：被动槽", first_page)
+        self.assertIn("第 **2/2** 页", last_page)
+
+
+class RoleSpecialCollectionRouteTests(unittest.TestCase):
+    def test_collection_page_command_is_parsed(self):
+        self.assertEqual(("专属图鉴", "2"), asyncio.run(jiance("专属图鉴 2")))
+
+    def test_collection_route_passes_page_suffix_to_handler(self):
+        with patch("output_main.openid_to_uid", new=AsyncMock(return_value=1)), \
+             patch("output_main.role_special_collection", new=AsyncMock(return_value="ok")) as handler:
+            result = asyncio.run(output_main.content("专属图鉴", "2", "openid"))
+
+        self.assertEqual("ok", result)
+        handler.assert_awaited_once_with(1, "2")
 
 
 if __name__ == "__main__":

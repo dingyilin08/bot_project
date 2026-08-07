@@ -57,6 +57,7 @@ youhouzhui += '|填写邀请码'
 youhouzhui += '|坊市上架|坊市购买|坊市收购|坊市出售|坊市底价|坊市列表|坊市交易记录|我的摊位|撤摊|坊市'
 youhouzhui += '|GM世界消息添加|GM世界消息修改|GM世界消息启用|GM世界消息停用|GM世界消息删除'
 youhouzhui += '|GM全服发放灵石|GM全服发放仙玉'
+youhouzhui += '|专属图鉴'
 
 world_message_value_commands = (
     'GM世界消息添加',
@@ -689,7 +690,7 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
     elif con_arr0 in ('角色养成', '萧炎养成', '王林养成', '韩立养成', '本命飞剑', '石昊养成', '洞天', '叶凡养成', '圣体秘境', '孟川养成', '元神修炼'):
         return await role_special_home(uid)
     elif con_arr0 in ('专属图鉴', '异火图鉴', '意境图鉴', '法宝图鉴', '宝术图鉴', '九秘图鉴', '刀法图鉴'):
-        return await role_special_collection(uid)
+        return await role_special_collection(uid, con_arr1)
     elif con_arr0 in ('专属祈愿', '异火祈愿', '意境祈愿', '法宝祈愿', '宝术祈愿', '九秘祈愿', '刀法祈愿'):
         return await role_special_pray(uid, con_arr1)
     elif con_arr0 in ('专属定向', '异火定向'):

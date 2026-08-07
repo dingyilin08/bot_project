@@ -2,6 +2,7 @@
 """P1 角色专属战斗养成：统一入口、图鉴、祈愿、装配、组合与排行。"""
 
 from func.pd_func import reg_xz_func
+from Tool.tool_command import pagination_controls
 from Game_domain.role_special_service import (
     DAILY_DROP_LIMIT,
     DAILY_PRAY_LIMIT,
@@ -21,6 +22,9 @@ from Game_domain.role_special_service import (
     select_feature,
     unlock,
 )
+
+
+COLLECTION_PAGE_SIZE = 4
 
 
 def _stage_name(spec, stage_no):
@@ -116,19 +120,56 @@ def render_home(data):
     return {"type": "markdown", "content": output}
 
 
-def render_collection(data, notice=""):
+def _collection_page(value):
+    """将图鉴页码限制在可用范围内；空参数默认展示第一页。"""
+    try:
+        return max(1, int(str(value or "").strip() or 1))
+    except ValueError:
+        return 1
+
+
+def _collection_status(item):
+    if not item["enabled"]:
+        return "⏳ 暂未开放"
+    if item["unlocked"]:
+        return "✅ 已点亮"
+    return f"碎片 {item['fragments']}/{item['cost']}"
+
+
+def render_collection(data, notice="", page=1):
     spec = data["spec"]
+    enabled_items = [item for item in data["items"] if item["enabled"]]
+    unlocked_count = sum(1 for item in enabled_items if item["unlocked"])
+    total_items = len(enabled_items)
+    total_pages = max(1, (len(data["items"]) + COLLECTION_PAGE_SIZE - 1) // COLLECTION_PAGE_SIZE)
+    page = min(max(1, int(page)), total_pages)
+    start = (page - 1) * COLLECTION_PAGE_SIZE
+    page_items = data["items"][start:start + COLLECTION_PAGE_SIZE]
+
     output = f"##### 📚 {data['role_name']}｜{spec['drop_name']}图鉴\n\n"
     if notice:
         output += f"> {notice}\n\n"
-    for item in data["items"]:
+
+    output += f"> 收集进度：**{unlocked_count}/{total_items}** 已点亮｜第 **{page}/{total_pages}** 页\n"
+    output += "> 输入 `专属图鉴 页码` 翻页；点亮后可用编号装备。\n\n"
+
+    if not page_items:
+        output += "> 当前没有可展示的专属能力。\n\n"
+    for item in page_items:
         stars = "★" * item["rarity"]
-        status = "未开放·待考据" if not item["enabled"] else "已点亮" if item["unlocked"] else f"残片 {item['fragments']}/{item['cost']}"
-        slot = f"｜已装备{item['slot']}" if item["slot"] else ""
+        status = _collection_status(item)
+        slot = ""
+        if item["slot"]:
+            slot_name = "主动槽" if item["slot"] == "ACTIVE" else "被动槽"
+            slot = f"｜装备：{slot_name}"
         kind = "未开放" if not item["enabled"] else "主动" if item["kind"] == "ACTIVE" else "被动"
-        output += f"**#{item['id']} {item['name']}**｜{stars}｜{kind}｜倍率 {item['multiplier']:.0%}\n"
-        output += f"> {status}{slot}｜{item['lore']}\n"
-    output += "\n" + " | ".join([
+        output += f"**#{item['id']}｜{item['name']}**｜{stars}\n"
+        output += f"> {kind}｜倍率 **{item['multiplier']:.0%}**｜{status}{slot}\n"
+        output += f"> {item['lore']}\n\n"
+
+    output += "***\n"
+    output += pagination_controls("专属图鉴", page, total_pages) + "\n\n"
+    output += " | ".join([
         _button("点亮能力 ", "点亮能力*"),
         _button("装备专属 ", "装备专属*"),
         _button("专属定向 ", "五星定向*"),
@@ -165,9 +206,9 @@ async def role_special_home(uid, qz):
 
 
 @reg_xz_func
-async def role_special_collection(uid, qz):
+async def role_special_collection(uid, qz, value=""):
     try:
-        return render_collection(await collection(uid))
+        return render_collection(await collection(uid), page=_collection_page(value))
     except RoleSpecialError as error:
         return {"type": "markdown", "content": str(error)}
 
