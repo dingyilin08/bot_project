@@ -7,7 +7,7 @@ import output_main
 from Game_domain.role_special_catalog import get_role_spec, validate_role_spec
 from Game_domain.role_special_intro import render_role_special_intro
 from Game_domain.role_special_service import world_boss_contribution
-from Game_main.g22_role_special import render_collection, render_target_selection, role_special_target
+from Game_main.g22_role_special import render_collection, render_special_overview, render_target_selection, role_special_target
 from Tool.combat_system import CombatEntity, CombatManager
 from Tool.qq_keyboard import attach_keyboard, extract_keyboard
 from output_main import jiance
@@ -191,7 +191,8 @@ class RoleSpecialTargetTests(unittest.TestCase):
 
     def test_invalid_target_value_returns_player_facing_format_help(self):
         result = asyncio.run(role_special_target.__wrapped__(1, "", "帝炎"))
-        self.assertEqual("定向设置失败：格式：专属定向 五星能力编号。", result["content"])
+        self.assertIn("##### ⚠️ 定向设置失败", result["content"])
+        self.assertIn("格式：专属定向 五星能力编号。", result["content"])
         self.assertNotIn("invalid literal", result["content"])
 
 
@@ -216,7 +217,8 @@ class RoleSpecialCollectionRenderTests(unittest.TestCase):
     def test_collection_uses_compact_cards_and_only_renders_requested_page(self):
         content = render_collection(self.COLLECTION_DATA, page=2)["content"]
 
-        self.assertIn("收集进度：**2/5** 已点亮｜第 **2/2** 页", content)
+        self.assertIn("**收集进度**", content)
+        self.assertIn("已点亮：**2/5**｜当前：第 **2/2** 页", content)
         self.assertIn("**#105｜虚无吞炎**｜★★★★★", content)
         self.assertIn("碎片 0/10", content)
         self.assertNotIn("#101｜帝炎", content)
@@ -232,7 +234,27 @@ class RoleSpecialCollectionRenderTests(unittest.TestCase):
         self.assertIn("第 **2/2** 页", last_page)
 
 
+class RoleSpecialOverviewTests(unittest.TestCase):
+    def test_overview_explains_progression_features_and_combat_rules(self):
+        content = render_special_overview()["content"]
+
+        for text in ("它有什么用？", "推荐流程", "功能说明", "战斗规则", "专属图鉴", "专属组合"):
+            self.assertIn(text, content)
+        self.assertIn("text='专属养成菜单'", content)
+
+
 class RoleSpecialCollectionRouteTests(unittest.TestCase):
+    def test_overview_command_is_parsed(self):
+        self.assertEqual(("专属养成介绍", ""), asyncio.run(jiance("专属养成介绍")))
+
+    def test_overview_route_dispatches_to_special_handler(self):
+        with patch("output_main.openid_to_uid", new=AsyncMock(return_value=1)), \
+             patch("output_main.role_special_overview", new=AsyncMock(return_value="overview")) as handler:
+            result = asyncio.run(output_main.content("专属养成介绍", "", "openid"))
+
+        self.assertEqual("overview", result)
+        handler.assert_awaited_once_with(1)
+
     def test_collection_page_command_is_parsed(self):
         self.assertEqual(("专属图鉴", "2"), asyncio.run(jiance("专属图鉴 2")))
 

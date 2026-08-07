@@ -326,12 +326,18 @@ async def show_sect_menu(uid, qz):
 @reg_xz_func
 async def show_role_special_menu(uid, qz):
     """角色专属战斗养成入口；具体内容随当前出战角色切换。"""
-    output = "##### ⚔️ 专属养成菜单\n\n"
-    output += "当前出战角色的专属材料、图鉴、进阶、组合与排行均在此处；装备的一组组合会随新创建的 PVE 快照生效。\n\n"
-    output += "<qqbot-cmd-input text='角色养成' show='当前角色养成' /> | <qqbot-cmd-input text='专属图鉴' show='专属图鉴' />\n\n"
-    output += "<qqbot-cmd-input text='专属进阶' show='专属进阶' /> | <qqbot-cmd-input text='专属组合 背包' show='组合背包' />\n\n"
-    output += "<qqbot-cmd-input text='专属组合 ' show='创建组合*' /> | <qqbot-cmd-input text='专属排行榜' show='专属排行榜' />\n\n"
-    output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
+    output = "##### ⚔️ 专属战斗养成｜功能菜单\n\n"
+    output += "**玩法作用**\n"
+    output += "> 为当前出战角色解锁专属主动、被动和成长阶段，让角色在 PVE 中获得独有的爆发、减伤、控制或续航能力。\n"
+    output += "> 切换出战角色后，图鉴、材料、进阶和组合会自动切换为该角色的专属体系。\n\n"
+    output += "**推荐流程**\n"
+    output += "> ① 查看玩法介绍 → ② 图鉴确认能力与碎片 → ③ 专属祈愿补齐碎片 → ④ 点亮并装备能力 → ⑤ 积累材料进阶 → ⑥ 创建并装备组合。\n\n"
+    output += "**养成与能力**\n"
+    output += "<qqbot-cmd-input text='专属养成介绍' show='玩法介绍' /> | <qqbot-cmd-input text='角色养成' show='当前养成进度' /> | <qqbot-cmd-input text='专属图鉴' show='专属图鉴' />\n\n"
+    output += "<qqbot-cmd-input text='专属祈愿 1次' show='祈愿1次' /> | <qqbot-cmd-input text='专属祈愿 10次' show='祈愿10次' /> | <qqbot-cmd-input text='专属定向' show='五星定向' />\n\n"
+    output += "**进阶与组合**\n"
+    output += "<qqbot-cmd-input text='专属进阶' show='专属进阶' /> | <qqbot-cmd-input text='专属组合 背包' show='组合背包' /> | <qqbot-cmd-input text='专属组合 ' show='创建组合*' />\n\n"
+    output += "<qqbot-cmd-input text='专属排行榜' show='专属排行榜' /> | <qqbot-cmd-input text='主菜单' show='返回主菜单' />"
     return {"type": "markdown", "content": output}
 
 
