@@ -108,41 +108,90 @@ async def jz_info(uid, qz, jz_name):
 
 
 # 技能信息
+def parse_skill_info_id(skill_info):
+    """解析玩家技能背包编号。"""
+    try:
+        skill_id = int(str(skill_info or "").strip())
+    except (TypeError, ValueError):
+        return None
+    return skill_id if skill_id > 0 else None
+
+
+def _display_skill_type(skill_type):
+    return {1: "攻击型", 2: "防御型", 3: "回复型", 4: "穿透型"}.get(
+        int(skill_type or 0), "未知类型"
+    )
+
+
+def _display_skill_value(value, is_percent):
+    return f"{value}%" if int(is_percent or 0) == 1 else str(value)
+
+
 @reg_xz_func
-async def skill_info(uid, qz, skill_name):
+async def skill_info(uid, qz, skill_info):
+    skill_id = parse_skill_info_id(skill_info)
+    if skill_id is None:
+        return {"type": "markdown", "content": qz + "指令错误，正确指令：技能信息 技能编号\n示例：技能信息 31\n"}
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            sql = "SELECT role_name, skill_type, `value`, is_percent, item_id, cooldown, buff_name, buff_desc FROM data_skill WHERE skill_name = %s LIMIT 1"
-            await cursor.execute(sql, (skill_name,))
+            await cursor.execute(
+                """
+                SELECT id, skill_name, skill_type, `value`, is_percent, skill_id, skill_1, skill_2,
+                       is_data_skill, cooldown
+                FROM user_skill WHERE id = %s AND uid = %s LIMIT 1
+                """,
+                (skill_id, uid),
+            )
             result = await cursor.fetchone()
             if result is None:
-                return {"type": "markdown", "content": qz + "技能不存在，请检查技能名称是否正确。\n"}
-            role_name, skill_type, value, is_percent, item_id, cooldown, buff_name, buff_desc = result
+                return {"type": "markdown", "content": qz + "未找到该技能编号，请从技能背包中复制编号后重试。\n"}
+            (_, skill_name, skill_type, value, is_percent, data_skill_id, source_1, source_2,
+             is_data_skill, cooldown) = result
 
-            if skill_type == 1 or skill_type == '1':
-                skill_type = "攻击型"
-            elif skill_type == 2 or skill_type == '2':
-                skill_type = "防御型"
-            elif skill_type == 3 or skill_type == '3':
-                skill_type = "回复型"
+            if int(is_data_skill or 0) == 1:
+                await cursor.execute(
+                    "SELECT role_name, buff_name, buff_desc FROM data_skill WHERE id = %s LIMIT 1",
+                    (data_skill_id,),
+                )
+                data_skill = await cursor.fetchone()
+                role_name, buff_name, buff_desc = data_skill or ("未知", "无", "暂无附加效果说明")
+                output = f"**基础技能【{skill_name}】信息：**\n"
+                output += f"技能编号：{skill_id}\n"
+                output += f"可装备角色：{role_name}\n"
+                output += f"技能类型：{_display_skill_type(skill_type)}\n"
+                output += f"技能数值：{_display_skill_value(value, is_percent)}\n"
+                output += f"技能冷却：{cooldown}回合\n"
+                output += f"技能BUFF：{buff_name}\n"
+                output += f"BUFF描述：{buff_desc}\n"
             else:
-                skill_type = "穿透型"
+                source_ids = [int(source) for source in (source_1, source_2) if source]
+                source_names = []
+                buff_name, buff_desc = "无", "暂无附加效果说明"
+                if source_ids:
+                    placeholders = ", ".join("%s" for _ in source_ids)
+                    await cursor.execute(
+                        f"SELECT id, skill_name, buff_name, buff_desc FROM data_skill WHERE id IN ({placeholders})",
+                        tuple(source_ids),
+                    )
+                    source_rows = {int(row[0]): row[1:] for row in await cursor.fetchall()}
+                    for source_id in source_ids:
+                        source = source_rows.get(source_id)
+                        if source:
+                            source_names.append(source[0])
+                    first_source = source_rows.get(int(source_1 or 0))
+                    if first_source:
+                        _, buff_name, buff_desc = first_source
+                output = f"**融合技能【{skill_name}】信息：**\n"
+                output += f"技能编号：{skill_id}\n"
+                output += "可装备角色：任意角色\n"
+                output += f"技能类型：{_display_skill_type(skill_type)}\n"
+                output += f"技能数值：{_display_skill_value(value, is_percent)}\n"
+                output += f"技能冷却：{cooldown}回合\n"
+                output += f"融合素材：{' + '.join(source_names) if source_names else '原始素材记录缺失'}\n"
+                output += f"继承BUFF：{buff_name}\n"
+                output += f"BUFF描述：{buff_desc}\n"
 
-            value = f"{value}" if is_percent == 0 else f"{value}%"
-
-            output = f"**技能【{skill_name}】信息：**\n"
-            output += f"技能名称：{skill_name}\n"
-            output += f"可装备角色：{role_name}\n"
-            output += f"技能类型：{skill_type}\n"
-            output += f"技能数值：{value}\n"
-            output += f"技能冷却：{cooldown}回合\n"
-            output += f"技能BUFF：{buff_name}\n"
-            output += f"BUFF描述：{buff_desc}\n"
-
-            output += "> Tips：基础技能将限制可装备角色，技能融合后可装备给任意角色\n"
-
-            kj = await all_write_cmd(uid, [("技能装备", 1), ("技能背包", 0), ("当前角色", 0)])
-
+            output += "> Tips：基础技能限制可装备角色；融合技能可由任意角色装备，且继承第一个素材技能的附加效果。\n"
             return {"type": "markdown", "content": qz + output}
 
 
@@ -250,8 +299,17 @@ async def fuse_skills(uid, qz, skill_info):
             output += f"所属玩家：[{uid}]{await uid_to_name(uid)}\n"
             output += f"技能类型：{skill_type_display}\n"
             output += f"技能数值：{new_skill_value}\n"
-
+            output += f"技能冷却：{new_skill_cooldown}回合\n"
+            await cursor.execute(
+                "SELECT buff_name, buff_desc FROM data_skill WHERE id = %s LIMIT 1",
+                (data_skill_id_1,),
+            )
+            buff_result = await cursor.fetchone()
+            if buff_result:
+                output += f"继承BUFF：{buff_result[0]}\n"
+                output += f"BUFF描述：{buff_result[1]}\n"
             output += f"<qqbot-cmd-input text='技能命名 {new_skill_id}-' show='为融合技能命名' />\n"
+            output += f"<qqbot-cmd-input text='技能信息 {new_skill_id}' show='查看融合技能详情' />\n"
 
             return {"type": "markdown", "content": qz + output}
 
@@ -475,7 +533,7 @@ async def skill_bag(uid, qz, page_num=1):
                 elif skill_type == 4 or skill_type == '4':
                     skill_type = "穿透型"
 
-                skill_bt = f"<qqbot-cmd-input text='技能信息 {skill_name}' show='技能信息 {skill_name}' />"
+                skill_bt = f"<qqbot-cmd-input text='技能信息 {skill_id}' show='技能信息 {skill_id}' />"
                 output += f"〔{skill_id}〕{skill_bt}『{skill_type}』{biaoshi}\n"
 
             output += "> 点击蓝字可查看该技能信息噢~\n"
@@ -492,7 +550,6 @@ async def skill_bag(uid, qz, page_num=1):
             output += pagination_controls("技能背包", page_num, total_pages) + "\n"
 
             return {"type": "markdown", "content": qz + output}
-
 
 
 

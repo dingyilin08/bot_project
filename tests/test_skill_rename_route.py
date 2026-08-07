@@ -3,7 +3,7 @@ from copy import deepcopy
 
 import output_main
 from Game_main import g5_skill
-from Game_main.g5_skill import parse_fusion_skill_ids, parse_skill_rename_param
+from Game_main.g5_skill import parse_fusion_skill_ids, parse_skill_info_id, parse_skill_rename_param
 
 
 class SkillRenameParserTests(unittest.TestCase):
@@ -31,6 +31,12 @@ class SkillRenameParserTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertEqual(parse_fusion_skill_ids(value), (None, None))
 
+    def test_parse_skill_info_id_requires_a_positive_skill_bag_id(self):
+        self.assertEqual(parse_skill_info_id(" 34 "), 34)
+        for value in ("", "0", "-1", "雨之剑意", "31-33"):
+            with self.subTest(value=value):
+                self.assertIsNone(parse_skill_info_id(value))
+
 
 class _FusionCursor:
     def __init__(self, skills):
@@ -54,6 +60,8 @@ class _FusionCursor:
         elif statement.startswith("DELETE FROM user_skill"):
             for skill_id in params[:2]:
                 self.skills.pop(int(skill_id), None)
+        elif statement.startswith("SELECT buff_name, buff_desc FROM data_skill"):
+            self._row = ("雨界意境", "无视敌方40%防御，持续2回合")
         else:
             raise AssertionError(f"未预期的融合 SQL：{statement}")
 
@@ -119,11 +127,57 @@ class SkillFusionSimulationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("成功将[雨之剑意]和[本源真身]融合", result["content"])
         self.assertIn("技能数值：60", result["content"])
+        self.assertIn("继承BUFF：雨界意境", result["content"])
+        self.assertIn("技能信息 34", result["content"])
         self.assertEqual(conn.commit_count, 1)
         self.assertEqual(set(skills), {34})
         skills.clear()
         skills.update(deepcopy(original_skills))
         self.assertEqual(skills, original_skills)
+
+
+class _SkillInfoCursor:
+    def __init__(self):
+        self._row = None
+        self._rows = []
+
+    async def execute(self, sql, params=None):
+        statement = " ".join(sql.split())
+        if statement.startswith("SELECT id, skill_name, skill_type"):
+            self._row = (34, "未命名", 1, "60", 0, None, 63, 65, 0, 2)
+        elif statement.startswith("SELECT id, skill_name, buff_name, buff_desc FROM data_skill"):
+            self._rows = [
+                (63, "雨之剑意", "雨界意境", "无视敌方40%防御，持续2回合"),
+                (65, "本源真身", "本尊", "全属性提升15%，持续1回合"),
+            ]
+        else:
+            raise AssertionError(f"未预期的技能信息 SQL：{statement}")
+
+    async def fetchone(self):
+        return self._row
+
+    async def fetchall(self):
+        return self._rows
+
+
+class SkillInfoTests(unittest.IsolatedAsyncioTestCase):
+    async def test_fused_skill_details_are_loaded_by_skill_bag_id(self):
+        cursor = _SkillInfoCursor()
+        conn = _FusionConnection(cursor)
+        original_connect = g5_skill.connect_mysql
+        g5_skill.connect_mysql = lambda: conn
+        try:
+            result = await g5_skill.skill_info.__wrapped__(70001, "", "34")
+        finally:
+            g5_skill.connect_mysql = original_connect
+
+        content = result["content"]
+        self.assertIn("融合技能【未命名】信息", content)
+        self.assertIn("技能编号：34", content)
+        self.assertIn("可装备角色：任意角色", content)
+        self.assertIn("融合素材：雨之剑意 + 本源真身", content)
+        self.assertIn("继承BUFF：雨界意境", content)
+        self.assertIn("BUFF描述：无视敌方40%防御，持续2回合", content)
 
 
 class SkillRenameRouteTests(unittest.IsolatedAsyncioTestCase):
@@ -132,6 +186,7 @@ class SkillRenameRouteTests(unittest.IsolatedAsyncioTestCase):
             await output_main.jiance("技能命名 10001-烈焰斩"),
             ("技能命名", "10001-烈焰斩"),
         )
+        self.assertEqual(await output_main.jiance("技能信息 34"), ("技能信息", "34"))
 
     async def test_content_routes_to_rename_handler(self):
         original_uid = output_main.openid_to_uid

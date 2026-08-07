@@ -421,7 +421,7 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         return await jz_info(uid, con_arr1)
     elif con_arr0 == '技能信息':
         if con_arr1 == "":
-            return "指令错误，正确指令：技能信息 技能名称\n示例：技能信息 八极崩"
+            return "指令错误，正确指令：技能信息 技能编号\n示例：技能信息 31"
         return await skill_info(uid, con_arr1)
     elif con_arr0 == '技能融合':
         if con_arr1 == "":
