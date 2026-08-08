@@ -16,6 +16,8 @@ from Game_main.g7_equip import calc_role_equip_bonus
 from Game_domain.role_special_intro import render_role_special_intro
 from Game_domain.role_grant_service import RoleGrantError, grant_role
 from Game_main.g21_season import cosmetic_identity, get_equipped_cosmetics
+from Game_domain.spirit_beast_rules import calculate_spirit_beast_power
+from Game_main.g12_spirit_beast import get_role_beast_profile
 
 
 ITEM_TYPE_NAMES = {
@@ -509,6 +511,18 @@ async def role_special_info(uid, qz, role_name):
     return {"type": "markdown", "content": qz + output}
 
 
+async def _role_spirit_beast_text(uid, role_id, cursor):
+    """渲染角色独立灵兽位，未绑定时给出可操作入口。"""
+    profile = await get_role_beast_profile(uid, role_id, cursor)
+    if not profile:
+        return "> 尚未绑定灵兽｜发送「灵兽出战 灵兽编号 角色编号」进行绑定\n"
+    details = calculate_spirit_beast_power(profile)
+    return (
+        f"> #{profile['id']} {profile['name']}｜资质 {profile['aptitude']}"
+        f"｜羁绊 Lv.{details['bond_level']}｜战力 {details['power']}\n"
+    )
+
+
 # 角色属性
 @reg_xz_func
 async def role_attr(uid, qz, role_id):
@@ -580,9 +594,11 @@ async def role_attr(uid, qz, role_id):
             output += "**技能：**\n"
             output += f"> 1.{skill_1}\n"
             output += f"> 2.{skill_2}\n"
-            output += f"> 3.{skill_3}\n"
+            output += f"> 3.{skill_3}\n\n"
+            output += "**随行灵兽：**\n"
+            output += await _role_spirit_beast_text(uid, role_id, cursor)
 
-            kj = await all_write_command(uid, (f"出战{role_id}", "参悟", "角色背包", "悟道进阶"))
+            kj = await all_write_command(uid, (f"出战{role_id}", "灵兽", "参悟", "角色背包", "悟道进阶"))
 
             return {"type": "markdown", "content": output + kj}
 
@@ -658,9 +674,11 @@ async def cz_role_attr(uid, qz):
             output += "**技能：**\n"
             output += f"> 1.{skill_1}\n"
             output += f"> 2.{skill_2}\n"
-            output += f"> 3.{skill_3}\n"
+            output += f"> 3.{skill_3}\n\n"
+            output += "**随行灵兽：**\n"
+            output += await _role_spirit_beast_text(uid, role_id, cursor)
 
-            kj = await all_write_command(uid, ("收回", "参悟", "角色背包", "悟道进阶", "查看本源", "赛季装扮"))
+            kj = await all_write_command(uid, ("收回", "灵兽", "参悟", "角色背包", "悟道进阶", "查看本源", "赛季装扮"))
 
             return {"type": "markdown", "content": output + kj}
 
@@ -695,6 +713,8 @@ async def cz_role(uid, qz, role_id):
             await cursor.execute("UPDATE user_role SET is_chuzhan = 0 WHERE uid = %s AND is_chuzhan = 1", (uid,))
             await cursor.execute("UPDATE user_role SET is_chuzhan = 1 WHERE id = %s AND uid = %s", (role_id, uid))
 
+            from Game_main.g12_spirit_beast import sync_active_beast_for_role
+            await sync_active_beast_for_role(cursor, uid, role_id)
             from Tool.tool_power import update_role_power
             await update_role_power(conn, uid)
             await conn.commit()
@@ -727,6 +747,8 @@ async def sh_role(uid, qz):
             role_id, name = result
             sql = "UPDATE user_role SET is_chuzhan = 0 WHERE id = %s"
             await cursor.execute(sql, (role_id,))
+            from Game_main.g12_spirit_beast import sync_active_beast_for_role
+            await sync_active_beast_for_role(cursor, uid, None)
             from Tool.tool_power import update_role_power
             await update_role_power(conn, uid)
             await conn.commit()

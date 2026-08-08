@@ -4,12 +4,16 @@
 功能：计算角色综合战力及各分项战力
 """
 from typing import Dict, Tuple
+
+import aiomysql
+
 from sql.mysql import connect_mysql
 from Game_domain.equipment_rules import (
     EQUIPMENT_ENHANCE_BONUS_PER_LEVEL,
     EQUIPMENT_QUALITY_MULTIPLIER,
     EQUIPMENT_SET_BONUS,
 )
+from Game_domain.spirit_beast_rules import calculate_spirit_beast_power as beast_power_details
 
 
 ATTR_WEIGHTS = {
@@ -269,6 +273,52 @@ async def calculate_skill_power(conn, role_id: int, uid: int) -> int:
     return int(total_power)
 
 
+async def calculate_role_spirit_beast_power(conn, role_id: int, uid: int) -> Tuple[int, Dict]:
+    """计算指定角色所绑定灵兽的战力；未绑定时返回0。
+
+    新表结构使用 equipped_role_id。迁移发布前仅允许旧 is_active 灵兽计入当前
+    出战角色，保证数据库与代码滚动发布期间不会重复计算。
+    """
+    async with conn.cursor() as cursor:
+        try:
+            await cursor.execute("""
+                SELECT ub.id, ub.aptitude, ub.bond_exp, db.name, db.role
+                FROM user_spirit_beast ub
+                JOIN data_spirit_beast db ON db.id = ub.beast_id
+                WHERE ub.uid = %s AND ub.equipped_role_id = %s
+                LIMIT 1
+            """, (uid, role_id))
+        except (aiomysql.OperationalError, aiomysql.ProgrammingError) as error:
+            if not error.args or error.args[0] != 1054:
+                raise
+            await cursor.execute(
+                "SELECT is_chuzhan FROM user_role WHERE uid = %s AND id = %s LIMIT 1",
+                (uid, role_id),
+            )
+            active_role = await cursor.fetchone()
+            if not active_role or not int(active_role[0] or 0):
+                return 0, {}
+            await cursor.execute("""
+                SELECT ub.id, ub.aptitude, ub.bond_exp, db.name, db.role
+                FROM user_spirit_beast ub
+                JOIN data_spirit_beast db ON db.id = ub.beast_id
+                WHERE ub.uid = %s AND ub.is_active = 1
+                LIMIT 1
+            """, (uid,))
+        row = await cursor.fetchone()
+
+    if not row:
+        return 0, {}
+    instance_id, aptitude, bond_exp, name, beast_role = row
+    details = beast_power_details({
+        "aptitude": aptitude,
+        "bond_exp": bond_exp,
+        "role": beast_role,
+    })
+    details.update({"instance_id": int(instance_id), "name": name, "role": beast_role})
+    return int(details["power"]), details
+
+
 async def calculate_total_power(conn, uid: int, role_id: int) -> Tuple[int, Dict[str, int]]:
     """
     计算总战力及明细
@@ -326,8 +376,9 @@ async def calculate_total_power(conn, uid: int, role_id: int) -> Tuple[int, Dict
     power_equip, set_info = await calculate_equip_power(conn, role_id, uid)
     power_benyuan = await calculate_benyuan_power(conn, role_id, uid, role_data)
     power_skill = await calculate_skill_power(conn, role_id, uid)
+    power_beast, beast_info = await calculate_role_spirit_beast_power(conn, role_id, uid)
     
-    total_power = power_base + power_level + power_equip + power_benyuan + power_skill
+    total_power = power_base + power_level + power_equip + power_benyuan + power_skill + power_beast
     
     power_details = {
         'power': total_power,
@@ -336,6 +387,8 @@ async def calculate_total_power(conn, uid: int, role_id: int) -> Tuple[int, Dict
         'power_equip': power_equip,
         'power_benyuan': power_benyuan,
         'power_skill': power_skill,
+        'power_beast': power_beast,
+        'beast_info': beast_info,
         'set_info': set_info
     }
     
@@ -367,6 +420,7 @@ async def update_role_power(conn, uid: int) -> int:
                 UPDATE user_zt
                 SET power = 0, power_base = 0, power_level = 0,
                     power_equip = 0, power_benyuan = 0, power_skill = 0,
+                    power_beast = 0,
                     power_role_name = '', power_update_time = NOW()
                 WHERE id = %s
             """, (uid,))
@@ -386,6 +440,7 @@ async def update_role_power(conn, uid: int) -> int:
                 power_equip = %s,
                 power_benyuan = %s,
                 power_skill = %s,
+                power_beast = %s,
                 power_role_name = %s,
                 power_update_time = NOW()
             WHERE id = %s
@@ -396,6 +451,7 @@ async def update_role_power(conn, uid: int) -> int:
             details['power_equip'],
             details['power_benyuan'],
             details['power_skill'],
+            details['power_beast'],
             role_name,
             uid
         ))

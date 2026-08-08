@@ -272,9 +272,10 @@ async def show_main_menu(uid, qz):
 async def show_spirit_beast_menu(uid, qz):
     """灵兽相关指令统一入口，避免主菜单出现操作级按钮。"""
     output = "##### 🐾 灵兽菜单\n\n"
-    output += "出战灵兽会把基础灵契与本源协同冻结到新开启的 PVE 战斗。灵兽园容量由洞府等级决定，灵兽只从玩法中获得，不在商城出售。\n\n"
+    output += "每名角色都拥有1个独立灵兽位。绑定后，灵兽战力计入对应角色；该角色进入 PVE 时，会冻结灵契与本源协同。\n\n"
     output += "<qqbot-cmd-input text='灵兽' show='我的灵兽' /> | <qqbot-cmd-input text='灵兽图鉴' show='灵兽图鉴' />\n\n"
-    output += "<qqbot-cmd-input text='灵兽寻访' show='每日寻访' /> | <qqbot-cmd-input text='灵兽出战 ' show='灵兽出战 编号*' />\n\n"
+    output += "<qqbot-cmd-input text='灵兽寻访' show='每日寻访' /> | <qqbot-cmd-input text='灵兽出战 ' show='绑定当前角色*' />\n\n"
+    output += "> 指定角色：灵兽出战 灵兽编号 角色编号\n\n"
     output += "<qqbot-cmd-input text='洞府' show='查看灵兽园容量' /> | <qqbot-cmd-input text='主菜单' show='主菜单' />"
     return {"type": "markdown", "content": output}
 
@@ -744,6 +745,8 @@ async def show_power_menu(uid, qz):
     output += "> 点击后发送可选择当前全服/各个角色的战力排行榜\n\n"
     output += "<qqbot-cmd-input text='战力排行 全服' show='战力排行 全服' />\n"
     output += "> 点击后发送可查看当前全服战力排行榜\n\n"
+    output += "<qqbot-cmd-input text='灵兽' show='查看随行灵兽' />\n"
+    output += "> 每名角色可绑定1只灵兽，灵兽战力会计入该角色\n\n"
 
     output += "***\n\n"
     output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
@@ -840,7 +843,7 @@ async def show_game_guide(uid):
     output += "**📊 战力系统：**\n\n"
     output += "> `我的战力` - 查看当前战力详情\n"
     output += "> `战力排行` - 查看全服战力排行榜\n"
-    output += "> 战力由基础、等级、装备、本源、技能构成\n\n"
+    output += "> 战力由基础、等级、装备、本源、技能、灵兽构成\n\n"
 
     output += "**🏆 修练系统：**\n\n"
     output += "> `悟道进阶` - 提升角色境界\n"

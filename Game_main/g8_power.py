@@ -25,10 +25,13 @@ async def my_power(uid, qz):
     指令：我的战力 / 战力
     """
     async with connect_mysql() as conn:
+        # 查看时实时刷新，保证刚绑定或更换灵兽后分项战力立即一致。
+        await update_role_power(conn, uid)
+        await conn.commit()
         async with conn.cursor() as cursor:
             await cursor.execute("""
                 SELECT power, power_base, power_level, power_equip,
-                       power_benyuan, power_skill, power_role_name
+                       power_benyuan, power_skill, power_beast, power_role_name
                 FROM user_zt
                 WHERE id = %s
             """, (uid,))
@@ -43,7 +46,7 @@ async def my_power(uid, qz):
             return {"type": "markdown", "content": output}
         
         power, power_base, power_level, power_equip = power_data[0], power_data[1], power_data[2], power_data[3]
-        power_benyuan, power_skill, power_role_name = power_data[4], power_data[5], power_data[6]
+        power_benyuan, power_skill, power_beast, power_role_name = power_data[4], power_data[5], power_data[6], power_data[7]
         
         my_rank, total_players = await get_user_power_rank(conn, uid)
         
@@ -54,6 +57,7 @@ async def my_power(uid, qz):
             'equip': round(power_equip / total * 100, 1) if total > 0 else 0,
             'benyuan': round(power_benyuan / total * 100, 1) if total > 0 else 0,
             'skill': round(power_skill / total * 100, 1) if total > 0 else 0,
+            'beast': round(power_beast / total * 100, 1) if total > 0 else 0,
         }
         
         output = f"##### 🔥 战力详情\n\n"
@@ -67,8 +71,9 @@ async def my_power(uid, qz):
         output += f"> 🛡️ 装备战力：{format_power(power_equip)} ({percentages['equip']}%)\n"
         output += f"> 💎 本源战力：{format_power(power_benyuan)} ({percentages['benyuan']}%)\n"
         output += f"> ⚡ 技能战力：{format_power(power_skill)} ({percentages['skill']}%)\n"
+        output += f"> 🐾 灵兽战力：{format_power(power_beast)} ({percentages['beast']}%)\n"
         output += "***\n"
-        output += '<qqbot-cmd-input text="战力排行" show="战力排行" /> | <qqbot-cmd-input text="装备背包" show="装备背包" /> | <qqbot-cmd-input text="查看本源" show="查看本源" />'
+        output += '<qqbot-cmd-input text="战力排行" show="战力排行" /> | <qqbot-cmd-input text="灵兽" show="随行灵兽" /> | <qqbot-cmd-input text="装备背包" show="装备背包" /> | <qqbot-cmd-input text="查看本源" show="查看本源" />'
         
         return {"type": "markdown", "content": output}
 

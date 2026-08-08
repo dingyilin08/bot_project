@@ -5,6 +5,12 @@ from datetime import date
 from hashlib import sha256
 from random import Random
 
+import aiomysql
+
+from Game_domain.spirit_beast_rules import (
+    calculate_spirit_beast_power,
+    spirit_beast_bonus_value,
+)
 from func.pd_func import reg_xz_func
 from sql.mysql import connect_mysql
 
@@ -15,16 +21,11 @@ ROLE_LABELS = {"STRIKER": "输出·追击", "GUARDIAN": "护法·护盾", "HEALE
 SPIRIT_BEAST_SNAPSHOT_VERSION = 1
 
 
-def _clamp(value, lower, upper):
-    return max(lower, min(upper, value))
-
-
 def combat_bonus(profile):
     """将灵兽资质映射为透明、有限的战斗加成，不写入角色基础属性。"""
     if not profile:
         return {}
-    aptitude = _clamp(int(profile["aptitude"]), 60, 100)
-    amount = 4 + (aptitude - 60) // 5
+    amount = spirit_beast_bonus_value(profile["aptitude"])
     role = profile["role"]
     if role == "STRIKER":
         return {"buff_type": "attack_up", "value": amount, "label": "追击灵契"}
@@ -86,13 +87,43 @@ def origin_synergy(origin_name, profile):
     return "当前本源未触发额外协同；基础灵契仍正常生效。"
 
 
-async def _active_profile(uid, cursor):
-    await cursor.execute("""
-        SELECT ub.id, ub.aptitude, ub.temperament, ub.bond_exp,
-               db.name, db.role, db.element, db.passive_name, db.description
-        FROM user_spirit_beast ub JOIN data_spirit_beast db ON db.id = ub.beast_id
-        WHERE ub.uid = %s AND ub.is_active = 1 LIMIT 1
-    """, (uid,))
+async def _current_role_id(uid, cursor):
+    await cursor.execute(
+        "SELECT id FROM user_role WHERE uid = %s AND is_chuzhan = 1 LIMIT 1",
+        (uid,),
+    )
+    row = await cursor.fetchone()
+    return int(row[0]) if row else None
+
+
+async def _active_profile(uid, cursor, role_id=None):
+    role_id = int(role_id) if role_id is not None else await _current_role_id(uid, cursor)
+    if role_id is None:
+        return None
+    try:
+        await cursor.execute("""
+            SELECT ub.id, ub.aptitude, ub.temperament, ub.bond_exp,
+                   db.name, db.role, db.element, db.passive_name, db.description
+            FROM user_spirit_beast ub JOIN data_spirit_beast db ON db.id = ub.beast_id
+            WHERE ub.uid = %s AND ub.equipped_role_id = %s LIMIT 1
+        """, (uid, role_id))
+    except (aiomysql.OperationalError, aiomysql.ProgrammingError) as error:
+        # 迁移部署前保留旧服全账号唯一出战灵兽，避免发布顺序导致 PVE 500。
+        if not error.args or error.args[0] != 1054:
+            raise
+        await cursor.execute(
+            "SELECT is_chuzhan FROM user_role WHERE uid = %s AND id = %s LIMIT 1",
+            (uid, role_id),
+        )
+        active_role = await cursor.fetchone()
+        if not active_role or not int(active_role[0] or 0):
+            return None
+        await cursor.execute("""
+            SELECT ub.id, ub.aptitude, ub.temperament, ub.bond_exp,
+                   db.name, db.role, db.element, db.passive_name, db.description
+            FROM user_spirit_beast ub JOIN data_spirit_beast db ON db.id = ub.beast_id
+            WHERE ub.uid = %s AND ub.is_active = 1 LIMIT 1
+        """, (uid,))
     row = await cursor.fetchone()
     if not row:
         return None
@@ -100,18 +131,23 @@ async def _active_profile(uid, cursor):
     return dict(zip(keys, row))
 
 
-async def get_active_beast_profile(uid):
+async def get_active_beast_profile(uid, role_id=None):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            profile = await _active_profile(uid, cursor)
+            profile = await _active_profile(uid, cursor, role_id)
             if profile:
                 profile["origin_name"] = await _origin_name(uid, cursor)
             return profile
 
 
-async def get_active_beast_snapshot(uid, cursor):
-    """使用调用方事务冻结出战灵兽，供单人/队伍 PVE 共用。"""
-    profile = await _active_profile(uid, cursor)
+async def get_role_beast_profile(uid, role_id, cursor):
+    """返回指定角色绑定的灵兽资料，供角色页与战力页共用。"""
+    return await _active_profile(uid, cursor, role_id)
+
+
+async def get_active_beast_snapshot(uid, cursor, role_id=None):
+    """使用调用方事务冻结指定角色灵兽，供单人/队伍 PVE 共用。"""
+    profile = await _active_profile(uid, cursor, role_id)
     if not profile:
         return None
     origin_name = await _origin_name(uid, cursor)
@@ -131,11 +167,11 @@ async def get_active_beast_snapshot(uid, cursor):
     }
 
 
-async def apply_active_beast_to_entity(uid, entity):
+async def apply_active_beast_to_entity(uid, entity, role_id=None):
     """向战斗实体注入可序列化 Buff，供 battle_session 重启后恢复。"""
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            snapshot = await get_active_beast_snapshot(uid, cursor)
+            snapshot = await get_active_beast_snapshot(uid, cursor, role_id)
     return apply_beast_snapshot_to_entity(snapshot, entity)
 
 
@@ -176,9 +212,10 @@ async def _origin_name(uid, cursor):
 
 def _beast_lines(profile, origin_name=""):
     bonus = combat_bonus(profile)
+    power = calculate_spirit_beast_power(profile)
     lines = [f"**#{profile['id']} {profile['name']}**｜{ROLE_LABELS.get(profile['role'], profile['role'])}",
              f"> 资质：{profile['aptitude']} | 性格：{profile['temperament']} | 血脉：{profile['element']}",
-             f"> 灵契：{bonus['label']}（{bonus['value']}%）",
+             f"> 灵契：{bonus['label']}（{bonus['value']}%）｜战力：{power['power']}",
              f"> 被动：{profile['passive_name']}｜{profile['description']}"]
     if origin_name:
         lines.append(f"> {origin_synergy(origin_name, profile)}")
@@ -189,16 +226,31 @@ def _beast_lines(profile, origin_name=""):
 async def spirit_beast_home(uid, qz):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            await cursor.execute("""
-                SELECT ub.id, ub.aptitude, ub.temperament, ub.bond_exp, db.name, db.role,
-                       db.element, db.passive_name, db.description, ub.is_active
-                FROM user_spirit_beast ub JOIN data_spirit_beast db ON db.id = ub.beast_id
-                WHERE ub.uid = %s ORDER BY ub.is_active DESC, ub.obtained_at ASC
-            """, (uid,))
+            try:
+                await cursor.execute("""
+                    SELECT ub.id, ub.aptitude, ub.temperament, ub.bond_exp, db.name, db.role,
+                           db.element, db.passive_name, db.description, ub.is_active,
+                           ub.equipped_role_id, ur.name
+                    FROM user_spirit_beast ub
+                    JOIN data_spirit_beast db ON db.id = ub.beast_id
+                    LEFT JOIN user_role ur ON ur.id = ub.equipped_role_id AND ur.uid = ub.uid
+                    WHERE ub.uid = %s
+                    ORDER BY (ub.equipped_role_id IS NOT NULL) DESC, ub.obtained_at ASC
+                """, (uid,))
+            except (aiomysql.OperationalError, aiomysql.ProgrammingError) as error:
+                if not error.args or error.args[0] != 1054:
+                    raise
+                await cursor.execute("""
+                    SELECT ub.id, ub.aptitude, ub.temperament, ub.bond_exp, db.name, db.role,
+                           db.element, db.passive_name, db.description, ub.is_active,
+                           NULL, NULL
+                    FROM user_spirit_beast ub JOIN data_spirit_beast db ON db.id = ub.beast_id
+                    WHERE ub.uid = %s ORDER BY ub.is_active DESC, ub.obtained_at ASC
+                """, (uid,))
             rows = await cursor.fetchall()
             origin_name = await _origin_name(uid, cursor)
             capacity = await _current_capacity(uid, cursor)
-    output = "##### 🐾 灵兽园\n\n" + f"收藏：{len(rows)}/{capacity}｜出战灵兽会在副本回合战斗中提供灵契。\n\n"
+    output = "##### 🐾 灵兽园\n\n" + f"收藏：{len(rows)}/{capacity}｜每名角色可绑定1只灵兽，灵兽战力计入该角色。\n\n"
     capacity_warning = _capacity_notice(len(rows), capacity)
     if capacity_warning:
         output += f"> ⚠️ {capacity_warning}\n\n"
@@ -206,9 +258,16 @@ async def spirit_beast_home(uid, qz):
         output += "尚无灵兽。完成一次副本后，可每日进行一次灵兽寻访。\n\n"
     else:
         for row in rows:
-            keys = ("id", "aptitude", "temperament", "bond_exp", "name", "role", "element", "passive_name", "description", "is_active")
+            keys = ("id", "aptitude", "temperament", "bond_exp", "name", "role", "element", "passive_name", "description", "is_active", "equipped_role_id", "bound_role_name")
             profile = dict(zip(keys, row))
-            output += ("**【出战中】**\n" if profile.pop("is_active") else "")
+            is_active = profile.pop("is_active")
+            profile.pop("equipped_role_id")
+            bound_role_name = profile.pop("bound_role_name")
+            if bound_role_name:
+                state = f"随 **{bound_role_name}** 出战" + ("｜当前生效" if is_active else "")
+                output += f"**【{state}】**\n"
+            elif is_active:
+                output += "**【随当前角色出战】**\n"
             output += "\n".join(_beast_lines(profile, origin_name)) + "\n\n"
     output += "<qqbot-cmd-input text='灵兽寻访' show='灵兽寻访' /> | <qqbot-cmd-input text='灵兽图鉴' show='灵兽图鉴' />\n\n"
     output += "<qqbot-cmd-input text='灵兽出战 ' show='灵兽出战 灵兽编号*' /> | <qqbot-cmd-input text='洞府' show='查看容量与升级' />\n\n"
@@ -263,23 +322,94 @@ async def seek_spirit_beast(uid, qz):
     return {"type": "markdown", "content": f"##### ✨ 灵兽寻访成功\n\n你与 **{name}** 结下灵契！\n> 资质：{aptitude}｜性格：{temperament}\n\n<qqbot-cmd-input text='灵兽出战 {instance_id}' show='设为出战灵兽' /> | <qqbot-cmd-input text='灵兽' show='查看灵兽园' />"}
 
 
+def parse_beast_role_binding(value):
+    """解析“灵兽编号 [角色编号]”，同时兼容按钮常用的短横线格式。"""
+    parts = str(value or "").replace("-", " ").split()
+    if not 1 <= len(parts) <= 2:
+        raise ValueError
+    beast_id = int(parts[0])
+    role_id = int(parts[1]) if len(parts) == 2 else None
+    return beast_id, role_id
+
+
+async def sync_active_beast_for_role(cursor, uid, role_id):
+    """角色切换时同步旧 is_active 标记；绑定关系始终保留。"""
+    try:
+        if role_id is None:
+            await cursor.execute(
+                "UPDATE user_spirit_beast SET is_active = 0 WHERE uid = %s",
+                (uid,),
+            )
+        else:
+            await cursor.execute(
+                """UPDATE user_spirit_beast
+                   SET is_active = CASE WHEN equipped_role_id = %s THEN 1 ELSE 0 END
+                   WHERE uid = %s""",
+                (role_id, uid),
+            )
+    except (aiomysql.OperationalError, aiomysql.ProgrammingError) as error:
+        if not error.args or error.args[0] != 1054:
+            raise
+
+
 @reg_xz_func
 async def set_active_spirit_beast(uid, qz, beast_text):
     try:
-        beast_id = int(str(beast_text).strip())
-    except ValueError:
-        return {"type": "markdown", "content": "灵兽编号错误，请发送：灵兽出战 灵兽编号"}
+        beast_id, role_id = parse_beast_role_binding(beast_text)
+    except (TypeError, ValueError):
+        return {"type": "markdown", "content": "灵兽或角色编号错误。\n\n发送：灵兽出战 灵兽编号\n也可发送：灵兽出战 灵兽编号 角色编号"}
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            await cursor.execute("SELECT id FROM user_spirit_beast WHERE id = %s AND uid = %s", (beast_id, uid))
-            if not await cursor.fetchone():
+            await cursor.execute("""
+                SELECT ub.id, db.name
+                FROM user_spirit_beast ub JOIN data_spirit_beast db ON db.id = ub.beast_id
+                WHERE ub.id = %s AND ub.uid = %s FOR UPDATE
+            """, (beast_id, uid))
+            beast_row = await cursor.fetchone()
+            if not beast_row:
                 return {"type": "markdown", "content": "未找到这只灵兽，请从灵兽园中选择。"}
+            if role_id is None:
+                await cursor.execute(
+                    "SELECT id, name, is_chuzhan FROM user_role WHERE uid = %s AND is_chuzhan = 1 LIMIT 1 FOR UPDATE",
+                    (uid,),
+                )
+            else:
+                await cursor.execute(
+                    "SELECT id, name, is_chuzhan FROM user_role WHERE uid = %s AND id = %s LIMIT 1 FOR UPDATE",
+                    (uid, role_id),
+                )
+            role_row = await cursor.fetchone()
+            if not role_row:
+                return {"type": "markdown", "content": "未找到目标角色。省略角色编号时，请先让一名角色出战。"}
+            role_id, role_name, role_is_active = role_row
             capacity = await _current_capacity(uid, cursor)
             await cursor.execute("SELECT COUNT(*) FROM user_spirit_beast WHERE uid = %s", (uid,))
             owned_count = int((await cursor.fetchone())[0])
-            await cursor.execute("UPDATE user_spirit_beast SET is_active = 0 WHERE uid = %s", (uid,))
-            await cursor.execute("UPDATE user_spirit_beast SET is_active = 1 WHERE id = %s AND uid = %s", (beast_id, uid))
+            try:
+                # 一名角色最多一只，一只灵兽也只能跟随一名角色。
+                await cursor.execute(
+                    """UPDATE user_spirit_beast
+                       SET equipped_role_id = NULL, is_active = 0
+                       WHERE uid = %s AND (equipped_role_id = %s OR id = %s)""",
+                    (uid, role_id, beast_id),
+                )
+                await cursor.execute(
+                    """UPDATE user_spirit_beast
+                       SET equipped_role_id = %s, is_active = %s
+                       WHERE id = %s AND uid = %s""",
+                    (role_id, 1 if role_is_active else 0, beast_id, uid),
+                )
+            except (aiomysql.OperationalError, aiomysql.ProgrammingError) as error:
+                if not error.args or error.args[0] != 1054:
+                    raise
+                # 旧库回退：迁移前仍维持全账号唯一出战灵兽。
+                await cursor.execute("UPDATE user_spirit_beast SET is_active = 0 WHERE uid = %s", (uid,))
+                await cursor.execute("UPDATE user_spirit_beast SET is_active = 1 WHERE id = %s AND uid = %s", (beast_id, uid))
+
+            from Tool.tool_power import update_role_power
+            await update_role_power(conn, uid)
             await conn.commit()
     warning = _capacity_notice(owned_count, capacity)
     suffix = f"\n> ⚠️ {warning}" if warning else ""
-    return {"type": "markdown", "content": f"已设置出战灵兽；下一场新开启的副本战斗将立即获得它的灵契。{suffix}\n<qqbot-cmd-input text='灵兽' show='查看灵兽园' />"}
+    active_text = "当前角色已立即生效" if role_is_active else "该角色下次出战时自动生效"
+    return {"type": "markdown", "content": f"##### ✅ 灵兽绑定成功\n\n**#{beast_id} {beast_row[1]}** 已随 **[{role_id}.{role_name}]** 出战。\n> {active_text}，灵兽战力已计入对应角色。{suffix}\n\n<qqbot-cmd-input text='灵兽' show='查看灵兽园' /> | <qqbot-cmd-input text='角色属性 {role_id}' show='查看角色' /> | <qqbot-cmd-input text='我的战力' show='查看战力' />"}

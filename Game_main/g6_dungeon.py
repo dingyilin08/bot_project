@@ -1533,7 +1533,7 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
             if role_special:
                 player_role_data['role_special'] = role_special
             from Game_main.g12_spirit_beast import get_active_beast_snapshot
-            active_beast_snapshot = await get_active_beast_snapshot(uid, cursor)
+            active_beast_snapshot = await get_active_beast_snapshot(uid, cursor, role_id)
 
             # 获取玩家技能（从user_skill表获取，然后根据is_data_skill决定查询来源）
             player_skills = []

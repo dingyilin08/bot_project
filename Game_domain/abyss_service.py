@@ -380,7 +380,7 @@ async def _build_role_snapshot(uid, cursor):
     special = await load_battle_special(cursor, uid, role_id, role_name)
     if special:
         role_data["role_special"] = special
-    beast = await get_active_beast_snapshot(uid, cursor)
+    beast = await get_active_beast_snapshot(uid, cursor, role_id)
     skills = await _load_player_skills(
         cursor, uid, role_id, role_name, (skill1_id, skill2_id, skill3_id), skill_bonus
     )

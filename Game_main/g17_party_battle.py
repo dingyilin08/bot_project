@@ -839,7 +839,7 @@ async def _build_member_snapshot(cursor, role_row, formation, season_effect=None
     skill_effect_bp = int(estate_snapshot["effects"].get("pve_skill_effect_bonus_bp", 0) or 0)
     causal_effect = await get_causal_mark_snapshot(uid, cursor)
     research = await get_active_research(uid, cursor)
-    spirit_beast = await get_active_beast_snapshot(uid, cursor)
+    spirit_beast = await get_active_beast_snapshot(uid, cursor, role_id)
     party_damage_bp = 300 if research and research.get("research_type") == "阵法" else 0
     season_effect = dict(season_effect or {})
     pve_attack_bp = min(

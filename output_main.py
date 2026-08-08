@@ -77,6 +77,7 @@ market_value_commands = (
     '坊市出售', '坊市底价', '坊市列表', '我的摊位', '撤摊', '坊市',
 )
 registration_value_commands = ('注册游戏',)
+spirit_beast_value_commands = ('灵兽出战',)
 
 user_last_call_time = {}
 
@@ -84,6 +85,10 @@ async def jiance(message):
     raw_message = str(message or '').strip()
     upper_message = raw_message.upper()
     for command in registration_value_commands:
+        if raw_message.startswith(command):
+            return command, raw_message[len(command):].strip()
+    # 灵兽可绑定到指定角色，第二个编号之间的空格不能被通用清洗移除。
+    for command in spirit_beast_value_commands:
         if raw_message.startswith(command):
             return command, raw_message[len(command):].strip()
     for command in market_value_commands:
@@ -372,7 +377,7 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         return await seek_spirit_beast(uid)
     elif con_arr0 == '灵兽出战':
         if con_arr1 == "":
-            return "指令错误，正确指令：灵兽出战 灵兽编号"
+            return "指令错误：灵兽出战 灵兽编号 [角色编号]"
         return await set_active_spirit_beast(uid, con_arr1)
 
     # ==================== P1 队伍与阵法命令 ==================== #
