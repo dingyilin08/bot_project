@@ -1,6 +1,73 @@
 -- 轮海深渊子系统迁移。
 -- 仅新增表和索引；可重复执行，不删除现有玩家数据。
 
+-- 深渊复用现有技能战斗快照。旧服若未执行队伍战斗 v2 迁移，需在此补齐
+-- 明确的技能法力消耗字段，避免挑战初始化读取技能时失败。
+SET @abyss_data_skill_mana_missing = (
+  SELECT COUNT(*) = 0
+  FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'data_skill'
+    AND COLUMN_NAME = 'mana_cost'
+);
+SET @abyss_data_skill_mana_ddl = (
+  SELECT IF(COUNT(*) = 0,
+    'ALTER TABLE data_skill ADD COLUMN mana_cost SMALLINT UNSIGNED NOT NULL DEFAULT 20 AFTER cooldown',
+    'SELECT 1')
+  FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'data_skill'
+    AND COLUMN_NAME = 'mana_cost'
+);
+PREPARE abyss_data_skill_mana_stmt FROM @abyss_data_skill_mana_ddl;
+EXECUTE abyss_data_skill_mana_stmt;
+DEALLOCATE PREPARE abyss_data_skill_mana_stmt;
+
+UPDATE data_skill
+SET mana_cost = CASE CAST(skill_type AS UNSIGNED)
+  WHEN 1 THEN 25
+  WHEN 2 THEN 18
+  WHEN 3 THEN 22
+  WHEN 4 THEN 28
+  ELSE 20
+END
+WHERE @abyss_data_skill_mana_missing = 1;
+
+SET @abyss_user_skill_mana_missing = (
+  SELECT COUNT(*) = 0
+  FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'user_skill'
+    AND COLUMN_NAME = 'mana_cost'
+);
+SET @abyss_user_skill_mana_ddl = (
+  SELECT IF(COUNT(*) = 0,
+    'ALTER TABLE user_skill ADD COLUMN mana_cost SMALLINT UNSIGNED NOT NULL DEFAULT 20 AFTER cooldown',
+    'SELECT 1')
+  FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'user_skill'
+    AND COLUMN_NAME = 'mana_cost'
+);
+PREPARE abyss_user_skill_mana_stmt FROM @abyss_user_skill_mana_ddl;
+EXECUTE abyss_user_skill_mana_stmt;
+DEALLOCATE PREPARE abyss_user_skill_mana_stmt;
+
+UPDATE user_skill
+SET mana_cost = CASE CAST(skill_type AS UNSIGNED)
+  WHEN 1 THEN 25
+  WHEN 2 THEN 18
+  WHEN 3 THEN 22
+  WHEN 4 THEN 28
+  ELSE 20
+END
+WHERE @abyss_user_skill_mana_missing = 1;
+
+UPDATE user_skill us
+JOIN data_skill ds ON us.is_data_skill = 1 AND us.skill_id = ds.id
+SET us.mana_cost = ds.mana_cost
+WHERE @abyss_user_skill_mana_missing = 1;
+
 CREATE TABLE IF NOT EXISTS `user_abyss_profile` (
   `uid` int NOT NULL,
   `highest_cleared_layer` int NOT NULL DEFAULT 0,

@@ -79,6 +79,9 @@ class AbyssCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("UNIQUE KEY `uk_abyss_wave_slot`", schema)
         self.assertIn("reward_snapshot_json", schema)
         self.assertIn("settlement_json", schema)
+        self.assertIn("ALTER TABLE data_skill ADD COLUMN mana_cost", schema)
+        self.assertIn("ALTER TABLE user_skill ADD COLUMN mana_cost", schema)
+        self.assertIn("WHERE @abyss_user_skill_mana_missing = 1", schema)
 
 
 if __name__ == "__main__":
