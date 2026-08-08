@@ -270,13 +270,22 @@ async def show_main_menu(uid, qz):
 
 @reg_xz_func
 async def show_spirit_beast_menu(uid, qz):
-    """灵兽相关指令统一入口，避免主菜单出现操作级按钮。"""
-    output = "##### 🐾 灵兽菜单\n\n"
-    output += "每名角色都拥有1个独立灵兽位。绑定后，灵兽战力计入对应角色；该角色进入 PVE 时，会冻结灵契与本源协同。\n\n"
-    output += "<qqbot-cmd-input text='灵兽' show='我的灵兽' /> | <qqbot-cmd-input text='灵兽图鉴' show='灵兽图鉴' />\n\n"
-    output += "<qqbot-cmd-input text='灵兽寻访' show='每日寻访' /> | <qqbot-cmd-input text='灵兽出战 ' show='绑定当前角色*' />\n\n"
-    output += "> 指定角色：灵兽出战 灵兽编号 角色编号\n\n"
-    output += "<qqbot-cmd-input text='洞府' show='查看灵兽园容量' /> | <qqbot-cmd-input text='主菜单' show='主菜单' />"
+    """诸天灵契统一入口；单页保持8个核心按钮。"""
+    output = "##### 🐾 诸天灵契\n\n"
+    output += (
+        "追寻六界灵影，培养资质、血脉与技能，并为每名角色配置"
+        "一主两辅灵阵。战斗开始时会冻结完整阵容，中途换阵只影响下一场。\n\n"
+    )
+    output += (
+        "<qqbot-cmd-input text='灵兽' show='灵兽主页' /> | "
+        "<qqbot-cmd-input text='我的灵兽' show='我的灵兽' />\n\n"
+        "<qqbot-cmd-input text='灵兽寻踪' show='六界寻踪' /> | "
+        "<qqbot-cmd-input text='灵兽阵容' show='配置灵阵' />\n\n"
+        "<qqbot-cmd-input text='万灵秘境' show='万灵秘境' /> | "
+        "<qqbot-cmd-input text='灵兽派遣' show='洞府派遣' />\n\n"
+        "<qqbot-cmd-input text='灵兽图鉴' show='六界图鉴' /> | "
+        "<qqbot-cmd-input text='灵兽周记' show='灵兽周记' />"
+    )
     return {"type": "markdown", "content": output}
 
 
@@ -288,7 +297,8 @@ async def show_estate_menu(uid, qz):
     output += "<qqbot-cmd-input text='洞府' show='查看洞府' /> | <qqbot-cmd-input text='洞府收取 稳健' show='稳健收取' />\n\n"
     output += "<qqbot-cmd-input text='洞府收取 冒险' show='冒险共鸣' /> | <qqbot-cmd-input text='洞府升级 ' show='升级建筑*' />\n\n"
     output += "<qqbot-cmd-input text='洞府升级 聚灵阵' show='聚灵阵·参悟减时' /> | <qqbot-cmd-input text='洞府升级 炼器台' show='炼器台·强化成功率' />\n\n"
-    output += "<qqbot-cmd-input text='洞府升级 灵兽园' show='灵兽园·扩容' /> | <qqbot-cmd-input text='洞府升级 藏经阁' show='藏经阁·PVE技能' />\n\n"
+    output += "<qqbot-cmd-input text='洞府升级 灵兽园' show='灵兽园·培养派遣' /> | <qqbot-cmd-input text='洞府升级 藏经阁' show='藏经阁·PVE技能' />\n\n"
+    output += "<qqbot-cmd-input text='灵兽派遣' show='灵兽派遣' /> | <qqbot-cmd-input text='灵兽阵容' show='灵阵配置' />\n\n"
     output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
     return {"type": "markdown", "content": output}
 
@@ -314,11 +324,12 @@ async def show_party_menu(uid, qz):
 async def show_sect_menu(uid, qz):
     """宗门与师徒的聚合入口。"""
     output = "##### 🏯 宗门菜单\n\n"
-    output += "完成每日委托获得贡献。本周投票将在下周生效：丹道增产、阵法队伍伤害、御器强化折扣、秘境额外材料；师徒之间不转移任何装备或货币。\n\n"
+    output += "完成每日委托获得贡献。本周投票将在下周生效；御兽学为护山灵兽提供追赶材料，不增加个人永久攻击。\n\n"
     output += "<qqbot-cmd-input text='宗门' show='我的宗门' /> | <qqbot-cmd-input text='宗门列表' show='宗门列表' />\n\n"
     output += "<qqbot-cmd-input text='宗门创建 ' show='创建宗门*' /> | <qqbot-cmd-input text='宗门委托' show='宗门委托' />\n\n"
     output += "<qqbot-cmd-input text='宗门投票 丹道' show='投票·丹道增产' /> | <qqbot-cmd-input text='宗门投票 阵法' show='投票·队伍伤害' />\n\n"
     output += "<qqbot-cmd-input text='宗门投票 御器' show='投票·强化折扣' /> | <qqbot-cmd-input text='宗门投票 秘境' show='投票·材料增产' />\n\n"
+    output += "<qqbot-cmd-input text='宗门投票 御兽学' show='投票·御兽学' /> | <qqbot-cmd-input text='护山灵兽' show='护山灵兽' />\n\n"
     output += "<qqbot-cmd-input text='师徒进度' show='师徒进度' /> | <qqbot-cmd-input text='师徒修行' show='师徒修行' />\n\n"
     output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
     return {"type": "markdown", "content": output}
@@ -746,7 +757,7 @@ async def show_power_menu(uid, qz):
     output += "<qqbot-cmd-input text='战力排行 全服' show='战力排行 全服' />\n"
     output += "> 点击后发送可查看当前全服战力排行榜\n\n"
     output += "<qqbot-cmd-input text='灵兽' show='查看随行灵兽' />\n"
-    output += "> 每名角色可绑定1只灵兽，灵兽战力会计入该角色\n\n"
+    output += "> 每名角色可配置一主两辅灵阵，主契战力会计入该角色\n\n"
 
     output += "***\n\n"
     output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"
@@ -769,6 +780,7 @@ async def show_help(uid):
 async def show_update_log(uid):
     """显示当前线上版本的玩家可见更新内容。"""
     output = "##### 📜 更新日志｜v1.26\n\n"
+    output += "**🐾 诸天灵契全面重制**\n> 六界22只灵兽、世界寻踪与双保底、四维洗髓、七重境界、共享血脉、无损技能、一主两辅灵阵已开放；并接入副本、扫荡、深渊、队伍、世界 Boss、洞府派遣、宗门护山与赛季玩法。发送“灵兽”即可进入。\n\n"
     output += "**🌊 轮海深渊开放**\n> 六波连战、每层30敌；10/20/30杀对应1/2/3星。支持50级定级赛、跨界压制、升星补差额与全服深渊排行。发送“深渊”即可进入。\n\n"
     output += "**✉️ 道友邀请开放**\n> 发送“我的邀请码”分享八位邀请码；新道友注册时填写后，双方可领取注册礼，完成全部新手札记后还能领取圆满礼。\n\n"
     output += "**📚 玩家攻略阁开放**\n> 发送“攻略”可阅读开荒、角色、战斗与资源四篇攻略；正文关键操作可直接点击发送。\n\n"
@@ -776,7 +788,7 @@ async def show_update_log(uid):
     output += "**⚔️ 角色专属战斗养成开放**\n> 萧炎、王林、韩立、石昊、叶凡、孟川均拥有独立成长路线、专属能力与组合玩法。发送“玩法介绍 角色名”可查看详细说明。\n\n"
     output += "**🗂️ 主菜单焕新**\n> 首页已按角色养成、战斗与资源、社交与活动、指引与记录分区；先进入对应“xx菜单”，再选择具体操作。\n\n"
     output += "**⚔️ 战斗与炼丹体验优化**\n> 队伍战斗中暂未行动的队友会自动防御；炼丹可选择保守、均衡或冒险火候，并受品质、产量与耐药效果影响。\n\n"
-    output += "**🐾 灵兽园开放**\n> 完成副本后每日可寻访灵兽；可设置出战灵兽并获得透明的战斗灵契加成。灵兽不在商城出售。\n\n"
+    output += "**🏡 灵兽园与万灵经营**\n> 灵兽园可产出御兽灵息并解锁护契、辅契、三套预设与一键照料；基础兽材支持坊市交易，其余灵兽资源保持绑定。\n\n"
     output += "**🧭 三千道途开放**\n> 2~4 名已准备的同群道友可挑战 6 节异步秘境；每节投票一次，超时沿用上次偏好，节点奖励与因果印记均可追溯。\n\n"
     output += "**🏯 宗门与师徒开放**\n> 可创建或加入宗门、完成每日委托、参与周研究投票；师徒契约支持申请、收徒与共同修行，且没有资产转移。\n\n"
     output += "**🌌 世界Boss与赛季开放**\n> 世界 Boss 提供挑战、辅助、净化三类贡献；副本、宗门委托和世界 Boss 均会累积赛季经验，赛季装扮领取后可实际佩戴展示。\n\n"

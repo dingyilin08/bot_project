@@ -89,6 +89,8 @@ def _render(run, remain, personal=None, notice=""):
     output = f"##### 🌌 世界Boss｜{name}\n\n"
     output += f"周期：{key}｜阶段 {phase}/3｜法则：{law}\n"
     output += f"HP：{max(0, current_hp):,}/{max_hp:,}｜本周剩余挑战：{remain}/{MAX_CHALLENGES}\n"
+    weakness_labels = ("攻伐", "守御", "生息", "控场", "破阵")
+    output += f"万灵弱点：**{weakness_labels[date.today().isocalendar()[1] % 5]}**｜命中后灵兽贡献效率+5%\n"
     if personal:
         output += f"个人伤害：{personal[0]:,}｜辅助贡献：{personal[1]:,}\n"
     output += "\n> 低战力可选择辅助或净化，达到参与档即可获得完整基础奖励。"
@@ -149,6 +151,11 @@ async def world_boss_challenge(uid, qz, action_text):
             phase = boss_phase(run[4], run[3])
             if action == "净化" and phase >= 2:
                 support += 800
+            from Game_main.g33_spirit_beast_v2 import world_boss_beast_modifier
+            beast_modifier = await world_boss_beast_modifier(uid, cursor)
+            if beast_modifier["bonus_bp"]:
+                damage = damage * (10_000 + beast_modifier["bonus_bp"]) // 10_000
+                support = support * (10_000 + beast_modifier["bonus_bp"]) // 10_000
             if run[4] <= 0:
                 return {"type": "markdown", "content": "本周世界 Boss 已被讨伐，请领取奖励并等待下周。"}
             await cursor.execute("INSERT INTO world_boss_contribution (run_id, uid, action_type, damage, support) VALUES (%s, %s, %s, %s, %s)", (run[0], uid, action, damage, support))
@@ -159,10 +166,17 @@ async def world_boss_challenge(uid, qz, action_text):
             personal = await cursor.fetchone()
             await conn.commit()
     await record_season_event(uid, "WORLD_BOSS")
+    from Game_main.g33_spirit_beast_v2 import record_spirit_beast_world_boss
+    await record_spirit_beast_world_boss(uid, action)
     note = f"{special_note or action}成功：伤害 +{damage:,}，辅助贡献 +{support:,}。"
     shown_bonus_bp = damage_bonus_bp if damage else support_bonus_bp
     if shown_bonus_bp:
         note += f" PVE 开战/贡献加成 +{shown_bonus_bp / 100:.0f}%。"
+    if beast_modifier["bonus_bp"]:
+        note += (
+            f" 万灵弱点「{beast_modifier['label']}」命中，"
+            f"{beast_modifier['main_name']}贡献效率 +5%。"
+        )
     if run[4] <= 0:
         note += " 诸天魔渊主已被讨伐！"
     return _render(run, remain - 1, personal, note)

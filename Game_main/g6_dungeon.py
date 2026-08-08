@@ -1967,6 +1967,14 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
         if rewards.get('dungeon_completed'):
             from Game_main.g21_season import record_season_event
             await record_season_event(uid, "DUNGEON")
+        from Game_main.g33_spirit_beast_v2 import record_spirit_beast_pve
+        rewards["spirit_beast_v2"] = await record_spirit_beast_pve(
+            uid,
+            role_id,
+            completed=bool(rewards.get("dungeon_completed")),
+            swept=False,
+            source="DUNGEON",
+        )
 
     else:
         # 战败处理 - 删除副本进度，不归还挑战次数
@@ -1984,6 +1992,17 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
     markdown_content = format_combat_result_markdown(
         winner, role_name, target_monster['name'], monster_type, summary, rewards, dungeon, combat_logs
     )
+    beast_rewards = rewards.get("spirit_beast_v2", {})
+    if beast_rewards:
+        beast_lines = []
+        if beast_rewards.get("beast_trace"):
+            beast_lines.append("诸天兽踪×1")
+        if beast_rewards.get("beast_material"):
+            beast_lines.append(f"基础兽材×{beast_rewards['beast_material']}")
+        if beast_rewards.get("bond"):
+            beast_lines.append(f"灵阵羁绊经验+{beast_rewards['bond']}")
+        if beast_lines:
+            markdown_content += "\n\n> 🐾 " + "｜".join(beast_lines)
 
     # 添加快捷按钮
     if rewards.get('dungeon_completed'):

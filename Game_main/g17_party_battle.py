@@ -368,6 +368,125 @@ def _trigger_reincarnation_heal(entity, round_no, logs):
     return False
 
 
+def _party_beast_buff(target, buff_type, value, name):
+    """同名团队灵契不叠加，同类效果只保留最高值。"""
+    existing = next(
+        (item for item in target.get("buffs", []) if item.get("type") == buff_type),
+        None,
+    )
+    if existing:
+        existing["value"] = max(int(existing.get("value", 0)), int(value))
+        existing["duration"] = max(int(existing.get("duration", 0)), 2)
+        return
+    target.setdefault("buffs", []).append({
+        "type": buff_type, "value": int(value), "duration": 2,
+        "name": name, "fresh": True,
+    })
+
+
+def _execute_party_beast_followup(member, members, enemies, round_no, logs):
+    beast = member.get("spirit_beast") or {}
+    if int(beast.get("schema_version", 1)) < 2 or beast.get("retreated"):
+        return
+    main = beast.get("main") or {}
+    target = select_front_target(enemies)
+    if not main or not target:
+        return
+    name = main.get("nickname") or main.get("name") or "主契灵兽"
+    role = main.get("role")
+    ready = beast.setdefault("skill_ready_round", {})
+    uses = beast.setdefault("skill_uses", {})
+    selected = next((
+        skill for skill in main.get("skills", [])
+        if int(round_no) >= int(ready.get(str(skill.get("id")), 0))
+        and int(uses.get(str(skill.get("id")), 0)) < int(skill.get("limit", 1))
+    ), None)
+    skill_code = (selected or {}).get("code", "")
+    value = max(2, min(10, int((selected or {}).get("value") or (main.get("effect") or {}).get("value", 4))))
+    support_triggered = beast.setdefault("support_triggered", [])
+    living = [item for item in members if int(item.get("hp", 0)) > 0]
+    weakest = min(
+        living,
+        key=lambda item: int(item["hp"]) / max(1, int(item["max_hp"])),
+    )
+    for support in beast.get("formation", []):
+        support_id = support.get("id")
+        if support.get("slot") == "主契" or support_id in support_triggered:
+            continue
+        support_role = support.get("role")
+        support_name = support.get("nickname") or support.get("name") or "灵阵辅契"
+        triggered = False
+        if support_role == "GUARDIAN" and int(weakest["hp"]) <= int(weakest["max_hp"]) * 50 // 100:
+            _party_beast_buff(weakest, "shield", 8, support_name)
+            support_text = f"替{weakest['name']}分担一次机制压力"
+            triggered = True
+        elif support_role == "HEALER" and int(weakest["hp"]) <= int(weakest["max_hp"]) * 60 // 100:
+            before = int(weakest["hp"])
+            weakest["hp"] = min(int(weakest["max_hp"]), before + int(weakest["max_hp"]) * 6 // 100)
+            support_text = f"为{weakest['name']}回复{int(weakest['hp']) - before}点气血"
+            triggered = True
+        elif support_role == "DISRUPTOR" and int(round_no) == 1:
+            _party_beast_buff(target, "speed_down", 6, support_name)
+            support_text = f"开场迟滞{target['name']}"
+            triggered = True
+        elif support_role == "BREAKER" and any(item.get("type") == "shield" for item in target.get("buffs", [])):
+            target["buffs"] = [item for item in target.get("buffs", []) if item.get("type") != "shield"]
+            support_text = f"破除{target['name']}一层护盾"
+            triggered = True
+        elif support_role == "STRIKER" and int(target["hp"]) <= int(target.get("max_hp", 1)) * 30 // 100:
+            damage = max(1, min(int(target.get("max_hp", 1)) * 2 // 100, effective_attack(member) * 25 // 100))
+            target["hp"] = max(0, int(target["hp"]) - damage)
+            support_text = f"追击{target['name']}造成{damage}点伤害"
+            triggered = True
+        if triggered:
+            support_triggered.append(support_id)
+            logs.append(f"灵阵响应：{support_name}{support_text}。")
+    bond = beast.get("bond_synergy") or {}
+    if (
+        bond.get("active") and not beast.get("bond_triggered")
+        and int(member["hp"]) <= int(member["max_hp"]) * 30 // 100
+    ):
+        before = int(member["hp"])
+        member["hp"] = min(
+            int(member["max_hp"]),
+            before + int(member["max_hp"]) * min(3, int(bond.get("value", 3))) // 100,
+        )
+        beast["bond_triggered"] = True
+        logs.append(f"{name}触发生死与共，为{member['name']}回复{int(member['hp']) - before}点气血。")
+    if skill_code in ("SKILL_HEAL", "SKILL_EMERGENCY_HEAL") or (not selected and role == "HEALER"):
+        ally = min(living, key=lambda item: int(item["hp"]) / max(1, int(item["max_hp"])))
+        if int(ally["hp"]) >= int(ally["max_hp"]) * 85 // 100:
+            return
+        before = int(ally["hp"])
+        ally["hp"] = min(int(ally["max_hp"]), before + int(ally["max_hp"]) * min(8, value) // 100)
+        text = f"为{ally['name']}回复{int(ally['hp']) - before}点气血"
+    elif skill_code in ("SKILL_SHIELD", "SKILL_TEAM_GUARD") or (not selected and role == "GUARDIAN"):
+        if int(member["hp"]) > int(member["max_hp"]) * 70 // 100:
+            return
+        _party_beast_buff(member, "shield", min(10, value), name)
+        text = "结成护主屏障"
+    elif skill_code in ("SKILL_SPEED", "SKILL_HINT") or (not selected and role == "DISRUPTOR"):
+        _party_beast_buff(target, "speed_down", min(12, value), name)
+        text = f"扰乱{target['name']}的行动"
+    elif skill_code in ("SKILL_BREAK", "SKILL_TOUGHNESS") or (not selected and role == "BREAKER"):
+        _party_beast_buff(target, "fangyu_down", min(10, value), name)
+        text = f"削弱{target['name']}的阵势"
+    else:
+        damage = max(1, min(int(target.get("max_hp", 1)) * 3 // 100, effective_attack(member) * 35 // 100))
+        target["hp"] = max(0, int(target["hp"]) - damage)
+        text = f"协战攻击{target['name']}，造成{damage}点伤害"
+    if selected:
+        key = str(selected.get("id"))
+        uses[key] = int(uses.get(key, 0)) + 1
+        ready[key] = int(round_no) + max(1, int(selected.get("cooldown", 1)))
+        text = f"施展「{selected.get('name', '传承技能')}」，" + text
+    beast.setdefault("events", []).append({
+        "round": int(round_no), "type": "PARTY_FOLLOWUP", "beast_id": main.get("id"),
+    })
+    member["spirit_beast"] = beast
+    logs.append(f"{member['name']}的{name}{text}。")
+
+
 def _shield_reduction_bp(entity):
     shield_percent = _buff_total(entity, {"shield", "gedang"})
     return max(0, min(8000, shield_percent * 100))
@@ -628,6 +747,10 @@ def resolve_party_round(members, actions, enemy, seed, formation=None, round_no=
                 target = select_front_target(enemies, action.get("payload", {}).get("target_id"))
                 if target:
                     _member_attack(actor, target, rng, inferred_formation, logs)
+            if any(int(item.get("hp", 0)) > 0 for item in enemies):
+                _execute_party_beast_followup(
+                    actor, resolved_members, enemies, round_no, logs
+                )
         else:
             target = select_front_target(resolved_members)
             if not target:

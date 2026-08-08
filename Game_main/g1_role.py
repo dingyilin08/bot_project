@@ -17,6 +17,7 @@ from Game_domain.role_special_intro import render_role_special_intro
 from Game_domain.role_grant_service import RoleGrantError, grant_role
 from Game_main.g21_season import cosmetic_identity, get_equipped_cosmetics
 from Game_domain.spirit_beast_rules import calculate_spirit_beast_power
+from Game_domain.spirit_beast_v2_rules import calculate_v2_power
 from Game_main.g12_spirit_beast import get_role_beast_profile
 
 
@@ -516,7 +517,10 @@ async def _role_spirit_beast_text(uid, role_id, cursor):
     profile = await get_role_beast_profile(uid, role_id, cursor)
     if not profile:
         return "> 尚未绑定灵兽｜发送「灵兽出战 灵兽编号 角色编号」进行绑定\n"
-    details = calculate_spirit_beast_power(profile)
+    details = (
+        calculate_v2_power(profile)
+        if "apt_spirit" in profile else calculate_spirit_beast_power(profile)
+    )
     return (
         f"> #{profile['id']} {profile['name']}｜资质 {profile['aptitude']}"
         f"｜羁绊 Lv.{details['bond_level']}｜战力 {details['power']}\n"

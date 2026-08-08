@@ -40,6 +40,7 @@ from Game_main.g29_dungeon_sweep import *    # 已通关副本扫荡
 from Game_main.g30_market import *            # 玩家坊市
 from Game_main.g31_invitation import *        # 玩家邀请码
 from Game_main.g32_abyss import *             # 轮海深渊
+from Game_main.g33_spirit_beast_v2 import *   # 诸天灵契 V2
 from Game_main.g0_menu import *          # 菜单系统
 from Tool.qq_keyboard import attach_keyboard
 from Game_domain.gm_service import GMError, authenticate_admin
@@ -51,6 +52,7 @@ wuhouzhui += '|日常任务|签到|签到记录|签到奖励|攻略|开荒攻略
 wuhouzhui += '|因果印记|赛季装扮|坊市菜单|坊市帮助'
 wuhouzhui += '|邀请菜单|我的邀请码|邀请列表|领取邀请奖励'
 wuhouzhui += '|深渊|深渊菜单|深渊怪物|深渊结算|离开深渊'
+wuhouzhui += '|我的灵兽|灵兽鉴定|灵兽阵容|灵兽派遣|万灵秘境|灵兽周记|灵兽周记领取|灵兽赛季|护山灵兽|护山灵兽供养|灵兽批量归真|灵兽一键照料'
 youhouzhui += '|日常领取'
 youhouzhui += '|扫荡副本'
 youhouzhui += '|技能命名'
@@ -61,6 +63,7 @@ youhouzhui += '|坊市上架|坊市购买|坊市收购|坊市出售|坊市底价
 youhouzhui += '|GM世界消息添加|GM世界消息修改|GM世界消息启用|GM世界消息停用|GM世界消息删除'
 youhouzhui += '|GM全服发放灵石|GM全服发放仙玉'
 youhouzhui += '|专属图鉴'
+youhouzhui += '|灵兽初契|灵兽详情|灵兽图鉴|灵兽寻踪|灵兽线索|灵兽重复|灵兽培养|灵兽喂养|灵兽突破|灵兽洗髓|灵兽洗髓确认|灵兽洗髓取消|灵兽血脉|灵兽血脉激活|灵兽技能|灵兽技能参悟|灵兽技能装配|灵兽技能卸下|灵兽照料|灵兽一键照料|灵兽上阵|灵兽下阵|灵兽预设|灵兽派遣开始|灵兽派遣领取|灵兽派遣取消|万灵秘境挑战|灵兽传记|灵兽传记选择|灵兽归真|灵兽归真确认|灵兽归真取消|灵兽批量归真确认|灵兽批量归真取消|灵兽改名|灵兽锁定|灵兽切磋'
 
 world_message_value_commands = (
     'GM世界消息添加',
@@ -77,7 +80,22 @@ market_value_commands = (
     '坊市出售', '坊市底价', '坊市列表', '我的摊位', '撤摊', '坊市',
 )
 registration_value_commands = ('注册游戏',)
-spirit_beast_value_commands = ('灵兽出战',)
+spirit_beast_value_commands = (
+    '灵兽批量归真确认', '灵兽批量归真取消',
+    '灵兽派遣领取', '灵兽派遣取消', '灵兽派遣开始',
+    '灵兽洗髓确认', '灵兽洗髓取消', '灵兽血脉激活',
+    '灵兽技能装配', '灵兽技能卸下', '灵兽技能参悟', '灵兽传记选择',
+    '灵兽归真确认', '灵兽归真取消', '万灵秘境挑战',
+    '护山灵兽供养', '灵兽周记领取',
+    '灵兽初契', '灵兽详情', '灵兽图鉴', '灵兽寻踪',
+    '灵兽线索', '灵兽鉴定', '灵兽重复', '灵兽培养',
+    '灵兽喂养', '灵兽突破', '灵兽洗髓', '灵兽血脉',
+    '灵兽技能', '灵兽一键照料', '灵兽照料', '灵兽上阵', '灵兽下阵',
+    '灵兽预设', '灵兽派遣', '灵兽传记', '灵兽归真',
+    '灵兽批量归真', '灵兽改名', '灵兽锁定', '灵兽切磋', '灵兽阵容',
+    '灵兽赛季', '万灵秘境', '护山灵兽', '我的灵兽',
+    '灵兽出战',
+)
 
 user_last_call_time = {}
 
@@ -368,17 +386,111 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
 
     # ==================== P1 灵兽系统命令 ==================== #
     elif con_arr0 == '灵兽':
-        return await spirit_beast_home(uid)
+        return await spirit_beast_v2_home(uid)
     elif con_arr0 == '灵兽菜单':
         return await show_spirit_beast_menu(uid)
     elif con_arr0 == '灵兽图鉴':
-        return await spirit_beast_catalog(uid)
+        return await beast_codex(uid, con_arr1)
     elif con_arr0 == '灵兽寻访':
-        return await seek_spirit_beast(uid)
+        return await beast_trace(uid, con_arr1)
     elif con_arr0 == '灵兽出战':
         if con_arr1 == "":
             return "指令错误：灵兽出战 灵兽编号 [角色编号]"
         return await set_active_spirit_beast(uid, con_arr1)
+    elif con_arr0 == '我的灵兽':
+        return await beast_list(uid, con_arr1)
+    elif con_arr0 == '灵兽初契':
+        return await beast_starter_contract(uid, con_arr1)
+    elif con_arr0 == '灵兽详情':
+        return await beast_detail(uid, con_arr1)
+    elif con_arr0 == '灵兽寻踪':
+        return await beast_trace(uid, con_arr1)
+    elif con_arr0 == '灵兽线索':
+        return await beast_trace_choose(uid, con_arr1)
+    elif con_arr0 == '灵兽鉴定':
+        return await beast_identify(uid)
+    elif con_arr0 == '灵兽重复':
+        return await beast_duplicate_choice(uid, con_arr1)
+    elif con_arr0 == '灵兽培养':
+        return await beast_cultivate(uid, con_arr1)
+    elif con_arr0 == '灵兽喂养':
+        return await beast_feed(uid, con_arr1)
+    elif con_arr0 == '灵兽突破':
+        return await beast_breakthrough(uid, con_arr1)
+    elif con_arr0 == '灵兽洗髓':
+        return await beast_wash(uid, con_arr1)
+    elif con_arr0 == '灵兽洗髓确认':
+        return await beast_wash_confirm(uid, con_arr1)
+    elif con_arr0 == '灵兽洗髓取消':
+        return await beast_wash_cancel(uid, con_arr1)
+    elif con_arr0 == '灵兽血脉':
+        return await beast_bloodline(uid, con_arr1)
+    elif con_arr0 == '灵兽血脉激活':
+        return await beast_bloodline_activate(uid, con_arr1)
+    elif con_arr0 == '灵兽技能':
+        return await beast_skills(uid, con_arr1)
+    elif con_arr0 == '灵兽技能参悟':
+        return await beast_skill_learn(uid, con_arr1)
+    elif con_arr0 == '灵兽技能装配':
+        return await beast_skill_equip(uid, con_arr1)
+    elif con_arr0 == '灵兽技能卸下':
+        return await beast_skill_unequip(uid, con_arr1)
+    elif con_arr0 == '灵兽照料':
+        return await beast_care(uid, con_arr1)
+    elif con_arr0 == '灵兽一键照料':
+        return await beast_one_click_care(uid, con_arr1)
+    elif con_arr0 == '灵兽阵容':
+        return await beast_formation(uid, con_arr1)
+    elif con_arr0 == '灵兽上阵':
+        return await beast_formation_set(uid, con_arr1)
+    elif con_arr0 == '灵兽下阵':
+        return await beast_formation_remove(uid, con_arr1)
+    elif con_arr0 == '灵兽预设':
+        return await beast_preset(uid, con_arr1)
+    elif con_arr0 == '灵兽派遣':
+        return await beast_dispatch_home(uid)
+    elif con_arr0 == '灵兽派遣开始':
+        return await beast_dispatch_start(uid, con_arr1)
+    elif con_arr0 == '灵兽派遣领取':
+        return await beast_dispatch_claim(uid, con_arr1)
+    elif con_arr0 == '灵兽派遣取消':
+        return await beast_dispatch_cancel(uid, con_arr1)
+    elif con_arr0 == '万灵秘境':
+        return await beast_realm(uid)
+    elif con_arr0 == '万灵秘境挑战':
+        return await beast_realm_challenge(uid, con_arr1)
+    elif con_arr0 == '灵兽传记':
+        return await beast_biography(uid, con_arr1)
+    elif con_arr0 == '灵兽传记选择':
+        return await beast_biography_choose(uid, con_arr1)
+    elif con_arr0 == '灵兽归真':
+        return await beast_return(uid, con_arr1)
+    elif con_arr0 == '灵兽归真确认':
+        return await beast_return_confirm(uid, con_arr1)
+    elif con_arr0 == '灵兽归真取消':
+        return await beast_return_cancel(uid, con_arr1)
+    elif con_arr0 == '灵兽批量归真':
+        return await beast_batch_return(uid)
+    elif con_arr0 == '灵兽批量归真确认':
+        return await beast_batch_return_confirm(uid, con_arr1)
+    elif con_arr0 == '灵兽批量归真取消':
+        return await beast_batch_return_cancel(uid, con_arr1)
+    elif con_arr0 == '灵兽改名':
+        return await beast_rename(uid, con_arr1)
+    elif con_arr0 == '灵兽锁定':
+        return await beast_lock(uid, con_arr1)
+    elif con_arr0 == '灵兽周记':
+        return await beast_journal(uid)
+    elif con_arr0 == '灵兽周记领取':
+        return await beast_journal_claim(uid)
+    elif con_arr0 == '灵兽赛季':
+        return await beast_season(uid)
+    elif con_arr0 == '灵兽切磋':
+        return await beast_spar(uid, con_arr1)
+    elif con_arr0 == '护山灵兽':
+        return await sect_guardian_home(uid)
+    elif con_arr0 == '护山灵兽供养':
+        return await sect_guardian_supply(uid)
 
     # ==================== P1 队伍与阵法命令 ==================== #
     elif con_arr0 == '队伍':

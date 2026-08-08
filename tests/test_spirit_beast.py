@@ -119,6 +119,10 @@ class SpiritBeastTests(unittest.TestCase):
         power, details = asyncio.run(calculate_role_spirit_beast_power(conn, 10014, 100007))
         self.assertEqual(power, 3260)
         self.assertEqual(details["name"], "玄甲龟")
-        sql, params = conn.db_cursor.executed[0]
-        self.assertIn("equipped_role_id", sql)
+        v2_sql, params = conn.db_cursor.executed[0]
+        self.assertIn("user_spirit_beast_formation", v2_sql)
+        self.assertIn("f.role_id=%s", v2_sql)
         self.assertEqual(params, (100007, 10014))
+        fallback_sql, fallback_params = conn.db_cursor.executed[1]
+        self.assertIn("equipped_role_id", fallback_sql)
+        self.assertEqual(fallback_params, (100007, 10014))

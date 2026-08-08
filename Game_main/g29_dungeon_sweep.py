@@ -505,4 +505,14 @@ async def sweep_dungeon(uid, qz, dungeon_id, request_id=None):
             "content": "扫荡结算遇到异常，本次不会消耗扫荡券或历练次数，请稍后重试。",
         }
 
-    return _render_sweep_result(reward)
+    from Game_main.g33_spirit_beast_v2 import record_spirit_beast_pve
+    beast_reward = await record_spirit_beast_pve(
+        uid, int(role[0]), completed=False, swept=True, source="SWEEP"
+    )
+    response = _render_sweep_result(reward)
+    response["content"] += (
+        f"\n\n> 🐾 扫荡基础兽材×{beast_reward['beast_material']}｜"
+        f"御兽灵息×{beast_reward['spirit_essence']}；"
+        "扫荡不结算羁绊与传记事件。"
+    )
+    return response

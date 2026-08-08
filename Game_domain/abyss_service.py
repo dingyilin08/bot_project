@@ -771,6 +771,22 @@ async def settle_finished_battle(uid, session):
                 if won:
                     hp_ratio = max(0.0, manager.player.hp / max(1, manager.player.max_hp))
                     next_ratio = min(1.0, hp_ratio + 0.30)
+                    # 灵阵在开层时已冻结；每只怪物之间只恢复主契30%灵体，
+                    # 不重新读取玩家实时养成或换阵结果。
+                    beast_snapshot = run["role_snapshot"].get("spirit_beast") or {}
+                    battle_beast = manager.spirit_beast or {}
+                    body = battle_beast.get("spirit_body") or beast_snapshot.get("spirit_body") or {}
+                    if body:
+                        maximum = max(1, int(body.get("maximum", 1)))
+                        current = min(
+                            maximum,
+                            int(body.get("current", maximum)) + int(maximum * 0.30),
+                        )
+                        beast_snapshot["spirit_body"] = {
+                            "maximum": maximum, "current": current,
+                        }
+                        beast_snapshot["retreated"] = current <= 0
+                        run["role_snapshot"]["spirit_beast"] = beast_snapshot
                     kills = min(ABYSS_MAX_KILLS, run["kill_count"] + 1)
                     await cursor.execute(
                         "UPDATE abyss_run_monster SET state='DEFEATED',defeated_at=NOW() WHERE id=%s AND state='FIGHTING'",
@@ -779,9 +795,13 @@ async def settle_finished_battle(uid, session):
                     await cursor.execute(
                         """
                         UPDATE abyss_run SET kill_count=%s,player_hp_ratio=%s,
-                            state=%s,version=version+1 WHERE run_uuid=%s
+                            role_snapshot_json=%s,state=%s,version=version+1
+                        WHERE run_uuid=%s
                         """,
-                        (kills, next_ratio, "QUALIFIED" if kills >= 10 else "FIGHTING", run_uuid),
+                        (
+                            kills, next_ratio, _dumps(run["role_snapshot"]),
+                            "QUALIFIED" if kills >= 10 else "FIGHTING", run_uuid,
+                        ),
                     )
                     run["kill_count"] = kills
                     run["player_hp_ratio"] = next_ratio
@@ -789,6 +809,10 @@ async def settle_finished_battle(uid, session):
                     if kills >= ABYSS_MAX_KILLS:
                         settlement = await _settle_run_in_transaction(cursor, run, conn)
                         await conn.commit()
+                        from Game_main.g33_spirit_beast_v2 import record_spirit_beast_pve
+                        await record_spirit_beast_pve(
+                            uid, run["role_id"], source="ABYSS"
+                        )
                         return {"kind": "settled", "settlement": settlement}
                     await cursor.execute(
                         "SELECT COUNT(*) FROM abyss_run_monster WHERE run_uuid=%s AND wave_no=%s AND state='DEFEATED'",
@@ -802,6 +826,10 @@ async def settle_finished_battle(uid, session):
                         )
                         await _generate_wave(cursor, run, run["role_snapshot"]["world"])
                     await conn.commit()
+                    from Game_main.g33_spirit_beast_v2 import record_spirit_beast_pve
+                    await record_spirit_beast_pve(
+                        uid, run["role_id"], source="ABYSS"
+                    )
                     return {"kind": "progress", "run": run, "notice": f"已击败{escape(manager.enemy.name)}，本层累计{kills}杀。"}
 
                 await cursor.execute(

@@ -953,6 +953,9 @@ class CombatManager:
         self.spirit_beast = copy.deepcopy(player.role_data.get("spirit_beast") or {})
         self.spirit_beast.setdefault("triggered", 0)
         self.spirit_beast.setdefault("events", [])
+        self.spirit_beast.setdefault("skill_uses", {})
+        self.spirit_beast.setdefault("skill_ready_round", {})
+        self.spirit_beast.setdefault("support_triggered", [])
 
     def initialize(self) -> None:
         """初始化战斗顺序；可单独调用以创建可持久化的待行动战斗。"""
@@ -1055,6 +1058,195 @@ class CombatManager:
             'round': self.round, 'type': 'SHIELD_BONUS', 'before': before, 'after': int(shield.value),
         })
         self._log('spirit_beast_synergy', f"🛡️ 掌天灵契加持首层护盾，减伤强度提升至{int(shield.value)}%。")
+
+    def _trigger_v2_support_beasts(self) -> None:
+        """护契与辅契每场只在满足职责条件时响应一次。"""
+        if int(self.spirit_beast.get('schema_version', 1)) < 2:
+            return
+        triggered = self.spirit_beast.setdefault('support_triggered', [])
+        for beast in self.spirit_beast.get('formation', []):
+            if beast.get('slot') == '主契' or beast.get('id') in triggered:
+                continue
+            role = beast.get('role')
+            should_trigger = (
+                (role in ('GUARDIAN', 'HEALER') and self.player.hp <= self.player.max_hp * 0.6)
+                or (role == 'DISRUPTOR' and self.round == 1)
+                or (role == 'BREAKER' and any(buff.buff_type == 'shield' for buff in self.enemy.buffs))
+                or (role == 'STRIKER' and self.enemy.hp <= self.enemy.max_hp * 0.3)
+            )
+            if not should_trigger:
+                continue
+            name = beast.get('nickname') or beast.get('name') or '辅契灵兽'
+            value = max(1, min(5, int((beast.get('effect') or {}).get('value', 3))))
+            if role == 'GUARDIAN':
+                self.player.add_buff(Buff('shield', min(10, value + 2), 2, name, '护契守御'))
+                text = '凝成护主屏障'
+            elif role == 'HEALER':
+                heal, _ = self.player.receive_heal(int(self.player.max_hp * min(8, value + 2) / 100))
+                text = f'回复{heal}点气血'
+            elif role == 'DISRUPTOR':
+                self.enemy.add_buff(Buff('speed_down', min(12, value + 2), 2, name, '辅契迟滞'))
+                text = '压低敌方速度'
+            elif role == 'BREAKER':
+                shield = next((buff for buff in self.enemy.buffs if buff.buff_type == 'shield'), None)
+                if shield:
+                    shield.value = max(0, int(shield.value) - min(10, value + 2))
+                text = '削弱敌方护盾'
+            else:
+                damage = max(1, min(int(self.enemy.max_hp * 0.03), int(self.player.get_effective_attack() * 0.35)))
+                self.enemy.hp -= damage
+                text = f'追击造成{damage}点伤害'
+            triggered.append(beast.get('id'))
+            event = {'round': self.round, 'type': 'FORMATION_RESPONSE', 'beast_id': beast.get('id'), 'role': role}
+            self.spirit_beast['events'].append(event)
+            self._log('spirit_beast_support', f"🔯 {name}灵阵响应，{text}。")
+
+    def _execute_v2_spirit_beast_followup(self) -> None:
+        """主人行动后由主契自动协战，所有收益都有冷却、次数与硬上限。"""
+        if (
+            int(self.spirit_beast.get('schema_version', 1)) < 2
+            or self.enemy.is_dead() or self.spirit_beast.get('retreated')
+        ):
+            return
+        main = self.spirit_beast.get('main') or {}
+        if not main:
+            return
+        self._trigger_v2_support_beasts()
+        bond = self.spirit_beast.get('bond_synergy') or {}
+        if (
+            bond.get('active') and not self.spirit_beast.get('bond_triggered')
+            and self.player.hp <= self.player.max_hp * 0.30
+        ):
+            heal, _ = self.player.receive_heal(
+                int(self.player.max_hp * min(3, int(bond.get('value', 3))) / 100)
+            )
+            self.spirit_beast['bond_triggered'] = True
+            self.spirit_beast['events'].append({
+                'round': self.round, 'type': 'LIFE_AND_DEATH', 'value': heal,
+            })
+            self._log('spirit_beast_bond', f"💞 生死与共触发，为{self.player.name}回复{heal}点气血。")
+        ready = self.spirit_beast.setdefault('skill_ready_round', {})
+        uses = self.spirit_beast.setdefault('skill_uses', {})
+        selected = None
+        selected_key = None
+        for skill in main.get('skills', []):
+            key = str(skill.get('id'))
+            if self.round < int(ready.get(key, 0)) or int(uses.get(key, 0)) >= int(skill.get('limit', 1)):
+                continue
+            selected = skill
+            selected_key = key
+            break
+        role = main.get('role')
+        skill_code = (selected or {}).get('code', '')
+        name = main.get('nickname') or main.get('name') or '主契灵兽'
+        value = max(2, min(10, int((selected or {}).get('value') or (main.get('effect') or {}).get('value', 4))))
+        if skill_code in ('SKILL_HEAL', 'SKILL_EMERGENCY_HEAL') or (not selected and role == 'HEALER'):
+            if self.player.hp >= self.player.max_hp * 0.85:
+                return
+            heal, _ = self.player.receive_heal(int(self.player.max_hp * min(8, value) / 100))
+            text = f'灵息回春，回复{heal}点气血'
+        elif skill_code in ('SKILL_SHIELD', 'SKILL_TEAM_GUARD') or (not selected and role == 'GUARDIAN'):
+            if self.player.hp > self.player.max_hp * 0.7:
+                return
+            self.player.add_buff(Buff('shield', min(10, value), 2, name, '主契护体'))
+            text = f'结成{min(10, value)}%护体屏障'
+        elif skill_code in ('SKILL_SPEED', 'SKILL_HINT') or (not selected and role == 'DISRUPTOR'):
+            self.enemy.add_buff(Buff('speed_down', min(12, value), 2, name, '灵契控场'))
+            text = '扰乱敌机并降低速度'
+        elif skill_code in ('SKILL_BREAK', 'SKILL_TOUGHNESS') or (not selected and role == 'BREAKER'):
+            self.enemy.add_buff(Buff('defense_down', min(10, value), 2, name, '灵契破阵'))
+            text = '击破阵势并降低防御'
+        else:
+            damage = max(1, min(int(self.enemy.max_hp * 0.04), int(self.player.get_effective_attack() * 0.45)))
+            self.enemy.hp -= damage
+            text = f'协战造成{damage}点伤害'
+            if skill_code == 'SKILL_BURN':
+                self.enemy.add_buff(Buff('burning', 2, 2, name, '血脉灼烧'))
+                text += '并施加灼烧'
+
+        if selected_key is not None:
+            uses[selected_key] = int(uses.get(selected_key, 0)) + 1
+            ready[selected_key] = self.round + max(1, int(selected.get('cooldown', 1)))
+            text = f"施展「{selected.get('name', '传承技能')}」，" + text
+
+        resonance = self.spirit_beast.get('resonance') or {}
+        if resonance.get('type') == 'WORLD' and not self.spirit_beast.get('resonance_triggered'):
+            world = resonance.get('world')
+            count = max(2, min(3, int(resonance.get('count', 2))))
+            resonance_text = ''
+            if world == '斗气大陆':
+                burning = next((buff for buff in self.enemy.buffs if buff.buff_type == 'burning'), None)
+                if burning:
+                    burning.duration = min(10, int(burning.duration) + 1)
+                    resonance_text = '延长首次灼烧1回合'
+                    if count >= 3:
+                        extra = max(1, min(int(self.enemy.max_hp * .02), int(self.player.get_effective_attack() * .20)))
+                        self.enemy.hp -= extra
+                        resonance_text += f'并追加紫火{extra}点'
+            elif world == '仙罡星域':
+                self.enemy.add_buff(Buff('defense_down', 3, 2, name, '仙罡削韧'))
+                resonance_text = '提高首次减益的削韧'
+                if count >= 3 and self.player.hp <= self.player.max_hp * .30:
+                    heal, _ = self.player.receive_heal(int(self.player.max_hp * .05))
+                    resonance_text += f'，生死轮转回复{heal}点'
+            elif world == '大荒':
+                self.player.add_buff(Buff('attack_up', 3, 2, name, '大荒战意'))
+                if count >= 3:
+                    self.player.add_buff(Buff('defense_up', 3, 2, name, '战意换形'))
+                resonance_text = '凝聚战意' + ('并完成攻守换形' if count >= 3 else '')
+            elif world == '北斗星域':
+                self._set_threat_insight('北斗阵纹', force=False)
+                resonance_text = '阵纹标记最高威胁'
+            elif world == '人界灵界':
+                shield = next((buff for buff in self.enemy.buffs if buff.buff_type == 'shield'), None)
+                if shield:
+                    shield.value = max(0, int(shield.value) - 5)
+                    resonance_text = '噬器灵光削弱敌方护盾'
+                    if count >= 3:
+                        for key in list(ready):
+                            ready[key] = max(self.round, int(ready[key]) - 1)
+                        resonance_text += '并缩短主契冷却1回合'
+            elif world == '沧元界':
+                self._set_threat_insight('元神观敌', force=False)
+                resonance_text = '开场洞察最高威胁'
+                if count >= 3:
+                    self.player.add_buff(Buff('speed_up', 3, 2, name, '刀痕留势'))
+                    resonance_text += '并留下一道刀痕'
+            if resonance_text:
+                self.spirit_beast['resonance_triggered'] = True
+                self.spirit_beast['events'].append({
+                    'round': self.round, 'type': 'WORLD_RESONANCE',
+                    'world': world, 'count': count,
+                })
+                self._log('spirit_beast_resonance', f"🌌 {world}{count}灵共鸣：{resonance_text}。")
+
+        synergy = self.spirit_beast.get('synergy') or {}
+        code = synergy.get('code')
+        if code == 'FIRST_STRIKE_CHASE' and self.round == 1 and self.first is self.player:
+            extra = max(1, min(int(self.enemy.max_hp * 0.03), int(self.player.get_effective_attack() * 0.25)))
+            self.enemy.hp -= extra
+            text += f'，先手追击{extra}点'
+        elif code == 'REINCARNATION_DEBUFF' and role in ('DISRUPTOR', 'BREAKER'):
+            self.enemy.add_buff(Buff('defense_down', 3, 2, name, '生死削韧'))
+            text += '，追加生死削韧'
+        elif code == 'WILDERNESS_WILL':
+            self.player.add_buff(Buff('attack_up', 3, 2, name, '大荒战意'))
+            text += '，凝聚一层战意'
+        elif code == 'ARTIFACT_SOUL_BREAK' and any(buff.buff_type == 'shield' for buff in self.enemy.buffs):
+            shield = next(buff for buff in self.enemy.buffs if buff.buff_type == 'shield')
+            shield.value = max(0, int(shield.value) - 5)
+            text += '，噬器削弱护盾'
+        elif code == 'FORMATION_INSIGHT' and self.round == 1:
+            self._set_threat_insight('灵兽阵纹', force=False)
+        elif code == 'FIRE_STRIKER':
+            burning = next((buff for buff in self.enemy.buffs if buff.buff_type == 'burning'), None)
+            if burning and not self.spirit_beast.get('triggered', 0):
+                burning.duration = min(10, int(burning.duration) + 1)
+                self.spirit_beast['triggered'] = 1
+                text += '，延长灼烧1回合'
+        event = {'round': self.round, 'type': 'MAIN_FOLLOWUP', 'beast_id': main.get('id'), 'skill': (selected or {}).get('id')}
+        self.spirit_beast['events'].append(event)
+        self._log('spirit_beast_followup', f"🐾 {name}{text}。")
 
     def _trigger_pending_copy(self) -> None:
         pending = self.role_special.get('pending_copy')
@@ -1184,12 +1376,14 @@ class CombatManager:
 
         if self.first == self.player:
             self._execute_player_action(player_action)
+            self._execute_v2_spirit_beast_followup()
             if not self._check_combat_end():
                 self._execute_turn(self.enemy, self.player)
         else:
             self._execute_turn(self.enemy, self.player)
             if not self._check_combat_end():
                 self._execute_player_action(player_action)
+                self._execute_v2_spirit_beast_followup()
 
         self._end_of_round()
         self._resolve_boss_tianji()
@@ -1697,6 +1891,15 @@ class CombatManager:
             self.boss_tianji.setdefault('broken_stages', []).append(intent['stage'])
             self.boss_tianji['reward_weight_bonus'] = self.boss_tianji.get('reward_weight_bonus', 0) + intent.get('drop_weight', 0)
             self._log('boss_break', f"✅ 「{intent['name']}」已被破局，Boss 未能获得强化。")
+            resonance = self.spirit_beast.get('resonance') or {}
+            if (
+                resonance.get('world') == '北斗星域'
+                and int(resonance.get('count', 0)) >= 3
+                and not self.spirit_beast.get('resonance_break_triggered')
+            ):
+                self.player.add_buff(Buff('shield', 5, 2, '北斗灵阵', '破局阵障'))
+                self.spirit_beast['resonance_break_triggered'] = True
+                self._log('spirit_beast_resonance', '🌌 北斗三灵共鸣在破局后生成5%阵纹屏障。')
             feature_effect = ((self.role_special.get('feature') or {}).get('effect') or {})
             if feature_effect.get('type') == 'BOSS_BREAK_HEAL':
                 percent = max(1, min(10, int(feature_effect.get('value', 0))))
@@ -1710,6 +1913,15 @@ class CombatManager:
             self.enemy.add_buff(Buff(intent['effect'], intent['value'], intent.get('duration', 2), intent['name'], intent['name']))
             effect_name = '防御' if intent['effect'] == 'defense_up' else '攻击'
             self._log('boss_resolve', f"⚠️ 天机未破！{self.enemy.name}{effect_name}提升{intent['value']}%，持续2回合。")
+            body = self.spirit_beast.get('spirit_body') or {}
+            if int(self.spirit_beast.get('schema_version', 1)) >= 2 and body:
+                maximum = max(1, int(body.get('maximum', 1)))
+                loss = max(1, int(maximum * 0.20))
+                body['current'] = max(0, int(body.get('current', maximum)) - loss)
+                self._log('spirit_beast_body', f"💠 Boss范围机制令主契灵体-{loss}（{body['current']}/{maximum}）。")
+                if body['current'] <= 0:
+                    self.spirit_beast['retreated'] = True
+                    self._log('spirit_beast_retreat', '🌫️ 主契灵体耗尽，本场退阵；主人仍可继续战斗。')
         self.boss_tianji['intent'] = None
         insight_source = self.boss_tianji.get('insight_source')
         if insight_source:

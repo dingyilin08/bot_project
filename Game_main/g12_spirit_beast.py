@@ -101,6 +101,25 @@ async def _active_profile(uid, cursor, role_id=None):
     if role_id is None:
         return None
     try:
+        from Game_main.g33_spirit_beast_v2 import load_formation_snapshot
+
+        snapshot = await load_formation_snapshot(uid, role_id, cursor)
+        if snapshot:
+            main = dict(snapshot["main"])
+            main["aptitude"] = calculate_spirit_beast_power({
+                "aptitude": (
+                    int(main["apt_spirit"]) + int(main["apt_body"])
+                    + int(main["apt_soul"]) + int(main["apt_speed"])
+                ) // 4,
+                "bond_exp": main["bond_exp"],
+                "role": main["role"],
+            })["aptitude"]
+            main["passive_name"] = main["talent_name"]
+            return main
+    except (aiomysql.OperationalError, aiomysql.ProgrammingError) as error:
+        if not error.args or error.args[0] not in (1054, 1146):
+            raise
+    try:
         await cursor.execute("""
             SELECT ub.id, ub.aptitude, ub.temperament, ub.bond_exp,
                    db.name, db.role, db.element, db.passive_name, db.description
@@ -147,6 +166,15 @@ async def get_role_beast_profile(uid, role_id, cursor):
 
 async def get_active_beast_snapshot(uid, cursor, role_id=None):
     """使用调用方事务冻结指定角色灵兽，供单人/队伍 PVE 共用。"""
+    try:
+        from Game_main.g33_spirit_beast_v2 import load_formation_snapshot
+
+        snapshot = await load_formation_snapshot(uid, role_id, cursor)
+        if snapshot:
+            return snapshot
+    except (aiomysql.OperationalError, aiomysql.ProgrammingError) as error:
+        if not error.args or error.args[0] not in (1054, 1146):
+            raise
     profile = await _active_profile(uid, cursor, role_id)
     if not profile:
         return None
@@ -181,7 +209,63 @@ def apply_beast_snapshot_to_entity(snapshot, entity):
         return None
     from Tool.combat_system import Buff
     bonus = snapshot["combat_bonus"]
-    entity.add_buff(Buff(bonus["buff_type"], bonus["value"], 99, snapshot["name"], bonus["label"]))
+    if int(snapshot.get("schema_version", 1)) >= 2:
+        # 同类效果取最高，不因同定位灵兽或技能重复无限叠加。
+        bounded = {
+            bonus["buff_type"]: {
+                "value": int(bonus["value"]),
+                "name": snapshot["name"],
+                "label": "主契灵契",
+            }
+        }
+        role_caps = {
+            "attack_up": 12, "defense_up": 12, "speed_up": 12,
+            "heal_over_time": 8, "pofang_up": 10,
+        }
+        skill_types = {
+            "SKILL_ATTACK": "attack_up",
+            "SKILL_SHIELD": "defense_up",
+            "SKILL_HEAL": "heal_over_time",
+            "SKILL_SPEED": "speed_up",
+            "SKILL_BREAK": "pofang_up",
+            "SKILL_BURN": "attack_up",
+            "SKILL_EMERGENCY_HEAL": "heal_over_time",
+            "SKILL_TOUGHNESS": "pofang_up",
+            "SKILL_TEAM_GUARD": "defense_up",
+        }
+        for beast in snapshot.get("formation", []):
+            # 护契、辅契与传承技能由战斗管理器按条件触发，不能在开场
+            # 偷换成全程常驻属性；主契仅保留自身定位的基础灵契。
+            if beast.get("slot") != "主契":
+                continue
+            effect = beast.get("effect", {})
+            buff_type = effect.get("buff_type")
+            value = int(effect.get("value", 0))
+            current = bounded.get(buff_type, {}).get("value", 0)
+            if buff_type and value > current:
+                bounded[buff_type] = {
+                    "value": value, "name": beast.get("name", "灵兽"),
+                    "label": f"{beast.get('slot', '灵阵')}响应",
+                }
+        # 共鸣和同世界协同只微调主契强度，并继续受全局硬上限约束。
+        resonance = snapshot.get("resonance", {})
+        if resonance.get("type") in ("WORLD", "ELEMENT") and bonus["buff_type"] in bounded:
+            bounded[bonus["buff_type"]]["value"] += 1 if resonance.get("count", 0) < 3 else 2
+        synergy = snapshot.get("role_synergy", {})
+        if synergy.get("active") and bonus["buff_type"] in bounded:
+            bounded[bonus["buff_type"]]["value"] += 1
+        for buff_type, item in bounded.items():
+            value = min(role_caps.get(buff_type, 10), int(item["value"]))
+            entity.add_buff(
+                Buff(buff_type, value, 99, item["name"], item["label"])
+            )
+    else:
+        entity.add_buff(
+            Buff(
+                bonus["buff_type"], bonus["value"], 99,
+                snapshot["name"], bonus["label"],
+            )
+        )
     entity.role_data["spirit_beast"] = snapshot
     return snapshot
 

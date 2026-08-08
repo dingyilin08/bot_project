@@ -12,6 +12,7 @@ RESEARCHES = {
     "阵法": "成员本人在队伍PVE中造成伤害+3%",
     "御器": "装备强化实际支付灵石-5%",
     "秘境": "普通副本材料10%概率额外+1",
+    "御兽学": "护山灵兽供养额外提供追赶材料，不增加个人永久攻击",
 }
 RESEARCH_ORDER = tuple(RESEARCHES)
 RESEARCH_EFFECTS = {
@@ -19,6 +20,7 @@ RESEARCH_EFFECTS = {
     "阵法": {"code": "SECT_FORMATION", "party_damage_bp": 300},
     "御器": {"code": "SECT_ARTIFACT", "enhance_discount_bp": 500},
     "秘境": {"code": "SECT_DUNGEON", "material_extra_chance_bp": 1000},
+    "御兽学": {"code": "SECT_BEAST", "guardian_chase_material_bonus": 1},
 }
 DAILY_CONTRIBUTION = 20
 
@@ -163,6 +165,7 @@ async def _render_sect(sect, cursor, notice=""):
     output += "\n<qqbot-cmd-input text='宗门委托' show='完成宗门委托' /> | <qqbot-cmd-input text='宗门投票 丹道' show='投票·丹道增产' />\n\n"
     output += "<qqbot-cmd-input text='宗门投票 阵法' show='投票·队伍伤害' /> | <qqbot-cmd-input text='宗门投票 御器' show='投票·强化折扣' />\n\n"
     output += "<qqbot-cmd-input text='宗门投票 秘境' show='投票·材料增产' /> | <qqbot-cmd-input text='师徒进度' show='师徒进度' />\n\n"
+    output += "<qqbot-cmd-input text='宗门投票 御兽学' show='投票·御兽学' /> | <qqbot-cmd-input text='护山灵兽' show='护山灵兽' />\n\n"
     output += "<qqbot-cmd-input text='宗门列表' show='宗门列表' /> | <qqbot-cmd-input text='宗门菜单' show='宗门说明' />"
     return {"type": "markdown", "content": output}
 
@@ -261,7 +264,7 @@ async def sect_commission(uid, qz):
 async def sect_vote(uid, qz, research):
     research = parse_research(research)
     if not research:
-        return {"type": "markdown", "content": "研究方向仅可选：丹道、阵法、御器、秘境。"}
+        return {"type": "markdown", "content": "研究方向仅可选：丹道、阵法、御器、秘境、御兽学。"}
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
             sect = await _sect_for_user(uid, cursor, True)

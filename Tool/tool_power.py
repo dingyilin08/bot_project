@@ -14,6 +14,7 @@ from Game_domain.equipment_rules import (
     EQUIPMENT_SET_BONUS,
 )
 from Game_domain.spirit_beast_rules import calculate_spirit_beast_power as beast_power_details
+from Game_domain.spirit_beast_v2_rules import calculate_v2_power
 
 
 ATTR_WEIGHTS = {
@@ -280,6 +281,54 @@ async def calculate_role_spirit_beast_power(conn, role_id: int, uid: int) -> Tup
     出战角色，保证数据库与代码滚动发布期间不会重复计算。
     """
     async with conn.cursor() as cursor:
+        try:
+            await cursor.execute("""
+                SELECT b.id,b.level,b.stage,b.bond_exp,t.name,t.role_code,t.quality,
+                       a.spirit,a.body,a.soul,a.speed,COALESCE(bl.nodes,0),
+                       (SELECT COUNT(*) FROM user_spirit_beast_skill_slot ss
+                        WHERE ss.beast_id=b.id)
+                FROM user_spirit_beast_formation f
+                JOIN user_spirit_beast_setting setting
+                  ON setting.uid=f.uid AND setting.role_id=f.role_id
+                 AND setting.active_preset=f.preset_no
+                JOIN user_spirit_beast_v2 b
+                  ON b.id=f.beast_id AND b.uid=f.uid
+                JOIN spirit_beast_template t ON t.id=b.template_id
+                JOIN user_spirit_beast_aptitude a ON a.beast_id=b.id
+                LEFT JOIN user_spirit_beast_bloodline bl
+                  ON bl.uid=b.uid AND bl.template_id=b.template_id
+                WHERE f.uid=%s AND f.role_id=%s AND f.slot_type='主契'
+                LIMIT 1
+            """, (uid, role_id))
+            v2_row = await cursor.fetchone()
+            # 单元测试与滚动发布期间，旧游标可能返回旧版五列数据；
+            # 只有完整 V2 行才进入新版解包，其他情况继续走兼容查询。
+            if v2_row and len(v2_row) >= 13:
+                (
+                    instance_id, level, stage, bond_exp, name, beast_role,
+                    quality, apt_spirit, apt_body, apt_soul, apt_speed,
+                    bloodline_nodes, skill_count,
+                ) = v2_row
+                if int(bloodline_nodes or 0) >= 6:
+                    quality = {
+                        "灵品": "玄品", "玄品": "地品",
+                    }.get(quality, quality)
+                details = calculate_v2_power({
+                    "level": level, "stage": stage, "bond_exp": bond_exp,
+                    "quality": quality, "apt_spirit": apt_spirit,
+                    "apt_body": apt_body, "apt_soul": apt_soul,
+                    "apt_speed": apt_speed,
+                    "bloodline_nodes": bloodline_nodes,
+                    "skill_count": skill_count,
+                })
+                details.update({
+                    "instance_id": int(instance_id), "name": name,
+                    "role": beast_role, "quality": quality,
+                })
+                return int(details["power"]), details
+        except (aiomysql.OperationalError, aiomysql.ProgrammingError) as error:
+            if not error.args or error.args[0] not in (1054, 1146):
+                raise
         try:
             await cursor.execute("""
                 SELECT ub.id, ub.aptitude, ub.bond_exp, db.name, db.role

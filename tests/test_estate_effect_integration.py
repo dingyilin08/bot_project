@@ -99,6 +99,8 @@ class ClaimCursor(BaseCursor):
         self.statements.append((compact, params))
         if compact.startswith("INSERT IGNORE INTO user_estate_claim"):
             self.rowcount = 1 if self.insert_succeeds else 0
+        elif compact.startswith("INSERT INTO user_spirit_beast_wallet"):
+            self.rowcount = 1
         elif compact.startswith("UPDATE user_zt SET lingshi = lingshi +"):
             self.rowcount = 1
         else:
@@ -239,7 +241,16 @@ class EstateEffectIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(insert_params[3], 132)
         self.assertEqual(json.loads(insert_params[4]), levels)
         self.assertEqual(insert_params[5], estate_module.ESTATE_RULE_VERSION)
-        self.assertEqual(cursor.statements[-1][1], (132, 7))
+        lingshi_update = next(
+            statement for statement in cursor.statements
+            if statement[0].startswith("UPDATE user_zt SET lingshi = lingshi +")
+        )
+        self.assertEqual(lingshi_update[1], (132, 7))
+        beast_reward = next(
+            statement for statement in cursor.statements
+            if statement[0].startswith("INSERT INTO user_spirit_beast_wallet")
+        )
+        self.assertEqual(beast_reward[1], (7, 60))
         self.assertEqual(connection.commits, 1)
         self.assertEqual(connection.rollbacks, 0)
         self.assertIn("132", result["content"])

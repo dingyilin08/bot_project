@@ -130,7 +130,17 @@ def building_effect_text(building_code, level):
         value = format_basis_points(forge_success_bonus_bp(level))
         return f"装备强化成功率 +{value}个百分点"
     if building_code == "beast_garden":
-        return f"灵兽容量 {spirit_beast_capacity(level)}只"
+        level = clamp_estate_level(level)
+        slot_text = "主契"
+        if level >= 7:
+            slot_text = "主契/护契/辅契"
+        elif level >= 4:
+            slot_text = "主契/护契"
+        extra = "；一键照料与三套预设" if level >= 10 else ""
+        return (
+            f"灵兽容量 {spirit_beast_capacity(level)}只；"
+            f"御兽灵息日产 {20 + level * 10}；灵阵位 {slot_text}{extra}"
+        )
     if building_code == "scripture_library":
         value = format_basis_points(scripture_skill_effect_bonus_bp(level))
         return f"新建PVE快照的已装备技能效果 +{value}%"
@@ -289,5 +299,12 @@ async def estate_claim(uid, qz, mode):
                 await conn.rollback()
                 return {"type": "markdown", "content": "今日已收取洞府产出，请明日再来。"}
             await cursor.execute("UPDATE user_zt SET lingshi = lingshi + %s WHERE id = %s", (reward, uid))
+            beast_essence = 20 + levels["beast_garden"] * 10
+            await cursor.execute("""
+                INSERT INTO user_spirit_beast_wallet(uid,spirit_essence)
+                VALUES(%s,%s)
+                ON DUPLICATE KEY UPDATE
+                    spirit_essence=spirit_essence+VALUES(spirit_essence)
+            """, (uid, beast_essence))
             await conn.commit()
-    return {"type": "markdown", "content": f"##### ✨ 洞府收取\n\n方式：{mode}\n获得灵石：**{reward}**\n> {description}\n\n<qqbot-cmd-input text='洞府' show='查看洞府' />"}
+    return {"type": "markdown", "content": f"##### ✨ 洞府收取\n\n方式：{mode}\n获得灵石：**{reward}**\n获得御兽灵息：**{beast_essence}**\n> {description}\n\n<qqbot-cmd-input text='洞府' show='查看洞府' /> | <qqbot-cmd-input text='灵兽' show='诸天灵契' />"}
