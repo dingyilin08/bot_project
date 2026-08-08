@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """灵石商城：提供不直接出售战力的便利型消耗品。"""
 
-from datetime import date
+from datetime import date, timedelta
 
 from func.pd_func import reg_xz_func
 from sql.mysql import connect_mysql
@@ -15,6 +15,7 @@ STAMINA_POTION_ITEM_ID = 209
 STAMINA_POTION_RESTORE = 5
 DUNGEON_SWEEP_TICKET_ITEM_ID = 211
 DUNGEON_SWEEP_TICKET_DAILY_LIMIT = 20
+DIRECTIONAL_SMELTING_JADE_ITEM_ID = 212
 
 # 商品价格以当前副本、药园和炼丹的灵石产出为基准；商品均可由后续运营在
 # data_shop_item 表中调整，不在业务逻辑中硬编码价格。
@@ -25,6 +26,7 @@ DEFAULT_SHOP_ITEMS = (
         "price": 500,
         "category": "历练",
         "daily_limit": 4,
+        "weekly_limit": 0,
         "description": "使用后恢复5次副本历练次数；当日历练次数最多为40次。",
     },
     {
@@ -33,6 +35,7 @@ DEFAULT_SHOP_ITEMS = (
         "price": 800,
         "category": "历练",
         "daily_limit": DUNGEON_SWEEP_TICKET_DAILY_LIMIT,
+        "weekly_limit": 0,
         "description": "消耗1张可一键扫荡已通关副本，同时消耗1次副本历练次数。",
     },
     {
@@ -41,6 +44,7 @@ DEFAULT_SHOP_ITEMS = (
         "price": 250,
         "category": "药园",
         "daily_limit": 8,
+        "weekly_limit": 0,
         "description": "对已播种且未成熟的药田施用，可立即成熟并采摘。",
     },
     {
@@ -49,6 +53,7 @@ DEFAULT_SHOP_ITEMS = (
         "price": 300,
         "category": "炼丹",
         "daily_limit": 8,
+        "weekly_limit": 0,
         "description": "使指定炼制中的丹炉立即完成；不改变炼丹成功率。",
     },
     {
@@ -57,7 +62,17 @@ DEFAULT_SHOP_ITEMS = (
         "price": 800,
         "category": "修行",
         "daily_limit": 2,
+        "weekly_limit": 0,
         "description": "悟道进阶时自动消耗，额外提高50%成功率。",
+    },
+    {
+        "name": "定枢玉",
+        "item_id": DIRECTIONAL_SMELTING_JADE_ITEM_ID,
+        "price": 12000,
+        "category": "炼器",
+        "daily_limit": 0,
+        "weekly_limit": 2,
+        "description": "定向熔炼装备时消耗，可指定熔炼产物的装备部位。",
     },
 )
 
@@ -91,6 +106,7 @@ async def _ensure_shop_schema(cursor):
             category VARCHAR(20) NOT NULL,
             description VARCHAR(255) NOT NULL,
             daily_limit INT NOT NULL DEFAULT 0,
+            weekly_limit INT NOT NULL DEFAULT 0,
             enabled TINYINT NOT NULL DEFAULT 1,
             PRIMARY KEY (id),
             UNIQUE KEY uk_name (name),
@@ -98,6 +114,12 @@ async def _ensure_shop_schema(cursor):
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='基础_灵石商城商品'
         """
     )
+    # 兼容已上线的商城表：早期版本没有周限购字段。
+    await cursor.execute("SHOW COLUMNS FROM data_shop_item LIKE 'weekly_limit'")
+    if not await cursor.fetchone():
+        await cursor.execute(
+            "ALTER TABLE data_shop_item ADD COLUMN weekly_limit INT NOT NULL DEFAULT 0 AFTER daily_limit"
+        )
     await cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS user_shop_daily (
@@ -110,6 +132,18 @@ async def _ensure_shop_schema(cursor):
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='玩家_商城每日购买记录'
         """
     )
+    await cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_shop_weekly (
+            uid INT NOT NULL,
+            item_id INT NOT NULL,
+            week_start DATE NOT NULL,
+            bought_num INT NOT NULL DEFAULT 0,
+            PRIMARY KEY (uid, item_id, week_start),
+            KEY idx_week_start (week_start)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='玩家_商城每周购买记录'
+        """
+    )
 
     item_definitions = (
         (1, "悟道天书", "可提升悟道进阶概率。", "副本掉落、灵石商城"),
@@ -117,6 +151,7 @@ async def _ensure_shop_schema(cursor):
         (209, "体力药", "恢复副本历练次数，每次恢复5次。", "灵石商城"),
         (210, "灵草培育液", "使已播种药田立即成熟。", "灵石商城"),
         (211, "扫荡副本券", "可一键扫荡已通关副本。", "灵石商城"),
+        (DIRECTIONAL_SMELTING_JADE_ITEM_ID, "定枢玉", "定向熔炼装备时消耗，可指定产物部位。", "灵石商城（每周限购）"),
     )
     for item_id, name, description, access in item_definitions:
         await cursor.execute(
@@ -131,15 +166,15 @@ async def _ensure_shop_schema(cursor):
     for item in DEFAULT_SHOP_ITEMS:
         await cursor.execute(
             """
-            INSERT INTO data_shop_item (name, item_id, price, category, description, daily_limit, enabled)
-            VALUES (%s, %s, %s, %s, %s, %s, 1)
+            INSERT INTO data_shop_item (name, item_id, price, category, description, daily_limit, weekly_limit, enabled)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 1)
             ON DUPLICATE KEY UPDATE item_id = VALUES(item_id), price = VALUES(price),
                 category = VALUES(category), description = VALUES(description),
-                daily_limit = VALUES(daily_limit), enabled = 1
+                daily_limit = VALUES(daily_limit), weekly_limit = VALUES(weekly_limit), enabled = 1
             """,
             (
                 item["name"], item["item_id"], item["price"], item["category"],
-                item["description"], item["daily_limit"],
+                item["description"], item["daily_limit"], item["weekly_limit"],
             ),
         )
 
@@ -147,7 +182,7 @@ async def _ensure_shop_schema(cursor):
 async def _get_shop_item(cursor, item_name):
     await cursor.execute(
         """
-        SELECT id, name, item_id, price, category, description, daily_limit
+        SELECT id, name, item_id, price, category, description, daily_limit, weekly_limit
         FROM data_shop_item WHERE name = %s AND enabled = 1 LIMIT 1
         """,
         (item_name,),
@@ -158,6 +193,7 @@ async def _get_shop_item(cursor, item_name):
     return {
         "id": int(row[0]), "name": row[1], "item_id": int(row[2]), "price": int(row[3]),
         "category": row[4], "description": row[5], "daily_limit": int(row[6]),
+        "weekly_limit": int(row[7]),
     }
 
 
@@ -199,6 +235,7 @@ async def show_shop(uid, qz, page=1):
         async with conn.cursor() as cursor:
             await _ensure_shop_schema(cursor)
             today = date.today()
+            week_start = today - timedelta(days=today.weekday())
             await cursor.execute("SELECT lingshi FROM user_zt WHERE id = %s LIMIT 1", (uid,))
             balance_row = await cursor.fetchone()
             lingshi = int((balance_row or [0])[0] or 0)
@@ -209,23 +246,30 @@ async def show_shop(uid, qz, page=1):
             offset = (page - 1) * SHOP_PAGE_SIZE
             await cursor.execute(
                 """
-                SELECT d.name, d.price, d.category, d.description, d.daily_limit,
-                       COALESCE(u.bought_num, 0)
+                SELECT d.name, d.price, d.category, d.description, d.daily_limit, d.weekly_limit,
+                       COALESCE(u.bought_num, 0), COALESCE(w.bought_num, 0)
                 FROM data_shop_item d
                 LEFT JOIN user_shop_daily u
                     ON u.uid = %s AND u.item_id = d.item_id AND u.stat_date = %s
+                LEFT JOIN user_shop_weekly w
+                    ON w.uid = %s AND w.item_id = d.item_id AND w.week_start = %s
                 WHERE d.enabled = 1
                 ORDER BY d.category, d.id
                 LIMIT %s OFFSET %s
                 """,
-                (uid, today, SHOP_PAGE_SIZE, offset),
+                (uid, today, uid, week_start, SHOP_PAGE_SIZE, offset),
             )
             rows = await cursor.fetchall()
             await conn.commit()
 
     lines = [f"##### 🏪 灵石商城（第{page}/{total_pages}页）", f"> 当前灵石：**{lingshi}**", "***"]
-    for name, price, category, description, daily_limit, bought_num in rows:
-        limit_text = "不限购" if int(daily_limit) <= 0 else f"今日 {int(bought_num)}/{int(daily_limit)}"
+    for name, price, category, description, daily_limit, weekly_limit, bought_num, weekly_bought_num in rows:
+        limits = []
+        if int(daily_limit) > 0:
+            limits.append(f"今日 {int(bought_num)}/{int(daily_limit)}")
+        if int(weekly_limit) > 0:
+            limits.append(f"本周 {int(weekly_bought_num)}/{int(weekly_limit)}")
+        limit_text = "｜".join(limits) if limits else "不限购"
         lines.append(f"**【{category}】{name}**")
         lines.append(f"> {description}")
         lines.append(f"> 价格：**{price} 灵石** ｜ 限购：{limit_text}")
@@ -255,26 +299,51 @@ async def buy_shop_item(uid, qz, param):
                 return {"type": "markdown", "content": f"商城没有出售：{item_name}。可发送“商城”查看商品。"}
 
             today = date.today()
-            await cursor.execute(
-                """
-                INSERT INTO user_shop_daily (uid, item_id, stat_date, bought_num)
-                VALUES (%s, %s, %s, 0)
-                ON DUPLICATE KEY UPDATE bought_num = bought_num
-                """,
-                (uid, item["item_id"], today),
-            )
-            await cursor.execute(
-                """
-                SELECT bought_num FROM user_shop_daily
-                WHERE uid = %s AND item_id = %s AND stat_date = %s FOR UPDATE
-                """,
-                (uid, item["item_id"], today),
-            )
-            bought_num = int((await cursor.fetchone())[0] or 0)
-            if item["daily_limit"] > 0 and bought_num + count > item["daily_limit"]:
-                await conn.rollback()
-                remain = max(0, item["daily_limit"] - bought_num)
-                return {"type": "markdown", "content": f"{item['name']}今日限购{item['daily_limit']}个，已购买{bought_num}个，还可购买{remain}个。"}
+            week_start = today - timedelta(days=today.weekday())
+            bought_num = 0
+            weekly_bought_num = 0
+            if item["daily_limit"] > 0:
+                await cursor.execute(
+                    """
+                    INSERT INTO user_shop_daily (uid, item_id, stat_date, bought_num)
+                    VALUES (%s, %s, %s, 0)
+                    ON DUPLICATE KEY UPDATE bought_num = bought_num
+                    """,
+                    (uid, item["item_id"], today),
+                )
+                await cursor.execute(
+                    """
+                    SELECT bought_num FROM user_shop_daily
+                    WHERE uid = %s AND item_id = %s AND stat_date = %s FOR UPDATE
+                    """,
+                    (uid, item["item_id"], today),
+                )
+                bought_num = int((await cursor.fetchone())[0] or 0)
+                if bought_num + count > item["daily_limit"]:
+                    await conn.rollback()
+                    remain = max(0, item["daily_limit"] - bought_num)
+                    return {"type": "markdown", "content": f"{item['name']}今日限购{item['daily_limit']}个，已购买{bought_num}个，还可购买{remain}个。"}
+            if item["weekly_limit"] > 0:
+                await cursor.execute(
+                    """
+                    INSERT INTO user_shop_weekly (uid, item_id, week_start, bought_num)
+                    VALUES (%s, %s, %s, 0)
+                    ON DUPLICATE KEY UPDATE bought_num = bought_num
+                    """,
+                    (uid, item["item_id"], week_start),
+                )
+                await cursor.execute(
+                    """
+                    SELECT bought_num FROM user_shop_weekly
+                    WHERE uid = %s AND item_id = %s AND week_start = %s FOR UPDATE
+                    """,
+                    (uid, item["item_id"], week_start),
+                )
+                weekly_bought_num = int((await cursor.fetchone())[0] or 0)
+                if weekly_bought_num + count > item["weekly_limit"]:
+                    await conn.rollback()
+                    remain = max(0, item["weekly_limit"] - weekly_bought_num)
+                    return {"type": "markdown", "content": f"{item['name']}本周限购{item['weekly_limit']}个，已购买{weekly_bought_num}个，还可购买{remain}个。"}
 
             total_price = item["price"] * count
             await cursor.execute(
@@ -288,13 +357,22 @@ async def buy_shop_item(uid, qz, param):
                 return {"type": "markdown", "content": f"灵石不足，购买需要{total_price}灵石，当前仅有{balance}灵石。"}
 
             await _add_user_item(cursor, uid, item["item_id"], count)
-            await cursor.execute(
-                """
-                UPDATE user_shop_daily SET bought_num = bought_num + %s
-                WHERE uid = %s AND item_id = %s AND stat_date = %s
-                """,
-                (count, uid, item["item_id"], today),
-            )
+            if item["daily_limit"] > 0:
+                await cursor.execute(
+                    """
+                    UPDATE user_shop_daily SET bought_num = bought_num + %s
+                    WHERE uid = %s AND item_id = %s AND stat_date = %s
+                    """,
+                    (count, uid, item["item_id"], today),
+                )
+            if item["weekly_limit"] > 0:
+                await cursor.execute(
+                    """
+                    UPDATE user_shop_weekly SET bought_num = bought_num + %s
+                    WHERE uid = %s AND item_id = %s AND week_start = %s
+                    """,
+                    (count, uid, item["item_id"], week_start),
+                )
             await cursor.execute("SELECT lingshi FROM user_zt WHERE id = %s LIMIT 1", (uid,))
             balance = int((await cursor.fetchone())[0] or 0)
             await conn.commit()

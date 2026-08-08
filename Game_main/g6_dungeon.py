@@ -1542,21 +1542,21 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                     # 先从user_skill表获取技能信息（user_skill表没有buff_name和buff_desc字段）
                     await cursor.execute("""
                         SELECT skill_id, is_data_skill, skill_name, skill_type, value, is_percent,
-                               cooldown
+                               cooldown, mana_cost, skill_1
                         FROM user_skill
                         WHERE id = %s
                         LIMIT 1
                     """, (skill_id,))
                     user_skill_result = await cursor.fetchone()
                     if user_skill_result:
-                        data_skill_id, is_data_skill, skill_name, skill_type, value, is_percent, cooldown = user_skill_result
+                        data_skill_id, is_data_skill, skill_name, skill_type, value, is_percent, cooldown, mana_cost, source_skill_id = user_skill_result
 
-                        if is_data_skill == 1:
+                        if int(is_data_skill or 0) == 1:
                             # 基础技能：从data_skill表获取完整信息（包含buff相关字段）
                             await cursor.execute("""
                                 SELECT id, role_name, skill_name, skill_type, value, is_percent,
                                        item_id, buff_type, buff_value, buff_duration, buff_target,
-                                       buff_desc, buff_name, cooldown
+                                       buff_desc, buff_name, cooldown, mana_cost
                                 FROM data_skill
                                 WHERE id = %s
                                 LIMIT 1
@@ -1570,7 +1570,7 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                                 target_type = "enemy" if buff_target == 2 else "self"
 
                                 player_skills.append(Skill(
-                                    id=skill_result[0],
+                                    id=skill_id,
                                     name=skill_result[2],
                                     skill_type=skill_result[3],
                                     target_type=target_type,
@@ -1578,7 +1578,7 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                                     is_percent=skill_result[5],
                                     item_id=skill_result[6],
                                     cooldown=skill_result[13] or 0,
-                                    mana_cost=0,
+                                    mana_cost=skill_result[14] or 0,
                                     effect_bonus_bp=skill_effect_bonus_bp,
                                     buff_type=skill_result[7],
                                     buff_value=skill_result[8] or 0,
@@ -1588,13 +1588,7 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                                     description=skill_result[11] or ""
                                 ))
                         else:
-                            # 融合技能：通过skill_1（存储的是data_skill.id）直接查询buff信息
-                            # 获取融合技能的skill_1字段（原基础技能的data_skill.id）
-                            await cursor.execute("""
-                                SELECT skill_1 FROM user_skill WHERE id = %s
-                            """, (skill_id,))
-                            fuse_result = await cursor.fetchone()
-
+                            # 融合技能继承第一份源技能的 Buff，并使用融合后写入的数值、冷却和法力消耗。
                             buff_type = None
                             buff_value = 0
                             buff_duration = 0
@@ -1602,14 +1596,14 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                             buff_desc = ""
                             buff_name_result = ""
 
-                            if fuse_result and fuse_result[0]:
+                            if source_skill_id:
                                 # 直接通过data_skill.id获取buff信息
                                 await cursor.execute("""
                                     SELECT buff_type, buff_value, buff_duration, buff_target, buff_desc, buff_name
                                     FROM data_skill
                                     WHERE id = %s
                                     LIMIT 1
-                                """, (fuse_result[0],))
+                                """, (source_skill_id,))
                                 buff_result = await cursor.fetchone()
                                 if buff_result:
                                     buff_type = buff_result[0]
@@ -1633,7 +1627,7 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                                 is_percent=is_percent,
                                 item_id=0,
                                 cooldown=cooldown or 0,
-                                mana_cost=0,
+                                mana_cost=mana_cost or 0,
                                 effect_bonus_bp=skill_effect_bonus_bp,
                                 buff_type=buff_type,
                                 buff_value=buff_value,

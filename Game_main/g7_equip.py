@@ -202,6 +202,7 @@ PART_EN = {
 }
 
 PAGE_SIZE = 6
+DIRECTIONAL_SMELTING_JADE_ITEM_ID = 212
 
 PART_COLUMN_MAP = {
     'weapon': 'equip_weapon',
@@ -561,6 +562,7 @@ def format_equip_bag_markdown(equipments, page, total_pages, role_info):
 
     lines.append("***")
 
+    lines.append("<qqbot-cmd-input text='装备熔炼 ' show='装备熔炼 编号1-编号2-编号3' /> | <qqbot-cmd-input text='定向熔炼 ' show='定向熔炼 部位 编号1-编号2-编号3' />")
     lines.append(f"<qqbot-cmd-input text='当前装备' show='当前装备' /> | <qqbot-cmd-input text='当前角色' show='当前角色' /> | <qqbot-cmd-input text='角色背包' show='角色背包' />")
 
     return "\n".join(lines)
@@ -1638,3 +1640,162 @@ async def sell_equip(uid, qz, equip_instance_id):
 
             markdown_content = format_sell_result_markdown(role_info, equip, sell_info, current_lingshi)
             return {"type": "markdown", "content": markdown_content}
+
+
+def parse_smelt_equip_ids(text):
+    """解析三个以“-”分隔的装备实例编号。"""
+    parts = [part.strip() for part in str(text or "").strip().split("-")]
+    if len(parts) != 3:
+        return None
+    try:
+        equip_ids = [int(part) for part in parts]
+    except (TypeError, ValueError):
+        return None
+    if any(equip_id <= 0 for equip_id in equip_ids) or len(set(equip_ids)) != 3:
+        return None
+    return equip_ids
+
+
+def _smelt_error(qz, message):
+    return {
+        "type": "markdown",
+        "content": "\n".join((
+            "##### ❌ 装备熔炼失败",
+            "",
+            f"> {message}",
+            "> 普通熔炼：装备熔炼 装备1编号-装备2编号-装备3编号",
+            "> 定向熔炼：定向熔炼 部位 装备1编号-装备2编号-装备3编号",
+            "***",
+            "<qqbot-cmd-input text='装备背包' show='装备背包' /> | <qqbot-cmd-input text='商城' show='购买定枢玉' />",
+        )),
+    }
+
+
+async def _smelt_equipment(uid, qz, equip_text, target_part=None, is_directional=False):
+    """消耗三件同品质未穿戴装备，按最低阶材料的套装生成一件同品质装备。"""
+    equip_ids = parse_smelt_equip_ids(equip_text)
+    if not equip_ids:
+        return _smelt_error(qz, "指令格式错误，需填写三个不同的装备编号。")
+    if target_part is not None and target_part not in PART_CN:
+        return _smelt_error(qz, "定向部位仅支持：武器、头盔、铠甲、护腿、鞋子、饰品。")
+
+    placeholders = ", ".join(["%s"] * len(equip_ids))
+    async with connect_mysql() as conn:
+        try:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    f"""
+                    SELECT ue.id, ue.equip_id, ue.quality, ue.is_equipped, de.set_id, de.min_level
+                    FROM user_equip ue
+                    JOIN data_equip de ON de.id = ue.equip_id
+                    WHERE ue.uid = %s AND ue.id IN ({placeholders})
+                    FOR UPDATE
+                    """,
+                    (uid, *equip_ids),
+                )
+                rows = await cursor.fetchall()
+                if len(rows) != 3:
+                    await conn.rollback()
+                    return _smelt_error(qz, "存在不存在或不属于你的装备，请重新确认编号。")
+                if any(int(row[3] or 0) == 1 for row in rows):
+                    await conn.rollback()
+                    return _smelt_error(qz, "穿戴中的装备不能熔炼，请先卸下。")
+
+                qualities = {str(row[2]) for row in rows}
+                if len(qualities) != 1:
+                    await conn.rollback()
+                    return _smelt_error(qz, "三件材料必须为同一品质装备。")
+
+                # 混用不同阶材料时取最低阶套装，避免用低阶材料跨阶产出。
+                anchor = min(rows, key=lambda row: (int(row[5] or 1), int(row[0])))
+                if target_part is None:
+                    target_part = random.choice(tuple(PART_CN.keys()))
+
+                await cursor.execute(
+                    """
+                    SELECT id, name, set_name, part, min_level
+                    FROM data_equip
+                    WHERE set_id = %s AND part = %s
+                    LIMIT 1
+                    """,
+                    (anchor[4], target_part),
+                )
+                template = await cursor.fetchone()
+                if not template:
+                    await conn.rollback()
+                    return _smelt_error(qz, "未找到可生成的目标部位模板，请稍后重试。")
+
+                if is_directional:
+                    # 定向熔炼消耗在目标模板确认后再扣除，失败不会损失道具。
+                    await cursor.execute(
+                        """
+                        UPDATE user_item SET item_num = item_num - 1
+                        WHERE uid = %s AND item_id = %s AND item_num >= 1
+                        """,
+                        (uid, DIRECTIONAL_SMELTING_JADE_ITEM_ID),
+                    )
+                    if cursor.rowcount <= 0:
+                        await conn.rollback()
+                        return _smelt_error(qz, "定向熔炼需要1个定枢玉，可前往灵石商城购买。")
+                    await cursor.execute(
+                        "DELETE FROM user_item WHERE uid = %s AND item_id = %s AND item_num <= 0",
+                        (uid, DIRECTIONAL_SMELTING_JADE_ITEM_ID),
+                    )
+
+                quality = next(iter(qualities))
+                await cursor.execute(
+                    """
+                    INSERT INTO user_equip (uid, equip_id, level, quality, is_equipped, enhance_fail_count)
+                    VALUES (%s, %s, 0, %s, 0, 0)
+                    """,
+                    (uid, template[0], quality),
+                )
+                new_equip_id = cursor.lastrowid
+                await cursor.execute(
+                    f"DELETE FROM user_equip WHERE uid = %s AND id IN ({placeholders})",
+                    (uid, *equip_ids),
+                )
+                if cursor.rowcount != 3:
+                    await conn.rollback()
+                    return _smelt_error(qz, "材料状态已变化，请重新打开装备背包后再试。")
+                await conn.commit()
+        except Exception:
+            await conn.rollback()
+            raise
+
+    part_name = PART_CN[target_part]
+    operation = "定向熔炼" if is_directional else "装备熔炼"
+    extra = "> 已消耗：定枢玉 ×1" if is_directional else None
+    return {
+        "type": "markdown",
+        "content": "\n".join((
+            f"##### ✨ {operation}成功",
+            "",
+            "> 已消耗三件同品质、未穿戴装备。",
+            *( (extra,) if extra else () ),
+            f"> 获得：**[{new_equip_id}] {template[1]}**",
+            f"> 品质：{QUALITY_ICON.get(quality, '○')}{quality} ｜ 部位：{part_name} ｜ 强化：+0",
+            "***",
+            f"<qqbot-cmd-input text='装备详情 {new_equip_id}' show='查看新装备' /> | <qqbot-cmd-input text='装备背包' show='装备背包' />",
+        )),
+    }
+
+
+@reg_xz_func
+async def smelt_equip(uid, qz, equip_text):
+    """装备熔炼：随机生成一个部位。"""
+    return await _smelt_equipment(uid, qz, equip_text)
+
+
+@reg_xz_func
+async def directional_smelt_equip(uid, qz, param):
+    """定向熔炼：消耗定枢玉指定产物部位。"""
+    text = str(param or "").strip()
+    try:
+        part_name, equip_text = text.split(None, 1)
+    except ValueError:
+        return _smelt_error(qz, "指令格式错误，请填写目标部位和三个装备编号。")
+    target_part = PART_EN.get(part_name)
+    if not target_part:
+        return _smelt_error(qz, "目标部位仅支持：武器、头盔、铠甲、护腿、鞋子、饰品。")
+    return await _smelt_equipment(uid, qz, equip_text, target_part=target_part, is_directional=True)

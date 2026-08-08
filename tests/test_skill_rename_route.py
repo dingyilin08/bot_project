@@ -51,10 +51,10 @@ class _FusionCursor:
         elif statement.startswith("SELECT COALESCE(MAX(id), 0) + 1"):
             self._row = (max(self.skills, default=0) + 1,)
         elif statement.startswith("INSERT INTO user_skill"):
-            skill_id, uid, name, skill_type, value, is_percent, source_1, source_2, is_data_skill, is_zb, cooldown = params
+            skill_id, uid, name, skill_type, value, is_percent, source_1, source_2, is_data_skill, is_zb, cooldown, mana_cost = params
             self.skills[skill_id] = {
                 "uid": uid,
-                "row": (name, skill_type, value, is_percent, is_data_skill, is_zb, source_1, cooldown),
+                "row": (name, skill_type, value, is_percent, is_data_skill, is_zb, source_1, cooldown, mana_cost),
                 "sources": (source_1, source_2),
             }
         elif statement.startswith("DELETE FROM user_skill"):
@@ -102,8 +102,8 @@ class SkillFusionSimulationTests(unittest.IsolatedAsyncioTestCase):
     async def test_player_31_33_fusion_returns_response_and_restores_snapshot(self):
         uid = 70001
         skills = {
-            31: {"uid": uid, "row": ("雨之剑意", 1, "340", 0, 1, 0, 63, 2)},
-            33: {"uid": uid, "row": ("本源真身", 1, "40", 0, 1, 0, 65, 1)},
+            31: {"uid": uid, "row": ("雨之剑意", 1, "340", 0, 1, 0, 63, 2, 25)},
+            33: {"uid": uid, "row": ("本源真身", 1, "40", 0, 1, 0, 65, 1, 18)},
         }
         original_skills = deepcopy(skills)
         cursor = _FusionCursor(skills)
@@ -127,6 +127,7 @@ class SkillFusionSimulationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("成功将[雨之剑意]和[本源真身]融合", result["content"])
         self.assertIn("技能数值：60", result["content"])
+        self.assertIn("法力消耗：25点", result["content"])
         self.assertIn("继承BUFF：雨界意境", result["content"])
         self.assertIn("技能信息 34", result["content"])
         self.assertEqual(conn.commit_count, 1)

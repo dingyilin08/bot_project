@@ -12,13 +12,13 @@ from Tool.tool_command import *
 async def jh_skill(uid, qz, skill_name):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            sql = "SELECT id, role_name, skill_type, `value`, is_percent, item_id, cooldown, buff_name, buff_desc FROM data_skill WHERE skill_name = %s LIMIT 1"
+            sql = "SELECT id, role_name, skill_type, `value`, is_percent, item_id, cooldown, mana_cost, buff_name, buff_desc FROM data_skill WHERE skill_name = %s LIMIT 1"
             await cursor.execute(sql, (skill_name,))
             result = await cursor.fetchone()
             if result is None:
                 return {"type": "markdown", "content": qz + "技能不存在，请检查技能名称是否正确。\n示例：激活技能 八极崩\n"}
 
-            skill_id, role_name, skill_type, value, is_percent, item_id, cooldown, buff_name, buff_desc = result
+            skill_id, role_name, skill_type, value, is_percent, item_id, cooldown, mana_cost, buff_name, buff_desc = result
             
             sql = "SELECT id FROM user_skill WHERE uid = %s AND skill_id = %s LIMIT 1"
             await cursor.execute(sql, (uid, skill_id))
@@ -33,8 +33,8 @@ async def jh_skill(uid, qz, skill_name):
             await cursor.execute(sql)
             user_skill_id, = await cursor.fetchone()
 
-            sql = "INSERT INTO user_skill (id, uid, is_data_skill, skill_id, skill_name, skill_type, `value`, is_percent, cooldown) VALUES (%s, %s, 1, %s, %s, %s, %s, %s, %s)"
-            await cursor.execute(sql, (user_skill_id, uid, skill_id, skill_name, skill_type, value, is_percent, cooldown))
+            sql = "INSERT INTO user_skill (id, uid, is_data_skill, skill_id, skill_name, skill_type, `value`, is_percent, cooldown, mana_cost) VALUES (%s, %s, 1, %s, %s, %s, %s, %s, %s, %s)"
+            await cursor.execute(sql, (user_skill_id, uid, skill_id, skill_name, skill_type, value, is_percent, cooldown, mana_cost))
             await conn.commit()
             if skill_type == 1:
                 skill_type = "攻击型"
@@ -54,6 +54,7 @@ async def jh_skill(uid, qz, skill_name):
             output += f"技能类型：{skill_type}\n"
             output += f"技能数值：{value}\n"
             output += f"技能冷却：{cooldown}回合\n"
+            output += f"法力消耗：{mana_cost}点\n"
             output += f"技能BUFF：{buff_name}\n"
             output += f"BUFF描述：{buff_desc}\n"
 
@@ -248,13 +249,13 @@ async def fuse_skills(uid, qz, skill_info):
             if skill_1_id is None:
                 return {"type": "markdown", "content": qz + "技能融合格式错误，请检查技能融合格式是否正确。\n示例：技能融合 欲融合技能1-欲融合技能2"}
             # 检查两个技能是否存在
-            sql = "SELECT skill_name, skill_type, `value`, is_percent, is_data_skill, is_zb, skill_id, cooldown FROM user_skill WHERE id = %s AND uid = %s LIMIT 1"
+            sql = "SELECT skill_name, skill_type, `value`, is_percent, is_data_skill, is_zb, skill_id, cooldown, mana_cost FROM user_skill WHERE id = %s AND uid = %s LIMIT 1"
             await cursor.execute(sql, (skill_1_id, uid))
             result1 = await cursor.fetchone()
             if result1 is None:
                 return {"type": "markdown", "content": qz + "技能1不存在或未激活，无法融合。\n"}
 
-            skill_name_1, skill_type_1, value_1, is_percent_1, is_data_skill_1, is_zb_1, data_skill_id_1, cooldown_1 = result1
+            skill_name_1, skill_type_1, value_1, is_percent_1, is_data_skill_1, is_zb_1, data_skill_id_1, cooldown_1, mana_cost_1 = result1
 
             if is_data_skill_1 != 1:
                 return {"type": "markdown", "content": qz + "已融合过的技能无法重复融合！\n"}
@@ -267,7 +268,7 @@ async def fuse_skills(uid, qz, skill_info):
             if result2 is None:
                 return {"type": "markdown", "content": qz + "技能2不存在或未激活，无法融合。\n"}
 
-            skill_name_2, skill_type_2, value_2, is_percent_2, is_data_skill_2, is_zb_2, data_skill_id_2, cooldown_2 = result2
+            skill_name_2, skill_type_2, value_2, is_percent_2, is_data_skill_2, is_zb_2, data_skill_id_2, cooldown_2, mana_cost_2 = result2
 
             if is_data_skill_2 != 1:
                 return {"type": "markdown", "content": qz + "已融合过的技能无法重复融合！\n"}
@@ -297,6 +298,7 @@ async def fuse_skills(uid, qz, skill_info):
             new_skill_name = "未命名"
             new_skill_type = skill_type_1
             new_skill_cooldown = max(cooldown_1 or 0, cooldown_2 or 0)
+            new_skill_mana_cost = max(int(mana_cost_1 or 0), int(mana_cost_2 or 0))
 
             sql = "SELECT COALESCE(MAX(id), 0) + 1 FROM user_skill"
             await cursor.execute(sql)
@@ -313,10 +315,10 @@ async def fuse_skills(uid, qz, skill_info):
             elif skill_type_display == 4:
                 skill_type_display = "穿透型"
 
-            sql = "INSERT INTO user_skill (id, uid, skill_name, skill_type, `value`, is_percent, skill_1, skill_2, is_data_skill, is_zb, cooldown) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            sql = "INSERT INTO user_skill (id, uid, skill_name, skill_type, `value`, is_percent, skill_1, skill_2, is_data_skill, is_zb, cooldown, mana_cost) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
             await cursor.execute(sql, (
             new_skill_id, uid, new_skill_name, new_skill_type, new_skill_value, is_percent_1, data_skill_id_1, data_skill_id_2, 0,
-            0, new_skill_cooldown))
+            0, new_skill_cooldown, new_skill_mana_cost))
             
             sql = "DELETE FROM user_skill WHERE id IN (%s, %s) AND uid = %s"
             await cursor.execute(sql, (skill_1_id, skill_2_id, uid))
@@ -330,6 +332,7 @@ async def fuse_skills(uid, qz, skill_info):
             output += f"技能类型：{skill_type_display}\n"
             output += f"技能数值：{new_skill_value}\n"
             output += f"技能冷却：{new_skill_cooldown}回合\n"
+            output += f"法力消耗：{new_skill_mana_cost}点\n"
             await cursor.execute(
                 "SELECT buff_name, buff_desc FROM data_skill WHERE id = %s LIMIT 1",
                 (data_skill_id_1,),
@@ -580,5 +583,4 @@ async def skill_bag(uid, qz, page_num=1):
             output += pagination_controls("技能背包", page_num, total_pages) + "\n"
 
             return {"type": "markdown", "content": qz + output}
-
 

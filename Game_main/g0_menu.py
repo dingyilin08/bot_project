@@ -562,6 +562,10 @@ async def show_equipment_menu(uid, qz):
     output += "> 点击后输入欲查看的装备编号，可查看该装备详细信息，如：装备详情 10001\n"
     output += "<qqbot-cmd-input text='出售装备 ' show='出售装备 装备编号' />\n\n"
     output += "> 点击后输入欲出售的装备编号，可出售该装备为灵石，如：出售装备 10001\n"
+    output += "<qqbot-cmd-input text='装备熔炼 ' show='装备熔炼 编号1-编号2-编号3' />\n\n"
+    output += "> 消耗三件同品质、未穿戴装备，随机获得同品质的一个装备部位；混用不同阶材料时按最低阶套装生成。\n"
+    output += "<qqbot-cmd-input text='定向熔炼 ' show='定向熔炼 部位 编号1-编号2-编号3' />\n\n"
+    output += "> 消耗1个定枢玉指定武器、头盔、铠甲、护腿、鞋子或饰品。定枢玉可在灵石商城购买，每周限购2个。\n"
 
     output += "***\n\n"
     output += "<qqbot-cmd-input text='主菜单' show='主菜单' />"

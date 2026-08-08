@@ -1,6 +1,11 @@
 import unittest
 
-from Game_main.g10_shop import DEFAULT_SHOP_ITEMS, STAMINA_POTION_ITEM_ID, parse_name_num
+from Game_main.g10_shop import (
+    DEFAULT_SHOP_ITEMS,
+    DIRECTIONAL_SMELTING_JADE_ITEM_ID,
+    STAMINA_POTION_ITEM_ID,
+    parse_name_num,
+)
 from Game_main.g9_yaoyuan import _parse_name_num
 from Tool.tool_command import pagination_controls
 
@@ -9,8 +14,12 @@ class ShopCatalogTests(unittest.TestCase):
     def test_default_items_have_unique_names_and_ids(self):
         self.assertEqual(len(DEFAULT_SHOP_ITEMS), len({item["name"] for item in DEFAULT_SHOP_ITEMS}))
         self.assertEqual(len(DEFAULT_SHOP_ITEMS), len({item["item_id"] for item in DEFAULT_SHOP_ITEMS}))
-        self.assertTrue(all(item["price"] > 0 and item["daily_limit"] > 0 for item in DEFAULT_SHOP_ITEMS))
+        self.assertTrue(all(item["price"] > 0 for item in DEFAULT_SHOP_ITEMS))
+        self.assertTrue(all(item["daily_limit"] > 0 or item["weekly_limit"] > 0 for item in DEFAULT_SHOP_ITEMS))
         self.assertIn(STAMINA_POTION_ITEM_ID, {item["item_id"] for item in DEFAULT_SHOP_ITEMS})
+        jade = next(item for item in DEFAULT_SHOP_ITEMS if item["item_id"] == DIRECTIONAL_SMELTING_JADE_ITEM_ID)
+        self.assertEqual(jade["weekly_limit"], 2)
+        self.assertEqual(jade["daily_limit"], 0)
 
     def test_parse_name_num_defaults_to_one_and_rejects_invalid_quantity(self):
         self.assertEqual(parse_name_num("体力药-2"), ("体力药", 2))
