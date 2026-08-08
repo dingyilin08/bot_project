@@ -39,6 +39,7 @@ from Game_main.g28_player_guide import *     # 玩家交互攻略
 from Game_main.g29_dungeon_sweep import *    # 已通关副本扫荡
 from Game_main.g30_market import *            # 玩家坊市
 from Game_main.g31_invitation import *        # 玩家邀请码
+from Game_main.g32_abyss import *             # 轮海深渊
 from Game_main.g0_menu import *          # 菜单系统
 from Tool.qq_keyboard import attach_keyboard
 from Game_domain.gm_service import GMError, authenticate_admin
@@ -49,11 +50,13 @@ youhouzhui = '注册游戏|选择角色|角色介绍|玩法介绍|角色属性|�
 wuhouzhui += '|日常任务|签到|签到记录|签到奖励|攻略|开荒攻略|角色攻略|战斗攻略|资源攻略'
 wuhouzhui += '|因果印记|赛季装扮|坊市菜单|坊市帮助'
 wuhouzhui += '|邀请菜单|我的邀请码|邀请列表|领取邀请奖励'
+wuhouzhui += '|深渊|深渊菜单|深渊怪物|深渊结算|离开深渊'
 youhouzhui += '|日常领取'
 youhouzhui += '|扫荡副本'
 youhouzhui += '|技能命名'
 youhouzhui += '|赛季佩戴'
 youhouzhui += '|填写邀请码'
+youhouzhui += '|深渊预览|挑战深渊怪物|挑战深渊|深渊定级|深渊排行'
 youhouzhui += '|坊市上架|坊市购买|坊市收购|坊市出售|坊市底价|坊市列表|坊市交易记录|我的摊位|撤摊|坊市'
 youhouzhui += '|GM世界消息添加|GM世界消息修改|GM世界消息启用|GM世界消息停用|GM世界消息删除'
 youhouzhui += '|GM全服发放灵石|GM全服发放仙玉'
@@ -335,6 +338,28 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         return await battle_action(uid, con_arr1)
     elif con_arr0 == '放弃副本':
         return await abandon_dungeon_cmd(uid)
+
+    # ==================== 轮海深渊 ==================== #
+    elif con_arr0 == '深渊' or con_arr0 == '深渊菜单':
+        return await abyss_home(uid)
+    elif con_arr0 == '深渊预览':
+        return await abyss_preview(uid, con_arr1 or None)
+    elif con_arr0 == '挑战深渊':
+        return await abyss_start(uid, con_arr1 or None)
+    elif con_arr0 == '深渊怪物':
+        return await abyss_monsters(uid)
+    elif con_arr0 == '挑战深渊怪物':
+        if con_arr1 == "":
+            return "指令错误，正确指令：挑战深渊怪物 编号"
+        return await abyss_fight(uid, con_arr1)
+    elif con_arr0 == '深渊结算':
+        return await abyss_settle(uid)
+    elif con_arr0 == '离开深渊':
+        return await abyss_leave(uid)
+    elif con_arr0 == '深渊定级':
+        return await abyss_placement(uid, con_arr1 or None)
+    elif con_arr0 == '深渊排行':
+        return await abyss_rank(uid, con_arr1 or 1)
 
     # ==================== P1 灵兽系统命令 ==================== #
     elif con_arr0 == '灵兽':

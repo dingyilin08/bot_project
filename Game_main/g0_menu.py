@@ -40,8 +40,8 @@ MENU_CONFIG = {
     "dungeon": {
         "name": "副本挑战",
         "icon": "⚔️",
-        "description": "挑战副本、战斗记录、查看怪物",
-        "commands": ["副本列表", "挑战副本", "查看怪物", "战斗状态", "战斗记录"]
+        "description": "挑战副本、扫荡副本与轮海深渊",
+        "commands": ["副本列表", "挑战副本", "扫荡副本", "深渊", "战斗状态", "战斗记录"]
     },
     "skill": {
         "name": "技能系统",
@@ -93,7 +93,7 @@ MAIN_MENU_SECTIONS = (
     ),
     (
         "👥 社交与活动",
-        "队伍协作、宗门师徒、世界 Boss、赛季与排行榜。",
+        "队伍协作、宗门师徒、轮海深渊、世界 Boss、赛季与排行榜。",
         (("队伍菜单", "队伍菜单"), ("宗门菜单", "宗门菜单"), ("活动菜单", "活动菜单"),
          ("邀请菜单", "道友邀请"), ("战力菜单", "战力菜单")),
     ),
@@ -372,8 +372,9 @@ async def show_resource_menu(uid, qz):
 async def show_activity_menu(uid, qz):
     """周期性挑战与长期目标的聚合入口。"""
     output = "##### 🌌 活动菜单\n\n"
-    output += "每日签到积累七日与三十日奖励；世界 Boss 提供贡献与专属感悟。赛季天象会影响新开启的 PVE，装扮只改变展示。\n\n"
+    output += "每日签到积累七日与三十日奖励；轮海深渊提供无尽单人挑战；世界 Boss 提供贡献与专属感悟。赛季天象会影响新开启的 PVE。\n\n"
     output += "<qqbot-cmd-input text='签到' show='每日签到' /> | <qqbot-cmd-input text='签到记录' show='签到记录' />\n\n"
+    output += "<qqbot-cmd-input text='深渊' show='轮海深渊' /> | <qqbot-cmd-input text='深渊排行' show='深渊排行' />\n\n"
     output += "<qqbot-cmd-input text='邀请菜单' show='道友邀请' />\n\n"
     output += "<qqbot-cmd-input text='世界BOSS' show='世界Boss' /> | <qqbot-cmd-input text='赛季' show='赛季主页' />\n\n"
     output += "<qqbot-cmd-input text='世界排行' show='世界排行' /> | <qqbot-cmd-input text='赛季任务' show='赛季任务' /> | <qqbot-cmd-input text='赛季装扮' show='赛季装扮' />\n\n"
@@ -602,6 +603,8 @@ async def show_dungeon_menu(uid, qz):
     output += "> 点击后输入副本编号，可进入副本进行挑战。如：挑战副本 1\n\n"
     output += "<qqbot-cmd-input text='扫荡副本' show='扫荡已通关副本' />\n"
     output += "> 查看永久解锁的已通关副本，消耗扫荡副本券与1次历练次数即可一键结算。\n\n"
+    output += "<qqbot-cmd-input text='深渊' show='轮海深渊' />\n"
+    output += "> 六波连战的无尽挑战，10/20/30杀分别获得1/2/3星。\n\n"
     output += "<qqbot-cmd-input text='怪物列表' show='怪物列表' />\n"
     output += "> 点击后发送可查看当前副本中可挑战的怪物。\n\n"
     output += "<qqbot-cmd-input text='挑战怪物 ' show='挑战怪物 怪物编号' />\n"
@@ -762,7 +765,8 @@ async def show_help(uid):
 
 async def show_update_log(uid):
     """显示当前线上版本的玩家可见更新内容。"""
-    output = "##### 📜 更新日志｜v1.25\n\n"
+    output = "##### 📜 更新日志｜v1.26\n\n"
+    output += "**🌊 轮海深渊开放**\n> 六波连战、每层30敌；10/20/30杀对应1/2/3星。支持50级定级赛、跨界压制、升星补差额与全服深渊排行。发送“深渊”即可进入。\n\n"
     output += "**✉️ 道友邀请开放**\n> 发送“我的邀请码”分享八位邀请码；新道友注册时填写后，双方可领取注册礼，完成全部新手札记后还能领取圆满礼。\n\n"
     output += "**📚 玩家攻略阁开放**\n> 发送“攻略”可阅读开荒、角色、战斗与资源四篇攻略；正文关键操作可直接点击发送。\n\n"
     output += "**☀️ 三十日签到开放**\n> 每个自然日可签到一次，漏签不清零；第7、14、21、28日追加七日礼，第30日领取圆满大奖并开启新一期。\n\n"

@@ -59,7 +59,7 @@ class InvitationRuleTests(unittest.IsolatedAsyncioTestCase):
         for command in ("我的邀请码", "填写邀请码 ", "邀请列表", "领取邀请奖励"):
             self.assertIn(command, invitation)
         update_log = (await show_update_log(1))["content"]
-        self.assertIn("v1.25", update_log)
+        self.assertIn("v1.26", update_log)
         self.assertIn("道友邀请开放", update_log)
 
     def test_schema_enforces_unique_codes_and_reward_once(self):

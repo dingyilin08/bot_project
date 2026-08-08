@@ -670,6 +670,12 @@ async def cz_role_attr(uid, qz):
 async def cz_role(uid, qz, role_id):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
+            from Game_domain.abyss_service import is_role_locked_by_abyss
+            if await is_role_locked_by_abyss(uid, cursor):
+                return {
+                    "type": "markdown",
+                    "content": "##### 🔒 角色已冻结\n\n深渊正式开战后不可切换角色，请先完成或结算当前挑战。\n\n<qqbot-cmd-input text='深渊怪物' show='返回深渊' /> | <qqbot-cmd-input text='战斗状态' show='战斗状态' />",
+                }
             # 锁定该玩家当前角色和目标角色，避免并发切换产生多个出战角色。
             sql = "SELECT id, `name` FROM user_role WHERE uid = %s and is_chuzhan = 1 FOR UPDATE"
             await cursor.execute(sql, (uid, ))
@@ -707,6 +713,12 @@ async def cz_role(uid, qz, role_id):
 async def sh_role(uid, qz):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
+            from Game_domain.abyss_service import is_role_locked_by_abyss
+            if await is_role_locked_by_abyss(uid, cursor):
+                return {
+                    "type": "markdown",
+                    "content": "##### 🔒 角色已冻结\n\n深渊正式开战后不可收回角色，请先完成或结算当前挑战。\n\n<qqbot-cmd-input text='深渊怪物' show='返回深渊' /> | <qqbot-cmd-input text='战斗状态' show='战斗状态' />",
+                }
             sql = "SELECT id, `name` FROM user_role WHERE uid = %s and is_chuzhan = 1 FOR UPDATE"
             await cursor.execute(sql, (uid, ))
             result = await cursor.fetchone()

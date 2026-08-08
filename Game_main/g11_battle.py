@@ -102,7 +102,12 @@ def render_battle_panel(session, notice="", events=None):
 
 
 async def _settle_finished_battle(uid, session):
-    """复用副本已有结算，奖励仍由幂等账本保证只发放一次。"""
+    """按战斗类型交给对应玩法结算，避免不同PVE串线。"""
+    if session.battle_type == "ABYSS":
+        from Game_main.g32_abyss import settle_abyss_battle
+        return await settle_abyss_battle(uid, session)
+    if session.battle_type != "SOLO_DUNGEON":
+        return {"type": "markdown", "content": "战斗已结束，但暂未找到对应的玩法结算器。"}
     monster_index = session.metadata.get("monster_index")
     if monster_index is None:
         return {"type": "markdown", "content": "战斗已结束，但缺少副本结算信息。"}
@@ -132,6 +137,11 @@ async def battle_status(uid, qz):
     service = get_battle_service()
     session = await service.get_active_battle(uid)
     if not session:
+        from Game_domain.abyss_service import recover_finished_battle
+        from Game_main.g32_abyss import render_abyss_outcome
+        recovered = await recover_finished_battle(uid)
+        if recovered:
+            return await render_abyss_outcome(uid, recovered)
         return {"type": "markdown", "content": "当前没有进行中的回合战斗。\n<qqbot-cmd-input text='查看怪物' show='查看怪物' />"}
     try:
         return await _resolve_expired_or_render(uid, session, service)
@@ -158,6 +168,11 @@ async def battle_action(uid, qz, action_text):
     service = get_battle_service()
     session = await service.get_active_battle(uid)
     if not session:
+        from Game_domain.abyss_service import recover_finished_battle
+        from Game_main.g32_abyss import render_abyss_outcome
+        recovered = await recover_finished_battle(uid)
+        if recovered:
+            return await render_abyss_outcome(uid, recovered)
         return {"type": "markdown", "content": "当前没有进行中的回合战斗。\n<qqbot-cmd-input text='查看怪物' show='查看怪物' />"}
     try:
         if session.is_expired():
