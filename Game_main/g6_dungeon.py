@@ -37,6 +37,11 @@ from Game_domain.dungeon_daily_limit import (
     ensure_daily_attempt_schema,
     get_daily_attempt_status,
 )
+from Game_domain.dungeon_reward_rules import (
+    calculate_encounter_currency,
+    calculate_full_clear_currency,
+    streak_bonus_bp,
+)
 
 
 def _dungeon_reward_battle_id(uid, dungeon_id, progress, monster_index, settlement_battle_id=None):
@@ -115,18 +120,6 @@ WAVE_DIFFICULTY_MULTIPLIER = {
 
 # Boss掉落概率（百分比）
 BOSS_DROP_RATE = 30
-
-# 连杀奖励阈值
-KILL_STREAK_REWARDS = {
-    3: 1.1,
-    5: 1.2,
-    10: 1.35,
-    15: 1.5
-}
-
-# 经验灵石倍率
-EXP_MULTIPLIER = 15  # 经验获得倍率
-LINGSHI_MULTIPLIER = 1  # 灵石按副本配置正常结算，防止50倍倍率造成经济膨胀
 
 # 不同世界挑战难度加成（境界克制）
 DIFFERENT_WORLD_MULTIPLIER = 1.20  # 不同世界挑战时怪物属性+20%
@@ -871,12 +864,13 @@ def format_dungeon_info_markdown(dungeon, role_info, remaining_count, is_differe
         lines.append(">破境丹(概率)：_无_")
         lines.append(">装备套装：_无_")
 
-    actual_exp = dungeon['reward_exp'] * EXP_MULTIPLIER
-    per_monster_lingshi = dungeon['reward_lingshi'] // 15 * LINGSHI_MULTIPLIER
-    per_boss_lingshi = per_monster_lingshi * 2
-    estimated_total = per_monster_lingshi * 12 + per_boss_lingshi * 3
-    lines.append(f">奖励经验：{actual_exp}")
-    lines.append(f">奖励灵石：{estimated_total}")
+    actual_exp, estimated_total = calculate_full_clear_currency(
+        dungeon['reward_exp'],
+        dungeon['reward_lingshi'],
+        dungeon['min_level'],
+    )
+    lines.append(f">完整通关经验：{actual_exp}")
+    lines.append(f">完整通关灵石：{estimated_total}")
 
     # 跨界挑战警告
     if is_different_world:
@@ -1726,20 +1720,14 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
     summary = combat_manager.get_combat_summary()
 
     # 构建奖励信息
-    base_exp = dungeon['reward_exp'] // 15 * EXP_MULTIPLIER
-    base_lingshi = dungeon['reward_lingshi'] // 15 * LINGSHI_MULTIPLIER
-    monster_bonus = 2.0 if target_monster['type'] == 'boss' else 1.0
-    total_exp = int(base_exp * monster_bonus)
-    total_lingshi = int(base_lingshi * monster_bonus)
-
     kill_streak = progress['kill_streak'] + 1
-    streak_bonus = 1.0
-    for threshold, bonus in KILL_STREAK_REWARDS.items():
-        if kill_streak >= threshold:
-            streak_bonus = max(streak_bonus, bonus)
-
-    total_exp = int(total_exp * streak_bonus)
-    total_lingshi = int(total_lingshi * streak_bonus)
+    total_exp, total_lingshi = calculate_encounter_currency(
+        dungeon['reward_exp'],
+        dungeon['reward_lingshi'],
+        dungeon['min_level'],
+        kill_streak,
+    )
+    streak_bonus = streak_bonus_bp(kill_streak) / 10000
 
     rewards = {
         'exp': total_exp,

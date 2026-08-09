@@ -11,7 +11,6 @@ from Game_main.g29_dungeon_sweep import (
     calculate_full_clear_currency,
     parse_dungeon_id,
 )
-from Game_main.g6_dungeon import LINGSHI_MULTIPLIER
 from output_main import jiance
 
 
@@ -36,20 +35,12 @@ class DungeonSweepTests(unittest.TestCase):
     def test_full_clear_currency_matches_fifteen_manual_victories(self):
         exp, lingshi = calculate_full_clear_currency(150, 150)
 
-        def expected(base):
-            total = 0
-            for kill in range(1, 16):
-                boss = 2 if kill % 5 == 0 else 1
-                streak = 1.5 if kill >= 15 else 1.35 if kill >= 10 else 1.2 if kill >= 5 else 1.1 if kill >= 3 else 1
-                total += int(base * boss * streak)
-            return total
-
-        self.assertEqual(exp, expected(150))
-        self.assertEqual(LINGSHI_MULTIPLIER, 1)
-        self.assertEqual(lingshi, expected(10))
+        self.assertEqual(exp, 3375)
+        self.assertEqual(lingshi, 1000)
 
     def test_reward_plan_is_deterministic_and_includes_completion_drops(self):
         dungeon = {
+            "min_level": 90,
             "reward_exp": 150,
             "reward_lingshi": 150,
             "reward_benyuan": 301,
@@ -65,6 +56,7 @@ class DungeonSweepTests(unittest.TestCase):
         first = build_sweep_reward_plan(dungeon, equipments, "same-request")
         second = build_sweep_reward_plan(dungeon, equipments, "same-request")
         self.assertEqual(first, second)
+        self.assertEqual(first["lingshi"], 2_400_000)
         self.assertEqual(first["item_totals"][301], 3)
         self.assertEqual(first["item_totals"][302], 3)
         self.assertEqual(first["item_totals"][303], 3)

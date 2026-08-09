@@ -614,7 +614,7 @@ async def show_dungeon_menu(uid, qz):
     output += "<qqbot-cmd-input text='挑战副本 ' show='挑战副本 副本编号' />\n"
     output += "> 点击后输入副本编号，可进入副本进行挑战。如：挑战副本 1\n\n"
     output += "<qqbot-cmd-input text='扫荡副本' show='扫荡已通关副本' />\n"
-    output += "> 查看永久解锁的已通关副本，消耗扫荡副本券与1次历练次数即可一键结算。挑战与扫荡共用每日20次基础额度。\n\n"
+    output += "> 查看永久解锁的已通关副本，消耗扫荡副本券与1次历练次数即可一键结算。挑战与扫荡共用每日20次基础额度；灵石产出随副本档位和同档装备强化成本成长。\n\n"
     output += "<qqbot-cmd-input text='深渊' show='轮海深渊' />\n"
     output += "> 六波连战的无尽挑战，10/20/30杀分别获得1/2/3星。\n\n"
     output += "<qqbot-cmd-input text='怪物列表' show='怪物列表' />\n"

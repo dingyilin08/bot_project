@@ -15,13 +15,9 @@ from Game_domain.dungeon_daily_limit import (
     ensure_daily_attempt_schema,
     get_daily_attempt_status,
 )
+from Game_domain.dungeon_reward_rules import calculate_full_clear_currency
 from Game_domain.reward_service import MySQLRewardService
-from Game_main.g6_dungeon import (
-    EXP_MULTIPLIER,
-    KILL_STREAK_REWARDS,
-    LINGSHI_MULTIPLIER,
-    ensure_dungeon_clear_schema,
-)
+from Game_main.g6_dungeon import ensure_dungeon_clear_schema
 from Game_main.g7_equip import QUALITY_DROP_RATE
 from Game_main.g10_shop import (
     DUNGEON_SWEEP_TICKET_DAILY_LIMIT,
@@ -52,28 +48,13 @@ def _split_item_ids(value):
     ))
 
 
-def calculate_full_clear_currency(reward_exp, reward_lingshi):
-    """按实际副本15场战斗（12小怪、3首领、连胜加成）汇总经验与灵石。"""
-    base_exp = int(reward_exp or 0) // 15 * EXP_MULTIPLIER
-    base_lingshi = int(reward_lingshi or 0) // 15 * LINGSHI_MULTIPLIER
-    total_exp = 0
-    total_lingshi = 0
-    for kill_streak in range(1, 16):
-        monster_bonus = 2.0 if kill_streak % 5 == 0 else 1.0
-        streak_bonus = 1.0
-        for threshold, bonus in KILL_STREAK_REWARDS.items():
-            if kill_streak >= threshold:
-                streak_bonus = max(streak_bonus, bonus)
-        total_exp += int(int(base_exp * monster_bonus) * streak_bonus)
-        total_lingshi += int(int(base_lingshi * monster_bonus) * streak_bonus)
-    return total_exp, total_lingshi
-
-
 def build_sweep_reward_plan(dungeon, equip_templates=(), seed=None):
     """生成与完整普通通关一致的随机奖励计划，不含实战专属与破解额外掉落。"""
     rng = random.Random(str(seed or uuid4()))
     total_exp, total_lingshi = calculate_full_clear_currency(
-        dungeon.get("reward_exp"), dungeon.get("reward_lingshi")
+        dungeon.get("reward_exp"),
+        dungeon.get("reward_lingshi"),
+        dungeon.get("min_level", 1),
     )
     item_totals = {}
 
