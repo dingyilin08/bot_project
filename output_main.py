@@ -41,6 +41,7 @@ from Game_main.g30_market import *            # 玩家坊市
 from Game_main.g31_invitation import *        # 玩家邀请码
 from Game_main.g32_abyss import *             # 轮海深渊
 from Game_main.g33_spirit_beast_v2 import *   # 诸天灵契 V2
+from Game_main.g34_xianyu_redeem import *      # 一次性仙玉兑换码
 from Game_main.g0_menu import *          # 菜单系统
 from Tool.qq_keyboard import attach_keyboard
 from Game_domain.gm_service import GMError, authenticate_admin
@@ -63,6 +64,7 @@ youhouzhui += '|深渊预览|挑战深渊怪物|挑战深渊|深渊定级|深渊
 youhouzhui += '|坊市上架|坊市购买|坊市收购|坊市出售|坊市底价|坊市列表|坊市交易记录|我的摊位|撤摊|坊市'
 youhouzhui += '|GM世界消息添加|GM世界消息修改|GM世界消息启用|GM世界消息停用|GM世界消息删除'
 youhouzhui += '|GM全服发放灵石|GM全服发放仙玉'
+youhouzhui += '|兑换|GM生成兑换码'
 youhouzhui += '|专属图鉴'
 youhouzhui += '|灵兽初契|灵兽详情|灵兽图鉴|灵兽寻踪|灵兽线索|灵兽重复|灵兽培养|灵兽喂养|灵兽突破|灵兽洗髓|灵兽洗髓确认|灵兽洗髓取消|灵兽血脉|灵兽血脉激活|灵兽技能|灵兽技能参悟|灵兽技能装配|灵兽技能卸下|灵兽照料|灵兽一键照料|灵兽上阵|灵兽下阵|灵兽预设|灵兽派遣开始|灵兽派遣领取|灵兽派遣取消|万灵秘境挑战|灵兽传记|灵兽传记选择|灵兽归真|灵兽归真确认|灵兽归真取消|灵兽批量归真确认|灵兽批量归真取消|灵兽改名|灵兽锁定|灵兽切磋'
 
@@ -81,6 +83,7 @@ market_value_commands = (
     '坊市出售', '坊市底价', '坊市列表', '我的摊位', '撤摊', '坊市',
 )
 registration_value_commands = ('注册游戏',)
+redeem_value_commands = ('GM生成兑换码', '兑换')
 spirit_beast_value_commands = (
     '灵兽批量归真确认', '灵兽批量归真取消',
     '灵兽派遣领取', '灵兽派遣取消', '灵兽派遣开始',
@@ -106,6 +109,11 @@ async def jiance(message):
     for command in registration_value_commands:
         if raw_message.startswith(command):
             return command, raw_message[len(command):].strip()
+    # 兑换码支持“兑换 CODE”与“兑换+CODE”，GM生成参数需要保留档位与数量分隔符。
+    for command in redeem_value_commands:
+        if upper_message.startswith(command):
+            suffix = raw_message[len(command):].strip()
+            return command, suffix.lstrip("+").strip()
     # 灵兽可绑定到指定角色，第二个编号之间的空格不能被通用清洗移除。
     for command in spirit_beast_value_commands:
         if raw_message.startswith(command):
@@ -299,6 +307,8 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         return await buy_shop_item(uid, con_arr1)
     elif con_arr0 == '使用体力药':
         return await use_stamina_potion(uid, con_arr1 or 1)
+    elif con_arr0 == '兑换':
+        return await redeem_xianyu(uid, con_arr1)
     elif con_arr0 == '坊市':
         return await market_home(uid, con_arr1)
     elif con_arr0 == '坊市帮助':
@@ -734,6 +744,8 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         return await gm_grant_all_lingshi(uid, con_arr1, request_id=request_id)
     elif con_arr0 == 'GM全服发放仙玉':
         return await gm_grant_all_xianyu(uid, con_arr1, request_id=request_id)
+    elif con_arr0 == 'GM生成兑换码':
+        return await gm_create_xianyu_redeem_codes(uid, con_arr1)
     elif con_arr0 == 'GM世界消息':
         return await gm_world_message_menu(uid)
     elif con_arr0 == 'GM世界消息添加':

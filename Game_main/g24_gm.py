@@ -45,17 +45,20 @@ async def gm_menu(uid, qz):
     content += f"管理员 UID：**{uid}**｜当前：**{mode}**\n\n"
     content += f"{_button('GM发放物品 ', '发放物品*')} | {_button('GM发放仙玉 ', '发放仙玉*')}\n"
     content += f"{_button('GM全服发放灵石 ', '全服发灵石*')} | {_button('GM全服发放仙玉 ', '全服发仙玉*')}\n\n"
+    content += f"{_button('GM生成兑换码 ', '生成仙玉兑换码*')}\n\n"
     content += f"{_button('关闭图片模式', '关闭图片')} | {_button('开启图片模式', '开启图片')}\n\n"
     content += f"{_button('GM世界消息', '世界消息库')}\n\n"
     content += "> 物品格式：GM发放物品 目标UID-物品名称或编号-数量\n"
     content += "> 仙玉格式：GM发放仙玉 目标UID-数量\n"
     content += "> 全服格式：GM全服发放灵石 数量，或 GM全服发放仙玉 数量\n\n"
+    content += "> 兑换码格式：GM生成兑换码 仙玉档位 数量\n\n"
     content += _button("主菜单", "主菜单")
     return _result(content, (
         {"command": "GM发放物品 ", "label": "发放物品*", "complete": False, "style": 1},
         {"command": "GM发放仙玉 ", "label": "发放仙玉*", "complete": False, "style": 1},
         {"command": "GM全服发放灵石 ", "label": "全服发灵石*", "complete": False, "style": 3},
         {"command": "GM全服发放仙玉 ", "label": "全服发仙玉*", "complete": False, "style": 3},
+        {"command": "GM生成兑换码 ", "label": "生成兑换码*", "complete": False, "style": 1},
         ("关闭图片模式", "关闭图片"), ("开启图片模式", "开启图片"),
         ("GM世界消息", "世界消息库"),
         ("主菜单", "主菜单"),

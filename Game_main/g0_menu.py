@@ -388,6 +388,8 @@ async def show_activity_menu(uid, qz):
     output += "<qqbot-cmd-input text='签到' show='每日签到' /> | <qqbot-cmd-input text='签到记录' show='签到记录' />\n\n"
     output += "<qqbot-cmd-input text='深渊' show='轮海深渊' /> | <qqbot-cmd-input text='深渊排行' show='深渊排行' />\n\n"
     output += "<qqbot-cmd-input text='邀请菜单' show='道友邀请' />\n\n"
+    output += "<qqbot-cmd-input text='兑换 ' show='仙玉兑换码*' />\n"
+    output += "> 输入一次性兑换码，仙玉将直接发放到账户余额。\n\n"
     output += "<qqbot-cmd-input text='世界BOSS' show='世界Boss' /> | <qqbot-cmd-input text='赛季' show='赛季主页' />\n\n"
     output += "<qqbot-cmd-input text='世界排行' show='世界排行' /> | <qqbot-cmd-input text='赛季任务' show='赛季任务' /> | <qqbot-cmd-input text='赛季装扮' show='赛季装扮' />\n\n"
     output += "<qqbot-cmd-input text='赛季奖励' show='领取赛季奖励' /> | <qqbot-cmd-input text='因果印记' show='查看因果印记' />\n\n"
