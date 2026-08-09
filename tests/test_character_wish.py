@@ -4,7 +4,9 @@ import unittest
 from pathlib import Path
 
 from Game_domain.character_wish_service import (
-    WISH_EXP_DIVISOR, _ledger_source_id, choose_by_rarity, choose_main_reward,
+    CHARACTER_REQUEST_ID_MAX_LENGTH, WISH_EXP_DIVISOR,
+    _fragment_ledger_request_id, _ledger_source_id, choose_by_rarity,
+    choose_main_reward,
 )
 from Game_main.g16_onboarding import ONBOARDING_ALL_XIANYU, ONBOARDING_XIANYU_PER_TASK, TASKS
 from Game_main.g23_character_wish import render_home
@@ -33,6 +35,20 @@ class CharacterWishRuleTests(unittest.TestCase):
         source_id = _ledger_source_id("x" * 200)
         self.assertLessEqual(len(source_id), 64)
         self.assertEqual(source_id, _ledger_source_id("x" * 200))
+
+    def test_compose_ledger_request_id_fits_database_column(self):
+        request_id = "x" * CHARACTER_REQUEST_ID_MAX_LENGTH
+        ledger_id = _fragment_ledger_request_id(request_id)
+        self.assertLessEqual(len(ledger_id), CHARACTER_REQUEST_ID_MAX_LENGTH)
+        self.assertTrue(ledger_id.startswith("compose:"))
+        self.assertEqual(ledger_id, _fragment_ledger_request_id(request_id))
+        self.assertNotEqual(ledger_id, _fragment_ledger_request_id("y" * 80))
+
+    def test_short_compose_request_id_remains_readable(self):
+        self.assertEqual(
+            "compose:message-123",
+            _fragment_ledger_request_id("message-123"),
+        )
 
     RATES = {"herb": 3000, "pill": 3000, "special4": 2500,
              "special5": 1000, "role_fragment": 500}

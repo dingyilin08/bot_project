@@ -22,6 +22,7 @@ FULL_SPECIAL_FRAGMENT_AMOUNT = 10
 FULL_RESOURCE_PILL_AMOUNT = 2
 FULL_RESOURCE_ORIGIN_AMOUNT = 20
 WISH_EXP_DIVISOR = 15
+CHARACTER_REQUEST_ID_MAX_LENGTH = 80
 
 
 class CharacterWishError(Exception):
@@ -60,6 +61,15 @@ def _ledger_source_id(request_id: str) -> str:
     if len(value) <= 64:
         return value
     return "wish:" + sha256(value.encode("utf-8")).hexdigest()[:59]
+
+
+def _fragment_ledger_request_id(request_id: str, source: str = "compose") -> str:
+    """生成适配角色碎片流水 VARCHAR(80) 的稳定幂等键。"""
+    prefix = f"{str(source).strip().lower()}:"
+    value = prefix + str(request_id)
+    if len(value) <= CHARACTER_REQUEST_ID_MAX_LENGTH:
+        return value
+    return prefix + sha256(value.encode("utf-8")).hexdigest()
 
 
 def choose_main_reward(rng, rates: dict, *, full_roster: bool = False) -> str:
@@ -638,7 +648,8 @@ async def compose(uid: int, role_name: str, request_id: str = None) -> dict:
                     """INSERT INTO character_fragment_ledger
                        (request_id,uid,role_template_id,change_amount,balance_before,balance_after,source_type)
                        VALUES (%s,%s,%s,%s,%s,%s,'COMPOSE')""",
-                    (f"compose:{request_id}", uid, template[0], -cost, amount, amount-cost),
+                    (_fragment_ledger_request_id(request_id), uid, template[0],
+                     -cost, amount, amount-cost),
                 )
                 try:
                     granted = await grant_role(cursor, uid=uid, role_template_id=int(template[0]))
