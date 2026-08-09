@@ -562,7 +562,7 @@ def format_equip_bag_markdown(equipments, page, total_pages, role_info):
 
     lines.append("***")
 
-    lines.append("<qqbot-cmd-input text='装备熔炼 ' show='装备熔炼 编号1-编号2-编号3' /> | <qqbot-cmd-input text='定向熔炼 ' show='定向熔炼 部位 编号1-编号2-编号3' />")
+    lines.append("<qqbot-cmd-input text='装备熔炼 ' show='装备熔炼 编号1-编号2-编号3' /> | <qqbot-cmd-input text='定向熔炉' show='打开定向熔炉' />")
     lines.append(f"<qqbot-cmd-input text='当前装备' show='当前装备' /> | <qqbot-cmd-input text='当前角色' show='当前角色' /> | <qqbot-cmd-input text='角色背包' show='角色背包' />")
 
     return "\n".join(lines)
@@ -1656,6 +1656,54 @@ def parse_smelt_equip_ids(text):
     return equip_ids
 
 
+def parse_directional_equip_id(text):
+    """解析“定向放置N-装备编号”的编号后缀，也兼容空格输入。"""
+    value = str(text or "").strip()
+    if value.startswith("-"):
+        value = value[1:].strip()
+    if not value.isdecimal():
+        return None
+    equip_id = int(value)
+    return equip_id if equip_id > 0 else None
+
+
+def _directional_furnace_markdown(slots, equipment=None, notice=""):
+    equipment = equipment or {}
+    lines = ["##### 🔥 定向熔炉", ""]
+    if notice:
+        lines.extend((f"> {notice}", ""))
+    lines.append("**熔炼材料**")
+    for slot_no in range(1, 4):
+        equip_id = slots[slot_no - 1] if slots else None
+        equip = equipment.get(equip_id)
+        if equip_id and equip:
+            lines.append(
+                f"> 槽位{slot_no}：**[{equip_id}] {equip['name']}** "
+                f"{QUALITY_ICON.get(equip['quality'], '○')}{equip['quality']}"
+            )
+        elif equip_id:
+            lines.append(f"> 槽位{slot_no}：[{equip_id}] 装备状态已变化，请重新放置")
+        else:
+            lines.append(
+                f"> 槽位{slot_no}：未放置　"
+                f"<qqbot-cmd-input text='定向放置{slot_no}-' show='定向放置{slot_no}-装备编号' />"
+            )
+
+    lines.extend(("", "> 放置指令：定向放置1-装备编号（槽位2、3同理）"))
+    if slots and all(slots):
+        lines.extend(("", "**选择产物部位**"))
+        part_buttons = [
+            f"<qqbot-cmd-input text='部位定向 {part_name}' show='{part_name}' />"
+            for part_name in PART_EN
+        ]
+        lines.append(" | ".join(part_buttons[:3]))
+        lines.append(" | ".join(part_buttons[3:]))
+    else:
+        lines.append("> 三个槽位全部放置后，才可发送“部位定向 部位名称”。")
+    lines.extend(("***", "<qqbot-cmd-input text='装备背包' show='查看装备编号' /> | <qqbot-cmd-input text='商城' show='购买定枢玉' />"))
+    return {"type": "markdown", "content": "\n".join(lines)}
+
+
 def _smelt_error(qz, message):
     return {
         "type": "markdown",
@@ -1664,25 +1712,45 @@ def _smelt_error(qz, message):
             "",
             f"> {message}",
             "> 普通熔炼：装备熔炼 装备1编号-装备2编号-装备3编号",
-            "> 定向熔炼：定向熔炼 部位 装备1编号-装备2编号-装备3编号",
+            "> 定向熔炼：定向熔炉 → 定向放置1/2/3-装备编号 → 部位定向 部位名称",
             "***",
             "<qqbot-cmd-input text='装备背包' show='装备背包' /> | <qqbot-cmd-input text='商城' show='购买定枢玉' />",
         )),
     }
 
 
-async def _smelt_equipment(uid, qz, equip_text, target_part=None, is_directional=False):
+async def _smelt_equipment(
+    uid, qz, equip_text=None, target_part=None, is_directional=False,
+    use_directional_furnace=False,
+):
     """消耗三件同品质未穿戴装备，按最低阶材料的套装生成一件同品质装备。"""
-    equip_ids = parse_smelt_equip_ids(equip_text)
-    if not equip_ids:
+    equip_ids = None if use_directional_furnace else parse_smelt_equip_ids(equip_text)
+    if not use_directional_furnace and not equip_ids:
         return _smelt_error(qz, "指令格式错误，需填写三个不同的装备编号。")
     if target_part is not None and target_part not in PART_CN:
         return _smelt_error(qz, "定向部位仅支持：武器、头盔、铠甲、护腿、鞋子、饰品。")
 
-    placeholders = ", ".join(["%s"] * len(equip_ids))
     async with connect_mysql() as conn:
         try:
             async with conn.cursor() as cursor:
+                if use_directional_furnace:
+                    await cursor.execute(
+                        """
+                        SELECT equip_id_1, equip_id_2, equip_id_3
+                        FROM user_directional_smelt WHERE uid = %s FOR UPDATE
+                        """,
+                        (uid,),
+                    )
+                    furnace = await cursor.fetchone()
+                    if not furnace or not all(furnace):
+                        await conn.rollback()
+                        return _smelt_error(qz, "定向熔炉尚未放满三件装备。")
+                    equip_ids = [int(equip_id) for equip_id in furnace]
+                    if len(set(equip_ids)) != 3:
+                        await conn.rollback()
+                        return _smelt_error(qz, "三个熔炉槽位不能放置同一件装备。")
+
+                placeholders = ", ".join(["%s"] * len(equip_ids))
                 await cursor.execute(
                     f"""
                     SELECT ue.id, ue.equip_id, ue.quality, ue.is_equipped, de.set_id, de.min_level
@@ -1758,6 +1826,11 @@ async def _smelt_equipment(uid, qz, equip_text, target_part=None, is_directional
                 if cursor.rowcount != 3:
                     await conn.rollback()
                     return _smelt_error(qz, "材料状态已变化，请重新打开装备背包后再试。")
+                if use_directional_furnace:
+                    await cursor.execute(
+                        "DELETE FROM user_directional_smelt WHERE uid = %s",
+                        (uid,),
+                    )
                 await conn.commit()
         except Exception:
             await conn.rollback()
@@ -1789,13 +1862,137 @@ async def smelt_equip(uid, qz, equip_text):
 
 @reg_xz_func
 async def directional_smelt_equip(uid, qz, param):
-    """定向熔炼：消耗定枢玉指定产物部位。"""
-    text = str(param or "").strip()
+    """旧指令入口：引导玩家改用不会被空格清洗破坏的分步流程。"""
+    if str(param or "").strip():
+        return _smelt_error(qz, "定向熔炼已改为分步操作，请先发送“定向熔炉”。")
+    return await open_directional_smelt_furnace.__wrapped__(uid, qz)
+
+
+@reg_xz_func
+async def open_directional_smelt_furnace(uid, qz):
+    """打开或查看玩家的定向熔炉；重复打开不会清空已放置材料。"""
+    async with connect_mysql() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                """
+                INSERT INTO user_directional_smelt (uid) VALUES (%s)
+                ON DUPLICATE KEY UPDATE updated_at = updated_at
+                """,
+                (uid,),
+            )
+            await cursor.execute(
+                "SELECT equip_id_1, equip_id_2, equip_id_3 FROM user_directional_smelt WHERE uid = %s",
+                (uid,),
+            )
+            slots = tuple(await cursor.fetchone() or (None, None, None))
+            placed_ids = [equip_id for equip_id in slots if equip_id]
+            equipment = {}
+            if placed_ids:
+                placeholders = ", ".join(["%s"] * len(placed_ids))
+                await cursor.execute(
+                    f"""
+                    SELECT ue.id, de.name, ue.quality
+                    FROM user_equip ue JOIN data_equip de ON de.id = ue.equip_id
+                    WHERE ue.uid = %s AND ue.id IN ({placeholders})
+                    """,
+                    (uid, *placed_ids),
+                )
+                equipment = {
+                    int(row[0]): {"name": row[1], "quality": str(row[2])}
+                    for row in await cursor.fetchall()
+                }
+            await conn.commit()
+    return _directional_furnace_markdown(slots, equipment)
+
+
+@reg_xz_func
+async def place_directional_smelt_equip(uid, qz, slot, equip_text):
+    """将一件本人未穿戴装备放入指定定向熔炉槽位。"""
     try:
-        part_name, equip_text = text.split(None, 1)
-    except ValueError:
-        return _smelt_error(qz, "指令格式错误，请填写目标部位和三个装备编号。")
-    target_part = PART_EN.get(part_name)
+        slot_no = int(slot)
+    except (TypeError, ValueError):
+        slot_no = 0
+    equip_id = parse_directional_equip_id(equip_text)
+    if slot_no not in (1, 2, 3) or not equip_id:
+        return _smelt_error(qz, "放置格式错误，请发送“定向放置1-装备编号”。")
+
+    async with connect_mysql() as conn:
+        try:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    """
+                    SELECT equip_id_1, equip_id_2, equip_id_3
+                    FROM user_directional_smelt WHERE uid = %s FOR UPDATE
+                    """,
+                    (uid,),
+                )
+                furnace = await cursor.fetchone()
+                if not furnace:
+                    await conn.rollback()
+                    return _smelt_error(qz, "请先发送“定向熔炉”开启熔炉。")
+
+                await cursor.execute(
+                    """
+                    SELECT ue.id, de.name, ue.quality, ue.is_equipped
+                    FROM user_equip ue JOIN data_equip de ON de.id = ue.equip_id
+                    WHERE ue.uid = %s AND ue.id = %s
+                    """,
+                    (uid, equip_id),
+                )
+                selected = await cursor.fetchone()
+                if not selected:
+                    await conn.rollback()
+                    return _smelt_error(qz, "装备不存在或不属于你，请检查装备编号。")
+                if int(selected[3] or 0) == 1:
+                    await conn.rollback()
+                    return _smelt_error(qz, "穿戴中的装备不能放入熔炉，请先卸下。")
+
+                slots = list(furnace)
+                for index, existing_id in enumerate(slots):
+                    if index != slot_no - 1 and existing_id and int(existing_id) == equip_id:
+                        await conn.rollback()
+                        return _smelt_error(qz, "同一件装备不能重复放入多个槽位。")
+                slots[slot_no - 1] = equip_id
+
+                column = f"equip_id_{slot_no}"
+                await cursor.execute(
+                    f"UPDATE user_directional_smelt SET {column} = %s WHERE uid = %s",
+                    (equip_id, uid),
+                )
+                placed_ids = [placed_id for placed_id in slots if placed_id]
+                placeholders = ", ".join(["%s"] * len(placed_ids))
+                await cursor.execute(
+                    f"""
+                    SELECT ue.id, de.name, ue.quality
+                    FROM user_equip ue JOIN data_equip de ON de.id = ue.equip_id
+                    WHERE ue.uid = %s AND ue.id IN ({placeholders})
+                    """,
+                    (uid, *placed_ids),
+                )
+                equipment = {
+                    int(row[0]): {"name": row[1], "quality": str(row[2])}
+                    for row in await cursor.fetchall()
+                }
+                await conn.commit()
+        except Exception:
+            await conn.rollback()
+            raise
+    return _directional_furnace_markdown(
+        tuple(slots), equipment, f"装备 [{equip_id}] 已放入槽位{slot_no}。"
+    )
+
+
+@reg_xz_func
+async def target_directional_smelt_part(uid, qz, part_name):
+    """选择定向产物部位，并原子校验、消耗熔炉内的三件装备。"""
+    normalized_part = str(part_name or "").strip().lstrip("-").strip()
+    target_part = PART_EN.get(normalized_part)
     if not target_part:
         return _smelt_error(qz, "目标部位仅支持：武器、头盔、铠甲、护腿、鞋子、饰品。")
-    return await _smelt_equipment(uid, qz, equip_text, target_part=target_part, is_directional=True)
+    return await _smelt_equipment(
+        uid,
+        qz,
+        target_part=target_part,
+        is_directional=True,
+        use_directional_furnace=True,
+    )

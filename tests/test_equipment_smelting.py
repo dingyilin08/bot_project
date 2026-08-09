@@ -1,8 +1,11 @@
+import asyncio
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from Game_main import g7_equip
 from Tool.combat_system import CombatEntity, Skill
+from output_main import jiance
 
 
 class _SmeltCursor:
@@ -14,11 +17,14 @@ class _SmeltCursor:
         self.jade_count = jade_count
         self.jade_deductions = 0
         self.created = False
+        self.furnace_cleared = False
 
     async def execute(self, sql, params=None):
         statement = " ".join(sql.split())
         self.rowcount = 0
-        if statement.startswith("SELECT ue.id, ue.equip_id, ue.quality"):
+        if statement.startswith("SELECT equip_id_1, equip_id_2, equip_id_3"):
+            self._row = (11, 12, 13)
+        elif statement.startswith("SELECT ue.id, ue.equip_id, ue.quality"):
             self._rows = [
                 (11, 1, "精品", 0, 1, 1),
                 (12, 2, "精品", 0, 1, 1),
@@ -36,6 +42,9 @@ class _SmeltCursor:
             self.rowcount = 1
         elif statement.startswith("DELETE FROM user_equip"):
             self.rowcount = 3
+        elif statement.startswith("DELETE FROM user_directional_smelt"):
+            self.furnace_cleared = True
+            self.rowcount = 1
         else:
             raise AssertionError(f"未预期的熔炼 SQL：{statement}")
 
@@ -79,12 +88,103 @@ class _SmeltConnection:
         self.rollbacks += 1
 
 
+class _FurnaceCursor:
+    def __init__(self):
+        self.state = [None, None, None]
+        self._row = None
+        self._rows = []
+        self.rowcount = 0
+        self.equipment = {
+            489: (489, "玄铁戒", "精品", 0),
+            934: (934, "青玉佩", "精品", 0),
+            958: (958, "星纹链", "精品", 0),
+        }
+
+    async def execute(self, sql, params=None):
+        statement = " ".join(sql.split())
+        self._row = None
+        self._rows = []
+        self.rowcount = 0
+        if statement.startswith("INSERT INTO user_directional_smelt"):
+            self.rowcount = 1
+        elif statement.startswith("SELECT equip_id_1, equip_id_2, equip_id_3"):
+            self._row = tuple(self.state)
+        elif statement.startswith("SELECT ue.id, de.name, ue.quality, ue.is_equipped"):
+            self._row = self.equipment.get(int(params[1]))
+        elif statement.startswith("UPDATE user_directional_smelt SET equip_id_"):
+            slot_no = int(statement.split("equip_id_", 1)[1][0])
+            self.state[slot_no - 1] = int(params[0])
+            self.rowcount = 1
+        elif statement.startswith("SELECT ue.id, de.name, ue.quality"):
+            self._rows = [self.equipment[int(equip_id)][:3] for equip_id in params[1:]]
+        else:
+            raise AssertionError(f"未预期的定向熔炉 SQL：{statement}")
+
+    async def fetchone(self):
+        return self._row
+
+    async def fetchall(self):
+        return self._rows
+
+
 class EquipmentSmeltingTests(unittest.IsolatedAsyncioTestCase):
     def test_parser_requires_three_distinct_positive_ids(self):
         self.assertEqual(g7_equip.parse_smelt_equip_ids("1-2-3"), [1, 2, 3])
         for value in ("1-2", "1-1-2", "1-0-2", "a-2-3"):
             with self.subTest(value=value):
                 self.assertIsNone(g7_equip.parse_smelt_equip_ids(value))
+
+    def test_directional_commands_survive_global_normalization(self):
+        cases = {
+            "定向熔炉": ("定向熔炉", ""),
+            "定向放置1-489": ("定向放置1", "-489"),
+            "定向放置2-934": ("定向放置2", "-934"),
+            "定向放置3-958": ("定向放置3", "-958"),
+            "部位定向 饰品": ("部位定向", "饰品"),
+        }
+        for command, expected in cases.items():
+            with self.subTest(command=command):
+                self.assertEqual(asyncio.run(jiance(command)), expected)
+
+    def test_directional_id_parser_accepts_hyphen_suffix(self):
+        self.assertEqual(g7_equip.parse_directional_equip_id("-489"), 489)
+        self.assertEqual(g7_equip.parse_directional_equip_id(" 489 "), 489)
+        for value in ("", "-", "0", "--1", "489-934"):
+            with self.subTest(value=value):
+                self.assertIsNone(g7_equip.parse_directional_equip_id(value))
+
+    def test_directional_furnace_panel_exposes_three_slots_and_parts(self):
+        empty = g7_equip._directional_furnace_markdown((None, None, None))["content"]
+        for slot in (1, 2, 3):
+            self.assertIn(f"定向放置{slot}-装备编号", empty)
+        full = g7_equip._directional_furnace_markdown(
+            (489, 934, 958),
+            {
+                489: {"name": "玄铁戒", "quality": "精品"},
+                934: {"name": "青玉佩", "quality": "精品"},
+                958: {"name": "星纹链", "quality": "精品"},
+            },
+        )["content"]
+        self.assertIn("部位定向 饰品", full)
+        self.assertIn("[489] 玄铁戒", full)
+
+    async def test_open_and_place_directional_furnace_material(self):
+        cursor = _FurnaceCursor()
+        conn = _SmeltConnection(cursor)
+        original_connect = g7_equip.connect_mysql
+        g7_equip.connect_mysql = lambda: conn
+        try:
+            opened = await g7_equip.open_directional_smelt_furnace.__wrapped__(7, "")
+            placed = await g7_equip.place_directional_smelt_equip.__wrapped__(
+                7, "", "1", "-489"
+            )
+        finally:
+            g7_equip.connect_mysql = original_connect
+        self.assertIn("槽位1：未放置", opened["content"])
+        self.assertIn("装备 [489] 已放入槽位1", placed["content"])
+        self.assertIn("[489] 玄铁戒", placed["content"])
+        self.assertEqual(cursor.state, [489, None, None])
+        self.assertEqual(conn.commits, 2)
 
     async def test_regular_smelt_creates_same_quality_item_without_jade(self):
         cursor = _SmeltCursor()
@@ -110,12 +210,37 @@ class EquipmentSmeltingTests(unittest.IsolatedAsyncioTestCase):
         original_connect = g7_equip.connect_mysql
         g7_equip.connect_mysql = lambda: conn
         try:
-            result = await g7_equip.directional_smelt_equip.__wrapped__(7, "", "武器 11-12-13")
+            result = await g7_equip.target_directional_smelt_part.__wrapped__(7, "", "武器")
         finally:
             g7_equip.connect_mysql = original_connect
         self.assertIn("需要1个定枢玉", result["content"])
         self.assertFalse(cursor.created)
+        self.assertFalse(cursor.furnace_cleared)
         self.assertEqual(conn.commits, 0)
+
+    async def test_directional_smelt_clears_furnace_only_after_success(self):
+        cursor = _SmeltCursor()
+        conn = _SmeltConnection(cursor)
+        original_connect = g7_equip.connect_mysql
+        g7_equip.connect_mysql = lambda: conn
+        try:
+            result = await g7_equip.target_directional_smelt_part.__wrapped__(7, "", "饰品")
+        finally:
+            g7_equip.connect_mysql = original_connect
+        self.assertIn("定向熔炼成功", result["content"])
+        self.assertTrue(cursor.created)
+        self.assertTrue(cursor.furnace_cleared)
+        self.assertEqual(cursor.jade_deductions, 1)
+        self.assertEqual(conn.commits, 1)
+
+    def test_directional_furnace_migration_is_idempotent(self):
+        migration = (
+            Path(__file__).resolve().parents[1]
+            / "数据库源文件"
+            / "p9_directional_smelt_furnace.sql"
+        ).read_text(encoding="utf-8")
+        self.assertIn("CREATE TABLE IF NOT EXISTS user_directional_smelt", migration)
+        self.assertIn("PRIMARY KEY (uid)", migration)
 
 
 class FusedSkillCombatTests(unittest.TestCase):
