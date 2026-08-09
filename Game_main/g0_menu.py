@@ -11,6 +11,7 @@ from Tool.tool_canwu import canwu_remaining_seconds, ensure_canwu_duration_colum
 from func.pd_func import *
 import time
 from Game_domain.gm_state import is_admin as is_gm_admin
+from Game_domain.game_version import PLAYER_VERSION
 
 
 # ================================
@@ -100,7 +101,8 @@ MAIN_MENU_SECTIONS = (
     (
         "📚 指引与记录",
         "玩家攻略、签到、新手札记、日常任务与版本记录。",
-        (("攻略", "玩家攻略"), ("签到", "每日签到"), ("问道札记", "新手札记"),
+        (("今日修行", "今日修行"), ("攻略", "玩家攻略"), ("签到", "每日签到"),
+         ("问道札记", "新手札记"),
          ("日常任务", "日常任务"), ("玩法介绍", "玩法介绍"), ("更新日志", "更新日志")),
     ),
 )
@@ -251,7 +253,8 @@ async def show_main_menu(uid, qz):
     output += f"**玩家：** {player_info['name']}\n"
     output += f"**当前角色：** {role_display}\n"
     output += f"**灵石：** {player_info['lingshi']} | **仙玉：** {player_info['xianyu']}\n\n"
-    output += "> 首页仅保留系统入口；进入对应「xx菜单」查看具体操作。\n\n"
+    output += "> 不确定下一步时，先进入「今日修行」；其余入口按系统分区保留。\n\n"
+    output += f"{_menu_link('今日修行', '🧭 今日修行')} | {_menu_link('问道札记', '新手札记')} | {_menu_link('日常任务', '日常任务')}\n\n"
 
     for title, description, entries in MAIN_MENU_SECTIONS:
         output += f"***\n\n**{title}**\n> {description}\n"
@@ -781,7 +784,10 @@ async def show_help(uid):
 
 async def show_update_log(uid):
     """显示当前线上版本的玩家可见更新内容。"""
-    output = "##### 📜 更新日志｜v1.26\n\n"
+    output = f"##### 📜 更新日志｜{PLAYER_VERSION}\n\n"
+    output += "**🧭 今日修行上线**\n> 发送“今日修行”即可查看参悟、副本与日常任务的当前状态，并直接前往最优先的三项操作。主菜单已置顶该入口。\n\n"
+    output += "**🛡️ 指令异常保护**\n> 核心指令发生未预期异常时，机器人会优先返回异常提示与消息编号，避免玩家因无回复而连续重复操作。\n\n"
+    output += "**📚 指引版本统一**\n> 玩法介绍、更新日志与主菜单共用同一版本标记，避免旧版本按钮误导。\n\n"
     output += "**🐾 诸天灵契全面重制**\n> 六界22只灵兽、世界寻踪与双保底、四维洗髓、七重境界、共享血脉、无损技能、一主两辅灵阵已开放；并接入副本、扫荡、深渊、队伍、世界 Boss、洞府派遣、宗门护山与赛季玩法。发送“灵兽”即可进入。\n\n"
     output += "**🌊 轮海深渊开放**\n> 六波连战、每层30敌；10/20/30杀对应1/2/3星。支持50级定级赛、跨界压制、升星补差额与全服深渊排行。发送“深渊”即可进入。\n\n"
     output += "**✉️ 道友邀请开放**\n> 发送“我的邀请码”分享八位邀请码；新道友注册时填写后，双方可领取注册礼，完成全部新手札记后还能领取圆满礼。\n\n"
@@ -795,7 +801,7 @@ async def show_update_log(uid):
     output += "**🏯 宗门与师徒开放**\n> 可创建或加入宗门、完成每日委托、参与周研究投票；师徒契约支持申请、收徒与共同修行，且没有资产转移。\n\n"
     output += "**🌌 世界Boss与赛季开放**\n> 世界 Boss 提供挑战、辅助、净化三类贡献；副本、宗门委托和世界 Boss 均会累积赛季经验，赛季装扮领取后可实际佩戴展示。\n\n"
     output += "**✨ 操作体验改进**\n> 常用操作会以正文蓝字或底部按钮呈现：导航与列表保持贴近说明，战斗和世界 Boss 的关键操作可直接点击。\n\n"
-    output += "<qqbot-cmd-input text='主菜单' show='主菜单' /> | <qqbot-cmd-input text='玩法介绍' show='玩法介绍' />"
+    output += "<qqbot-cmd-input text='今日修行' show='今日修行' /> | <qqbot-cmd-input text='主菜单' show='主菜单' />"
     return {"type": "markdown", "content": output}
 
 
@@ -879,6 +885,9 @@ async def show_game_guide(uid):
     output += "> `我的战力` - 查看战力详情\n\n"
 
     output += "***\n\n"
-    output += "<qqbot-cmd-input text='主菜单' show='主菜单' /> | <qqbot-cmd-input text='更新日志' show='更新日志 v1.22' />"
+    output += (
+        "<qqbot-cmd-input text='今日修行' show='今日修行' /> | "
+        f"<qqbot-cmd-input text='更新日志' show='更新日志 {PLAYER_VERSION}' />"
+    )
 
     return {"type": "markdown", "content": output}

@@ -272,7 +272,7 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
                 )
 
         self.assertEqual(500, caught.exception.status_code)
-        sender.assert_awaited_once()
+        self.assertEqual(2, sender.await_count)
         self.assertEqual("FAILED", inbox.events["event-group-reply-failed"]["status"])
         self.assertIn(
             "群聊回复消息发送失败",
@@ -292,12 +292,30 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
                 )
 
         self.assertEqual(500, caught.exception.status_code)
-        sender.assert_awaited_once()
+        self.assertEqual(2, sender.await_count)
         self.assertEqual("FAILED", inbox.events["event-c2c-reply-failed"]["status"])
         self.assertIn(
             "私聊回复消息发送失败",
             inbox.events["event-c2c-reply-failed"]["error_message"],
         )
+
+    async def test_handler_error_returns_safe_player_notice_when_delivery_is_available(self):
+        inbox = InMemoryEventInbox()
+        safe_sender = AsyncMock(return_value={"id": "safe-error-message"})
+
+        with patch.object(main, "event_inbox", inbox), patch.object(
+            main, "output_content", AsyncMock(side_effect=RuntimeError("unexpected label error"))
+        ), patch.object(main, "send_c2c_message", safe_sender):
+            response = await main.handle_webhook(
+                self._c2c_message_request("event-c2c-processing-error")
+            )
+
+        self.assertEqual({"op": 12}, response)
+        self.assertEqual("PROCESSED", inbox.events["event-c2c-processing-error"]["status"])
+        content = safe_sender.await_args.args[1]
+        self.assertIn("操作结果待确认", content)
+        self.assertIn("event-c2c-processing-error", content)
+        self.assertNotIn("unexpected label error", content)
 
     async def test_full_group_message_routes_with_member_openid(self):
         inbox = InMemoryEventInbox()

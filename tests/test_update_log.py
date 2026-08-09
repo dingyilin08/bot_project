@@ -2,6 +2,7 @@ import asyncio
 import unittest
 
 from Game_main.g0_menu import show_update_log
+from Game_domain.game_version import PLAYER_VERSION
 from output_main import jiance
 
 
@@ -12,7 +13,7 @@ class UpdateLogTests(unittest.TestCase):
     def test_update_log_mentions_current_version_and_features(self):
         response = asyncio.run(show_update_log(1))
         content = response["content"]
-        self.assertIn("v1.26", content)
+        self.assertIn(PLAYER_VERSION, content)
         self.assertIn("轮海深渊开放", content)
         self.assertIn("道友邀请开放", content)
         self.assertIn("玩家攻略阁", content)

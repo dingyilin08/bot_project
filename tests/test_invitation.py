@@ -53,13 +53,15 @@ class InvitationRuleTests(unittest.IsolatedAsyncioTestCase):
         register.assert_awaited_once_with("member-openid-1", "云澈")
 
     async def test_activity_and_update_log_expose_invitation(self):
+        from Game_domain.game_version import PLAYER_VERSION
+
         activity = (await show_activity_menu.__wrapped__(1, ""))["content"]
         self.assertIn("邀请菜单", activity)
         invitation = (await invitation_menu.__wrapped__(1, ""))["content"]
         for command in ("我的邀请码", "填写邀请码 ", "邀请列表", "领取邀请奖励"):
             self.assertIn(command, invitation)
         update_log = (await show_update_log(1))["content"]
-        self.assertIn("v1.26", update_log)
+        self.assertIn(PLAYER_VERSION, update_log)
         self.assertIn("道友邀请开放", update_log)
 
     def test_schema_enforces_unique_codes_and_reward_once(self):

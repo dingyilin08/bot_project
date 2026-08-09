@@ -42,6 +42,7 @@ from Game_main.g31_invitation import *        # 玩家邀请码
 from Game_main.g32_abyss import *             # 轮海深渊
 from Game_main.g33_spirit_beast_v2 import *   # 诸天灵契 V2
 from Game_main.g34_xianyu_redeem import *      # 一次性仙玉兑换码
+from Game_main.g35_daily_compass import *      # 今日修行指引
 from Game_main.g0_menu import *          # 菜单系统
 from Tool.qq_keyboard import attach_keyboard
 from Game_domain.gm_service import GMError, authenticate_admin
@@ -51,6 +52,7 @@ wuhouzhui = '收回|当前角色|参悟|参悟状态|领取参悟经验|悟道�
 youhouzhui = '注册游戏|选择角色|角色介绍|玩法介绍|角色属性|出战|角色背包|物品背包|物品信息|副本信息|副本列表|挑战副本|挑战怪物|战斗行动|激活技能|卷轴信息|技能信息|技能融合|技能装备|技能卸下|穿戴装备|卸下装备|强化装备|装备详情|出售装备|装备熔炼|定向熔炼|定向放置1|定向放置2|定向放置3|部位定向|技能背包|装备背包|战力排行|排行榜|商城|购买商品|使用体力药|种子商店|购买种子|播种|一键播种|采摘|解锁药田|施肥|出售药材|丹方列表|炼丹|收丹|服丹|解锁丹炉|加速炼丹|添火|关闭图片模式|开启图片模式|GM验证|GM发放物品|GM发放仙玉|灵兽出战|队伍加入|布阵|洞府升级|洞府收取|道途投票|札记领取|队伍战斗行动|宗门创建|宗门申请|宗门投票|拜师|收徒|世界挑战|仙玉祈愿|祈愿定向|祈愿保底选择|合成角色|专属祈愿|专属定向|点亮能力|装备专属|专属组合|异火祈愿|异火定向|合成异火|装备异火|异火融合|意境祈愿|参悟意境|装备意境|本源合道|法宝祈愿|点亮法宝|法宝协同|炼制飞剑|宝术祈愿|铭刻宝术|六道轮回|九秘祈愿|参悟九秘|九秘连携|选择异象|刀法祈愿|绘制绘卷|刀势推演'
 wuhouzhui += '|定向熔炉'
 wuhouzhui += '|日常任务|签到|签到记录|签到奖励|攻略|开荒攻略|角色攻略|战斗攻略|资源攻略'
+wuhouzhui += '|今日修行'
 wuhouzhui += '|因果印记|赛季装扮|坊市菜单|坊市帮助'
 wuhouzhui += '|邀请菜单|我的邀请码|邀请列表|领取邀请奖励'
 wuhouzhui += '|深渊|深渊菜单|深渊怪物|深渊结算|离开深渊'
@@ -783,6 +785,8 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         return await onboarding_home(uid)
     elif con_arr0 == '日常任务':
         return await daily_task_home(uid)
+    elif con_arr0 == '今日修行':
+        return await daily_compass_home(uid)
     elif con_arr0 == '日常领取':
         if con_arr1 == "":
             return "指令错误，正确指令：日常领取 任务编号（或 全部）"

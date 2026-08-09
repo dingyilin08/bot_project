@@ -14,7 +14,7 @@ import os
 from output_main import *
 from config import DOMAIN, IMG_BASE_URL
 from Game_domain.event_inbox import MySQLEventInbox
-from Tool.qq_keyboard import attach_keyboard
+from Tool.qq_keyboard import attach_keyboard, build_command_keyboard
 from Tool.qq_group_welcome import build_friend_welcome_message, build_group_welcome_message
 from Tool.qq_reply_footer import append_rotating_reply_notice
 
@@ -481,6 +481,59 @@ def generate_signature(bot_secret: str, event_ts: str, plain_token: str) -> str:
     return signature
 
 
+def build_player_error_notice(request_id, interactive=False):
+    """不向玩家暴露内部异常细节，但给出可供排查的消息编号。"""
+    content = (
+        "##### ⚠️ 操作结果待确认\n\n"
+        "> 本次指令处理出现异常。为避免重复扣除或重复领取，请先不要连续重复操作；"
+        "可进入对应页面确认当前状态。\n\n"
+        f"**异常编号：** `{request_id or 'UNKNOWN'}`"
+    )
+    if interactive:
+        content += (
+            "\n\n<qqbot-cmd-input text='今日修行' show='查看今日状态' /> | "
+            "<qqbot-cmd-input text='主菜单' show='返回主菜单' />"
+        )
+    else:
+        content += "\n\n请发送“今日修行”或“主菜单”确认状态。"
+    return content
+
+
+async def send_player_error_notice(context, request_id):
+    """尽量通过与原回复相同的通道发送异常提示。
+
+    如果原消息发送接口本身不可用，本函数会返回 ``None``，交由上层保留失败事件以供
+    QQ 重试；如果是业务代码异常，则通常可以立即给玩家可理解的反馈。
+    """
+    if not context or not context.get("msg_id") or not context.get("target"):
+        return None
+
+    is_group = context["kind"] == "group"
+    reply_type = context.get("reply_type")
+    content = build_player_error_notice(
+        request_id,
+        interactive=reply_type in ("markdown", "markdown_keyboard"),
+    )
+    target = context["target"]
+    msg_id = context["msg_id"]
+
+    if reply_type == "markdown_keyboard":
+        keyboard = build_command_keyboard(
+            (("今日修行", "查看今日状态"), ("主菜单", "返回主菜单")),
+            is_group=is_group,
+        )
+        if is_group:
+            return await send_group_markdown_keyboard(target, content, keyboard, msg_id)
+        return await send_c2c_markdown_keyboard(target, content, keyboard, msg_id)
+    if reply_type == "markdown":
+        if is_group:
+            return await send_group_markdown(target, content, msg_id)
+        return await send_c2c_markdown(target, content, msg_id)
+    if is_group:
+        return await send_group_message(target, content, msg_id)
+    return await send_c2c_message(target, content, msg_id)
+
+
 @app.post("/webhook")
 async def handle_webhook(request: Request):
     """
@@ -488,6 +541,7 @@ async def handle_webhook(request: Request):
     支持回调地址验证和事件推送
     """
     event_id = None
+    reply_context = None
     try:
         # 获取请求头信息
         user_agent = request.headers.get("User-Agent", "")
@@ -595,6 +649,12 @@ async def handle_webhook(request: Request):
                     raise RuntimeError("群消息缺少发送者 OpenID")
                 msg_id = json_data["id"]
                 group_openid = json_data["group_openid"]
+                reply_context = {
+                    "kind": "group",
+                    "target": group_openid,
+                    "msg_id": msg_id,
+                    "reply_type": None,
+                }
                 logging.info(f"群聊【{group_openid}】{user_openid}：{redact_sensitive_content(content)}")
                 should_reply = (
                     payload.t == "GROUP_AT_MESSAGE_CREATE"
@@ -609,6 +669,7 @@ async def handle_webhook(request: Request):
                     # 检查返回消息类型
                     if isinstance(result, dict):
                         result_type = result.get("type")
+                        reply_context["reply_type"] = result_type
                         if result_type == "markdown_keyboard":
                             # Markdown + Keyboard 消息
                             send_result = await send_group_markdown_keyboard(
@@ -632,12 +693,19 @@ async def handle_webhook(request: Request):
                 content = filter_message_content(json_data["content"])
                 user_openid = json_data["author"]["union_openid"]
                 msg_id = json_data["id"]
+                reply_context = {
+                    "kind": "c2c",
+                    "target": user_openid,
+                    "msg_id": msg_id,
+                    "reply_type": None,
+                }
                 logging.info(f"私聊【{user_openid}】：{redact_sensitive_content(content)}")
                 result = await output_content(content, user_openid, request_id=msg_id)
 
                 # 检查返回消息类型
                 if isinstance(result, dict):
                     result_type = result.get("type")
+                    reply_context["reply_type"] = result_type
                     if result_type == "markdown_keyboard":
                         # Markdown + Keyboard 消息
                         send_result = await send_c2c_markdown_keyboard(
@@ -674,12 +742,21 @@ async def handle_webhook(request: Request):
         logging.error(f"JSON解析失败: {e}")
         raise HTTPException(status_code=400, detail="Invalid JSON")
     except Exception as e:
+        recovered = False
+        if reply_context:
+            try:
+                recovered = bool(await send_player_error_notice(reply_context, event_id or reply_context.get("msg_id")))
+            except Exception:
+                logging.exception("发送玩家异常提示失败")
         if event_id:
             try:
-                await event_inbox.mark_processed(event_id, str(e)[:500])
+                # 异常提示已经送达时，平台无需重投同一条指令；原始异常仍完整写入服务日志。
+                await event_inbox.mark_processed(event_id, None if recovered else str(e)[:500])
             except Exception:
                 logging.exception("记录Webhook失败事件时发生错误")
-        logging.error(f"处理webhook请求失败: {e}")
+        logging.exception("处理webhook请求失败: %s", e)
+        if recovered:
+            return {"op": 12}
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
