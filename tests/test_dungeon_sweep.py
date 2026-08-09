@@ -24,7 +24,7 @@ class DungeonSweepTests(unittest.TestCase):
         self.assertEqual(ticket["name"], "扫荡副本券")
         self.assertEqual(ticket["price"], 800)
         self.assertEqual(ticket["daily_limit"], DUNGEON_SWEEP_TICKET_DAILY_LIMIT)
-        self.assertEqual(ticket["daily_limit"], 10)
+        self.assertEqual(ticket["daily_limit"], 20)
 
     def test_parse_dungeon_id_only_accepts_positive_integer(self):
         self.assertEqual(parse_dungeon_id(" 12 "), 12)

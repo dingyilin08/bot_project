@@ -50,8 +50,8 @@ JOIN user_dungeon_daily_usage u ON u.uid=z.id AND u.stat_date=CURDATE()
 SET z.dungeon_num=GREATEST(0,u.attempt_limit-u.used_count),
     z.daily_dungeon_reset_time=CURDATE();
 
--- 扫荡券恢复每日限购10张；体力药每日4瓶、正常供给。
-UPDATE data_shop_item SET daily_limit=10 WHERE item_id=211;
+-- 扫荡券每日限购20张；体力药每日4瓶、正常供给。
+UPDATE data_shop_item SET daily_limit=20 WHERE item_id=211;
 UPDATE data_shop_item SET enabled=1,daily_limit=4 WHERE item_id=209;
 
 -- 下架所有商城限购便利道具订单；出售单退物，收购单退还预存灵石。

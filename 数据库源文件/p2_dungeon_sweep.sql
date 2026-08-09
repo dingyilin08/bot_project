@@ -55,7 +55,7 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO `data_shop_item`
   (`name`, `item_id`, `price`, `category`, `description`, `daily_limit`, `enabled`)
 VALUES
-  ('扫荡副本券', 211, 800, '历练', '消耗1张可一键扫荡已通关副本，同时消耗1次副本历练次数。', 10, 1)
+  ('扫荡副本券', 211, 800, '历练', '消耗1张可一键扫荡已通关副本，同时消耗1次副本历练次数。', 20, 1)
 ON DUPLICATE KEY UPDATE
   `item_id` = VALUES(`item_id`), `price` = VALUES(`price`),
   `category` = VALUES(`category`), `description` = VALUES(`description`),
