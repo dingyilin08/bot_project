@@ -59,6 +59,33 @@ def _apply_returned_quality(profile):
     return profile
 
 
+def formation_combat_effect(profile):
+    """生成稳定的主契战斗效果契约，展示字段与数值字段必须同时存在。"""
+    buff_type, cap = ROLE_BUFF.get(profile["role"], ("attack_up", 5))
+    average = aptitude_average((
+        profile["apt_spirit"], profile["apt_body"],
+        profile["apt_soul"], profile["apt_speed"],
+    ))
+    temperament_roles = {
+        "勇猛": {"STRIKER"}, "沉稳": {"GUARDIAN"},
+        "灵慧": {"HEALER", "BREAKER"}, "机敏": {"DISRUPTOR"},
+    }
+    temperament_bonus = int(
+        profile["role"] in temperament_roles.get(profile["temperament"], set())
+    )
+    return {
+        "buff_type": buff_type,
+        "value": min(
+            cap,
+            4 + (average - 60) // 8
+            + int(profile["bloodline_nodes"]) // 2
+            + temperament_bonus,
+        ),
+        "code": profile["talent_code"],
+        "label": f"{ROLE_LABELS.get(profile['role'], '主契')}灵契",
+    }
+
+
 async def _ensure_user(uid, cursor):
     await cursor.execute("INSERT IGNORE INTO user_spirit_beast_wallet(uid) VALUES(%s)", (uid,))
     await cursor.execute("INSERT IGNORE INTO user_spirit_beast_pity(uid) VALUES(%s)", (uid,))
@@ -288,28 +315,7 @@ async def load_formation_snapshot(uid, role_id, cursor):
     role_name = role[1] if role else ""
     for profile in rows:
         profile["bond_level"] = bond_level(profile["bond_exp"])
-        buff_type, cap = ROLE_BUFF.get(profile["role"], ("attack_up", 5))
-        average = aptitude_average((
-            profile["apt_spirit"], profile["apt_body"],
-            profile["apt_soul"], profile["apt_speed"],
-        ))
-        temperament_roles = {
-            "勇猛": {"STRIKER"}, "沉稳": {"GUARDIAN"},
-            "灵慧": {"HEALER", "BREAKER"}, "机敏": {"DISRUPTOR"},
-        }
-        temperament_bonus = int(
-            profile["role"] in temperament_roles.get(profile["temperament"], set())
-        )
-        profile["effect"] = {
-            "buff_type": buff_type,
-            "value": min(
-                cap,
-                4 + (average - 60) // 8
-                + int(profile["bloodline_nodes"]) // 2
-                + temperament_bonus,
-            ),
-            "code": profile["talent_code"],
-        }
+        profile["effect"] = formation_combat_effect(profile)
         await cursor.execute("""
             SELECT s.id,s.name,s.category,s.effect_code,s.effect_value,
                    s.cooldown,s.trigger_limit

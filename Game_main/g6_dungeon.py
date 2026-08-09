@@ -1707,10 +1707,11 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
             return render_battle_panel(active_session, "你已有进行中的战斗，请先完成该回合。")
         combat_manager = CombatManager(player_entity, monster_entity, max_rounds=50)
         if active_beast:
+            beast_bonus = active_beast.get('combat_bonus') or {}
             combat_manager._log(
                 "spirit_beast",
-                f"🐾 出战灵兽「{active_beast['name']}」发动{active_beast['combat_bonus']['label']}，"
-                f"获得{active_beast['combat_bonus']['value']}%灵契加成！"
+                f"🐾 出战灵兽「{active_beast['name']}」发动{beast_bonus.get('label', '主契灵契')}，"
+                f"获得{int(beast_bonus.get('value', 0))}%灵契加成！"
             )
         session = await service.create_battle(
             uid=uid,

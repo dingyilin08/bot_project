@@ -12,6 +12,7 @@ from Game_domain.spirit_beast_v2_rules import (
     roll_quality,
 )
 from Tool.combat_system import CombatEntity, CombatManager
+from Game_main.g33_spirit_beast_v2 import formation_combat_effect
 from output_main import jiance
 
 
@@ -59,6 +60,16 @@ class SpiritBeastV2RuleTests(unittest.TestCase):
         high = return_refund(30, 3)
         self.assertGreater(high["spirit_essence"], low["spirit_essence"])
         self.assertGreater(high["beast_material"], low["beast_material"])
+
+    def test_formation_combat_effect_keeps_player_facing_label(self):
+        effect = formation_combat_effect({
+            "role": "STRIKER", "apt_spirit": 80, "apt_body": 80,
+            "apt_soul": 80, "apt_speed": 80, "bloodline_nodes": 0,
+            "temperament": "勇猛", "talent_code": "BURN_CHASE",
+        })
+        self.assertEqual(effect["label"], "攻伐灵契")
+        self.assertEqual(effect["buff_type"], "attack_up")
+        self.assertGreater(effect["value"], 0)
 
     def test_new_commands_preserve_space_separated_arguments(self):
         cases = {
