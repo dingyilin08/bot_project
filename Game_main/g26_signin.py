@@ -5,6 +5,7 @@ import json
 
 from func.pd_func import pd_reg_func
 from sql.mysql import connect_mysql
+from Game_domain.role_trait_service import calculate_lingshi_output
 
 
 CYCLE_DAYS = 30
@@ -299,6 +300,13 @@ async def signin_claim(uid, qz):
                 milestone = milestone_for_day(new_cycle_day)
                 milestone_reward = milestone["reward"] if milestone else None
                 total_reward = combine_rewards(daily_reward, milestone_reward)
+                base_total_lingshi = int(total_reward["lingshi"])
+                credited_lingshi = await calculate_lingshi_output(
+                    cursor, uid, base_total_lingshi
+                )
+                trait_bonus_lingshi = credited_lingshi - base_total_lingshi
+                total_reward = dict(total_reward)
+                total_reward["lingshi"] = credited_lingshi
 
                 await cursor.execute(
                     """
@@ -341,6 +349,8 @@ async def signin_claim(uid, qz):
     ]
     if milestone:
         lines.extend(("", f"##### 🎊 {milestone['title']}", f"> 额外获得：**{reward_text(milestone_reward)}**"))
+    if trait_bonus_lingshi > 0:
+        lines.extend(("", f"> 叶凡特性「源术通灵」：灵石额外 **+{trait_bonus_lingshi}**。"))
     if new_cycle_day == CYCLE_DAYS:
         lines.extend(("", "> 三十日道途圆满！下一次签到将开启全新一期。"))
     else:

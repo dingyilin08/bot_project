@@ -4,6 +4,7 @@
 from func.pd_func import reg_xz_func
 from sql.mysql import connect_mysql
 from Game_main.g31_invitation import sync_onboarding_invitation_rewards
+from Game_domain.role_trait_service import calculate_lingshi_output
 import json
 
 
@@ -116,12 +117,13 @@ async def onboarding_claim(uid, qz, task_key):
                 await conn.rollback()
                 return {"type": "markdown", "content": f"「{title}」奖励已领取，请继续完成其他札记。"}
             await cursor.execute("UPDATE user_onboarding_progress SET claimed_at = CURRENT_TIMESTAMP WHERE uid = %s AND task_code = %s AND claimed_at IS NULL", (uid, code))
+            credited_reward = await calculate_lingshi_output(cursor, uid, reward)
             await cursor.execute(
                 "UPDATE user_zt SET lingshi=lingshi+%s,xianyu=xianyu+%s WHERE id=%s",
-                (reward, ONBOARDING_XIANYU_PER_TASK, uid),
+                (credited_reward, ONBOARDING_XIANYU_PER_TASK, uid),
             )
             await conn.commit()
-    return {"type": "markdown", "content": f"##### 🎁 札记奖励\n\n完成：{title}\n获得：**{reward}灵石 + {ONBOARDING_XIANYU_PER_TASK}仙玉**\n\n<qqbot-cmd-input text='问道札记' show='继续札记' /> | <qqbot-cmd-input text='仙玉祈愿' show='仙玉祈愿' />"}
+    return {"type": "markdown", "content": f"##### 🎁 札记奖励\n\n完成：{title}\n获得：**{credited_reward}灵石 + {ONBOARDING_XIANYU_PER_TASK}仙玉**\n\n<qqbot-cmd-input text='问道札记' show='继续札记' /> | <qqbot-cmd-input text='仙玉祈愿' show='仙玉祈愿' />"}
 
 
 async def _claim_all_onboarding(uid):

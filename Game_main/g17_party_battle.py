@@ -9,6 +9,11 @@ from uuid import uuid4
 from func.pd_func import reg_xz_func
 from sql.mysql import connect_mysql
 from Tool.combat_system import normalize_buff_target, normalize_skill_buff_type
+from Game_domain.role_trait_service import (
+    apply_battle_hp,
+    calculate_lingshi_output,
+    has_owned_role,
+)
 
 
 SCHEMA_VERSION = 2
@@ -1008,6 +1013,10 @@ async def _build_member_snapshot(cursor, role_row, formation, season_effect=None
     attack = int(int(gongji) * (100 + float(gongji_jc or 0)) / 100) + int(equip_bonus.get("gongji", 0) or 0)
     defense = int(int(fangyu) * (100 + float(fangyu_jc or 0)) / 100) + int(equip_bonus.get("fangyu", 0) or 0)
     max_hp = int(int(qixue) * (100 + float(qixue_jc or 0)) / 100) + int(equip_bonus.get("qixue", 0) or 0)
+    wang_lin_trait = await has_owned_role(cursor, uid, "王林")
+    max_hp = apply_battle_hp(max_hp, wang_lin_trait)
+    if wang_lin_trait:
+        effect_sources.append("王林特性：气血 +20%")
     max_mana = max(0, int(fali) + int(equip_bonus.get("fali", 0) or 0))
     speed = max(0, int(sudu) + int(equip_bonus.get("sudu", 0) or 0))
     critical = max(0, int(baoji) + int(equip_bonus.get("baoji", 0) or 0))
@@ -1127,22 +1136,29 @@ async def _finish_battle(cursor, session_id, party_id, state, snapshot, logs):
     await cursor.execute("UPDATE party SET state = 'LOBBY' WHERE id = %s AND state = 'BATTLE'", (party_id,))
     await cursor.execute("UPDATE party_member SET ready = 0 WHERE party_id = %s AND member_state = 'ACTIVE'", (party_id,))
     if state == "COMPLETED":
+        reward_lines = []
         for member in snapshot["members"]:
+            credited_reward = await calculate_lingshi_output(
+                cursor, member["uid"], VICTORY_LINGSHI
+            )
             await cursor.execute("""
                 INSERT IGNORE INTO party_battle_reward
                     (session_id, uid, reward_type, amount)
                 VALUES (%s, %s, 'LINGSHI', %s)
-            """, (session_id, member["uid"], VICTORY_LINGSHI))
+            """, (session_id, member["uid"], credited_reward))
             if cursor.rowcount:
                 await cursor.execute(
                     "UPDATE user_zt SET lingshi = lingshi + %s WHERE id = %s",
-                    (VICTORY_LINGSHI, member["uid"]),
+                    (credited_reward, member["uid"]),
                 )
+            reward_lines.append(f"> {member['name']}：{credited_reward} 灵石")
         return {
             "type": "markdown",
             "content": "##### 🏆 队伍战斗胜利\n\n"
             + "\n".join(f"> {line}" for line in logs)
-            + f"\n\n每位参战道友获得 **{VICTORY_LINGSHI} 灵石**。\n\n"
+            + "\n\n**参战奖励**\n"
+            + "\n".join(reward_lines)
+            + "\n> 拥有叶凡者已自动获得20%灵石产出加成。\n\n"
             + "<qqbot-cmd-input text='队伍' show='返回队伍' />",
         }
     return {

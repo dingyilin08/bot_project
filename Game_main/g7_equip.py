@@ -22,6 +22,12 @@ from Game_main.g14_estate import (
     read_estate_levels,
 )
 from Game_main.g19_sect import get_active_research
+from Game_domain.role_trait_service import (
+    ENHANCE_SUCCESS_BONUS_BP,
+    apply_enhance_success_rate,
+    calculate_lingshi_output,
+    has_owned_role,
+)
 
 # ================================
 # 常量定义
@@ -777,6 +783,7 @@ def format_enhance_result_markdown(
     forge_level=1,
     sect_discount_bp=0,
     nominal_cost_lingshi=None,
+    role_trait_bonus_bp=0,
 ):
     """格式化强化结果"""
     lines = []
@@ -816,6 +823,11 @@ def format_enhance_result_markdown(
             f"> 炼器台 Lv.{forge_level}：成功率 +{format_basis_points(forge_bonus_bp)}个百分点"
             f"（本次 {format_basis_points(success_rate_bp)}%）"
         )
+        if role_trait_bonus_bp > 0:
+            lines.append(
+                f"> 石昊特性「锻体炼器」：成功率 +"
+                f"{format_basis_points(role_trait_bonus_bp)}个百分点"
+            )
         if sect_discount_bp > 0:
             nominal = int(nominal_cost_lingshi or cost_lingshi)
             lines.append(
@@ -883,6 +895,10 @@ def format_sell_result_markdown(role_info, equip, sell_info, current_lingshi):
     else:
         lines.append("> 强化返还：0灵石")
     lines.append(f"> 本次获得：{sell_info['total_price']}灵石")
+    if sell_info.get("role_trait_bonus", 0) > 0:
+        lines.append(
+            f"> 叶凡特性「源术通灵」：额外 +{sell_info['role_trait_bonus']}灵石"
+        )
 
     lines.append("")
     lines.append(f"**当前灵石：** {current_lingshi}")
@@ -1414,6 +1430,10 @@ async def enhance_equip(uid, qz, equip_instance_id):
 
             target_level = current_level + 1
             success_rate_bp = get_enhance_success_rate_bp(target_level, forge_level)
+            shi_hao_trait = await has_owned_role(cursor, uid, "石昊")
+            success_rate_bp = apply_enhance_success_rate(
+                success_rate_bp, shi_hao_trait
+            )
 
             fail_count = equip.get('enhance_fail_count', 0)
             pity_threshold = ENHANCE_PITY.get(target_level, 0)
@@ -1477,6 +1497,9 @@ async def enhance_equip(uid, qz, equip_instance_id):
                 forge_level=forge_level,
                 sect_discount_bp=sect_discount_bp,
                 nominal_cost_lingshi=nominal_cost_lingshi,
+                role_trait_bonus_bp=(
+                    ENHANCE_SUCCESS_BONUS_BP if shi_hao_trait else 0
+                ),
             )
 
             if not success and pity_threshold > 0:
@@ -1619,10 +1642,16 @@ async def sell_equip(uid, qz, equip_instance_id):
                 return {"type": "markdown", "content": "\n".join(lines)}
 
             sell_info = calc_equip_sell_info(equip['min_level'], equip['quality'], equip['level'])
+            base_sell_price = sell_info['total_price']
+            credited_sell_price = await calculate_lingshi_output(
+                cursor, uid, base_sell_price
+            )
+            sell_info['total_price'] = credited_sell_price
+            sell_info['role_trait_bonus'] = credited_sell_price - base_sell_price
 
             await cursor.execute(
                 "UPDATE user_zt SET lingshi = lingshi + %s WHERE id = %s",
-                (sell_info['total_price'], uid)
+                (credited_sell_price, uid)
             )
             await cursor.execute("DELETE FROM user_equip WHERE id = %s", (equip_instance_id,))
             await conn.commit()

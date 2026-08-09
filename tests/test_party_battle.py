@@ -70,6 +70,10 @@ class _RewardCursor:
         else:
             self.rowcount = 1
 
+    async def fetchone(self):
+        # 测试账号默认未拥有叶凡，按基础队伍奖励结算。
+        return None
+
 class PartyBattleTests(unittest.TestCase):
     def test_actions_are_limited_to_public_choices(self):
         self.assertEqual(normalize_action('普攻'), 'ATTACK')

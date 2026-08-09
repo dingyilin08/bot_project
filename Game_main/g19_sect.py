@@ -5,6 +5,7 @@ from hashlib import sha256
 
 from func.pd_func import reg_xz_func
 from sql.mysql import connect_mysql
+from Game_domain.role_trait_service import calculate_lingshi_output
 
 
 RESEARCHES = {
@@ -253,11 +254,12 @@ async def sect_commission(uid, qz):
                 return {"type": "markdown", "content": "今日宗门委托已完成，明日再来。"}
             await cursor.execute("INSERT INTO sect_task_log (sect_id, uid, task_date, contribution) VALUES (%s, %s, %s, %s)", (sect[0], uid, today, DAILY_CONTRIBUTION))
             await cursor.execute("UPDATE sect_member SET contribution = contribution + %s WHERE sect_id = %s AND uid = %s", (DAILY_CONTRIBUTION, sect[0], uid))
-            await cursor.execute("UPDATE user_zt SET lingshi = lingshi + 30 WHERE id = %s", (uid,))
+            reward_lingshi = await calculate_lingshi_output(cursor, uid, 30)
+            await cursor.execute("UPDATE user_zt SET lingshi = lingshi + %s WHERE id = %s", (reward_lingshi, uid))
             await conn.commit()
             from Game_main.g21_season import record_season_event
             await record_season_event(uid, "SECT")
-            return await _render_sect((sect[0], sect[1], sect[2], sect[3] + DAILY_CONTRIBUTION, sect[4]), cursor, "完成今日委托：贡献 +20，灵石 +30。")
+            return await _render_sect((sect[0], sect[1], sect[2], sect[3] + DAILY_CONTRIBUTION, sect[4]), cursor, f"完成今日委托：贡献 +20，灵石 +{reward_lingshi}。")
 
 
 @reg_xz_func
@@ -333,9 +335,12 @@ async def apprentice_practice(uid, qz):
                 return {"type": "markdown", "content": "今日已完成师徒修行。"}
             progress = min(contract[3], contract[2] + 1)
             await cursor.execute("UPDATE master_apprentice SET progress = %s, last_active_at = CURRENT_TIMESTAMP WHERE id = %s", (progress, contract[0]))
-            await cursor.execute("UPDATE user_zt SET lingshi = lingshi + 20 WHERE id IN (%s, %s)", (uid, contract[1]))
+            apprentice_reward = await calculate_lingshi_output(cursor, uid, 20)
+            master_reward = await calculate_lingshi_output(cursor, contract[1], 20)
+            await cursor.execute("UPDATE user_zt SET lingshi = lingshi + %s WHERE id = %s", (apprentice_reward, uid))
+            await cursor.execute("UPDATE user_zt SET lingshi = lingshi + %s WHERE id = %s", (master_reward, contract[1]))
             await conn.commit()
-    return {"type": "markdown", "content": f"师徒修行完成，双方各得 20 灵石。契约进度：{progress}/{contract[3]}。"}
+    return {"type": "markdown", "content": f"师徒修行完成：徒弟获得{apprentice_reward}灵石，师父获得{master_reward}灵石。契约进度：{progress}/{contract[3]}。"}
 
 
 @reg_xz_func

@@ -9,6 +9,7 @@ import string
 from func.pd_func import pd_reg_func
 from sql.mysql import connect_mysql
 from Game_domain.gm_state import get_admin_uids
+from Game_domain.role_trait_service import calculate_lingshi_output
 
 
 INVITE_CODE_LENGTH = 8
@@ -312,6 +313,9 @@ async def claim_invitation_rewards(uid, qz):
                     return {"type": "markdown", "content": "##### 🎁 邀请奖励\n\n当前暂无可领取奖励。邀请新道友完成注册，或等待已邀请道友完成全部新手札记后再来领取。\n\n" + _buttons(("邀请列表", "邀请列表"), ("我的邀请码", "我的邀请码"))}
                 total_lingshi = sum(int(row[2]) for row in rewards)
                 total_xianyu = sum(int(row[3]) for row in rewards)
+                total_lingshi = await calculate_lingshi_output(
+                    cursor, uid, total_lingshi
+                )
                 for reward_id, *_ in rewards:
                     await cursor.execute(
                         "UPDATE user_invitation_reward SET claimed_at = CURRENT_TIMESTAMP WHERE id = %s AND claimed_at IS NULL",

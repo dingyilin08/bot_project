@@ -29,6 +29,14 @@ class SpiritBeastV2RuleTests(unittest.TestCase):
     def test_identification_hard_pity(self):
         self.assertEqual(roll_quality("稳定", 9, 0, 9999), "地品")
         self.assertEqual(roll_quality("稳定", 0, 59, 0), "天品")
+        self.assertEqual(
+            roll_quality("稳定", 0, 49, 0, heaven_pity=50),
+            "天品",
+        )
+        self.assertNotEqual(
+            roll_quality("稳定", 0, 48, 0, heaven_pity=50),
+            "天品",
+        )
 
     def test_template_selection_prefers_unowned_candidate(self):
         first = choose_template("斗气大陆", "地品", 7, "one", ())

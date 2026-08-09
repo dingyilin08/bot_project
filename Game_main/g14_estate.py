@@ -10,6 +10,7 @@ import aiomysql
 
 from func.pd_func import reg_xz_func
 from sql.mysql import connect_mysql
+from Game_domain.role_trait_service import calculate_lingshi_output
 
 
 MAX_LEVEL = 10
@@ -285,7 +286,8 @@ async def estate_claim(uid, qz, mode):
         async with conn.cursor() as cursor:
             await ensure_estate_claim_snapshot_columns(cursor)
             levels = await read_estate_levels(uid, cursor, for_update=True)
-            reward, description = claim_reward(levels, mode, uid, today)
+            base_reward, description = claim_reward(levels, mode, uid, today)
+            reward = await calculate_lingshi_output(cursor, uid, base_reward)
             levels_json = json.dumps(levels, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
             await cursor.execute(
                 """
@@ -307,4 +309,5 @@ async def estate_claim(uid, qz, mode):
                     spirit_essence=spirit_essence+VALUES(spirit_essence)
             """, (uid, beast_essence))
             await conn.commit()
-    return {"type": "markdown", "content": f"##### ✨ 洞府收取\n\n方式：{mode}\n获得灵石：**{reward}**\n获得御兽灵息：**{beast_essence}**\n> {description}\n\n<qqbot-cmd-input text='洞府' show='查看洞府' /> | <qqbot-cmd-input text='灵兽' show='诸天灵契' />"}
+    trait_note = "\n> 叶凡特性「源术通灵」额外产出20%。" if reward > base_reward else ""
+    return {"type": "markdown", "content": f"##### ✨ 洞府收取\n\n方式：{mode}\n获得灵石：**{reward}**\n获得御兽灵息：**{beast_essence}**\n> {description}{trait_note}\n\n<qqbot-cmd-input text='洞府' show='查看洞府' /> | <qqbot-cmd-input text='灵兽' show='诸天灵契' />"}

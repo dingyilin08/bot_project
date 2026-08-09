@@ -99,6 +99,9 @@ class ClaimCursor(BaseCursor):
         self.statements.append((compact, params))
         if compact.startswith("INSERT IGNORE INTO user_estate_claim"):
             self.rowcount = 1 if self.insert_succeeds else 0
+        elif compact.startswith("SELECT 1 FROM user_role"):
+            self._fetchone = None
+            self.rowcount = 0
         elif compact.startswith("INSERT INTO user_spirit_beast_wallet"):
             self.rowcount = 1
         elif compact.startswith("UPDATE user_zt SET lingshi = lingshi +"):
@@ -122,6 +125,9 @@ class EnhanceCursor(BaseCursor):
                 "试锋剑", "试锋套", "weapon", 1,
                 100, 10, 1000, 20, 5, 1, 1, 1, 1, 1, 0, None,
             )
+        elif compact.startswith("SELECT 1 FROM user_role"):
+            self._fetchone = None
+            self.rowcount = 0
         elif compact.startswith("SELECT lingshi FROM user_zt"):
             self._lingshi_reads += 1
             self._fetchone = (10000 if self._lingshi_reads == 1 else 9050,)

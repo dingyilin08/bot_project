@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from sql.mysql import connect_mysql
+from Game_domain.role_trait_service import calculate_lingshi_output
 
 
 BREAKTHROUGH_LEVELS = {10, 20, 30, 40, 50, 60, 70, 80, 90}
@@ -62,6 +63,7 @@ class RewardResult:
     add_gongji: int = 0
     add_fangyu: int = 0
     add_qixue: int = 0
+    lingshi: int = 0
 
 
 def required_exp(level: int) -> int:
@@ -261,6 +263,8 @@ class MySQLRewardService:
                             result.duplicates.append(key)
 
                     if lingshi:
+                        lingshi = await calculate_lingshi_output(cursor, uid, lingshi)
+                        result.lingshi = lingshi
                         key = self._key(battle_id, uid, "lingshi")
                         if await self._claim(cursor, key, uid, "LINGSHI", lingshi, battle_id):
                             await cursor.execute(

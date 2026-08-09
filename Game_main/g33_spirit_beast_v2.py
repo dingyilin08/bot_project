@@ -17,6 +17,11 @@ from Game_domain.spirit_beast_v2_rules import (
 )
 from func.pd_func import reg_xz_func
 from sql.mysql import connect_mysql
+from Game_domain.role_trait_service import (
+    calculate_lingshi_output,
+    has_owned_role,
+    heaven_pity_limit,
+)
 
 
 WALLET_COLUMNS = {
@@ -789,8 +794,10 @@ async def beast_identify(uid, qz):
                 int(value) for value in await cursor.fetchone()
             )
             rng = deterministic_rng("identify", uid, total + 1, trace[3])
+            meng_chuan_trait = await has_owned_role(cursor, uid, "孟川")
             quality = roll_quality(
-                trace[1], ten_count, sixty_count, rng.randrange(10000)
+                trace[1], ten_count, sixty_count, rng.randrange(10000),
+                heaven_pity=heaven_pity_limit(meng_chuan_trait),
             )
             world = rng.choice(WORLDS) if trace[1] == "未知" else trace[0]
             await cursor.execute("""
@@ -1875,6 +1882,9 @@ async def _dispatch_finish(uid, dispatch_id, cancel):
             }
             await _wallet_change(cursor, uid, wallet_rewards)
             if reward.get("lingshi"):
+                reward["lingshi"] = await calculate_lingshi_output(
+                    cursor, uid, reward["lingshi"]
+                )
                 await cursor.execute(
                     "UPDATE user_zt SET lingshi=lingshi+%s WHERE id=%s",
                     (reward["lingshi"], uid),

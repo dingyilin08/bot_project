@@ -13,6 +13,12 @@ from Tool.tool_user import *
 from func.pd_func import *
 from Tool.tool_power import update_role_power
 from Tool.tool_command import pagination_controls
+from Game_domain.role_trait_service import (
+    adjusted_start_timestamp,
+    apply_production_duration,
+    calculate_lingshi_output,
+    has_owned_role,
+)
 
 
 FARM_SLOT_COUNT = 12
@@ -1117,7 +1123,10 @@ async def sell_herb(uid, qz, param):
                 await conn.rollback()
                 return {"type": "markdown", "content": f"药材不足：{herb['name']} x {sell_num}"}
 
-            gain_lingshi = int(herb["sell_price"]) * sell_num
+            base_gain_lingshi = int(herb["sell_price"]) * sell_num
+            gain_lingshi = await calculate_lingshi_output(
+                cursor, uid, base_gain_lingshi
+            )
             await cursor.execute(
                 "UPDATE user_zt SET lingshi = lingshi + %s WHERE id = %s",
                 (gain_lingshi, uid),
@@ -1239,7 +1248,10 @@ async def bo_zhong(uid, qz, param):
 
             slot["is_zz"] = 1
             slot["zz_id"] = int(seed["id"])
-            slot["time"] = int(time.time())
+            han_li_trait = await has_owned_role(cursor, uid, "韩立")
+            slot["time"] = adjusted_start_timestamp(
+                time.time(), FARM_MATURE_SECONDS, han_li_trait
+            )
             slots[plot_no - 1] = slot
             await _save_slots(uid, slots, cursor, "user_yaotian", "yt", [plot_no])
             await conn.commit()
@@ -1248,7 +1260,10 @@ async def bo_zhong(uid, qz, param):
             lines = []
             lines.append("##### 播种成功")
             lines.append(f"药田{plot_no} 已播种：{seed['name']}")
-            lines.append(f"预计成熟：{_format_seconds(FARM_MATURE_SECONDS)}")
+            farm_duration = apply_production_duration(FARM_MATURE_SECONDS, han_li_trait)
+            lines.append(f"预计成熟：{_format_seconds(farm_duration)}")
+            if han_li_trait:
+                lines.append("> 韩立特性「掌天培灵」生效：种植耗时缩短20%。")
             lines.append("***")
             lines.append("<qqbot-cmd-input text='药园' show='药园' /> | <qqbot-cmd-input text='一键播种 ' show='一键播种*' />")
             return {"type": "markdown", "content": "\n".join(lines)}
@@ -1291,9 +1306,17 @@ async def yj_bozhong(uid, qz, seed_name):
 
             plant_num = min(len(empty_indices), own_num)
             now_ts = int(time.time())
+            han_li_trait = await has_owned_role(cursor, uid, "韩立")
+            planted_at = adjusted_start_timestamp(
+                now_ts, FARM_MATURE_SECONDS, han_li_trait
+            )
             changed = []
             for idx in empty_indices[:plant_num]:
-                slots[idx - 1] = {"is_zz": 1, "zz_id": int(seed["id"]), "time": now_ts}
+                slots[idx - 1] = {
+                    "is_zz": 1,
+                    "zz_id": int(seed["id"]),
+                    "time": planted_at,
+                }
                 changed.append(idx)
 
             await _save_slots(uid, slots, cursor, "user_yaotian", "yt", changed)
@@ -1312,7 +1335,10 @@ async def yj_bozhong(uid, qz, seed_name):
             lines.append("##### 一键播种完成")
             lines.append(f"种子：{seed['name']}")
             lines.append(f"播种药田数量：{plant_num}")
-            lines.append(f"预计成熟：{_format_seconds(FARM_MATURE_SECONDS)}")
+            farm_duration = apply_production_duration(FARM_MATURE_SECONDS, han_li_trait)
+            lines.append(f"预计成熟：{_format_seconds(farm_duration)}")
+            if han_li_trait:
+                lines.append("> 韩立特性「掌天培灵」生效：种植耗时缩短20%。")
             lines.append("***")
             lines.append("<qqbot-cmd-input text='药园' show='药园' /> | <qqbot-cmd-input text='种子背包' show='种子背包' />")
             return {"type": "markdown", "content": "\n".join(lines)}
@@ -1724,6 +1750,10 @@ async def lian_dan(uid, qz, param):
                 return {"type": "markdown", "content": f"炼丹失败，{lack_msg}"}
 
             now_ts = int(time.time())
+            xiao_yan_trait = await has_owned_role(cursor, uid, "萧炎")
+            alchemy_started_at = adjusted_start_timestamp(
+                now_ts, ALCHEMY_SECONDS, xiao_yan_trait
+            )
             from Game_main.g18_alchemy_study import get_alchemy_mastery
             from Game_main.g19_sect import get_active_research
             mastery = await get_alchemy_mastery(cursor, uid, recipe["name"])
@@ -1736,7 +1766,7 @@ async def lian_dan(uid, qz, param):
             slots[furnace_no - 1] = {
                 "is_lz": 1,
                 "df_id": int(recipe["id"]),
-                "time": now_ts,
+                "time": alchemy_started_at,
                 "fire_count": 0,
                 "batch_ts": now_ts,
                 "fire_style": fire_style,
@@ -1757,7 +1787,10 @@ async def lian_dan(uid, qz, param):
             lines.append("##### 炼丹开始")
             lines.append(f"丹炉{furnace_no}：{recipe['name']}")
             lines.append(f"消耗灵石：{need_lingshi}")
-            lines.append(f"炼制时长：{_format_seconds(ALCHEMY_SECONDS)}")
+            alchemy_duration = apply_production_duration(ALCHEMY_SECONDS, xiao_yan_trait)
+            lines.append(f"炼制时长：{_format_seconds(alchemy_duration)}")
+            if xiao_yan_trait:
+                lines.append("> 萧炎特性「帝炎丹心」生效：炼丹耗时缩短20%。")
             lines.append(f"火候：{fire_style}｜当前熟练度：{mastery}")
             lines.append("成功率：保守95% / 均衡90% / 冒险83%")
             if sect_research:
@@ -2033,6 +2066,9 @@ async def fu_dan(uid, qz, param):
             if exp_add > 0:
                 await cursor.execute("UPDATE user_role SET exp = exp + %s WHERE id = %s", (exp_add, role_id))
             if lingshi_add > 0:
+                lingshi_add = await calculate_lingshi_output(
+                    cursor, uid, lingshi_add
+                )
                 await cursor.execute("UPDATE user_zt SET lingshi = lingshi + %s WHERE id = %s", (lingshi_add, uid))
 
             usage_raw[usage_key] = used_times + use_num

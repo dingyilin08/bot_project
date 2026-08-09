@@ -12,6 +12,7 @@ from Game_domain.role_special_service import (
     world_boss_contribution,
     world_boss_loadout,
 )
+from Game_domain.role_trait_service import calculate_lingshi_output
 
 
 MAX_CHALLENGES = 3
@@ -207,7 +208,8 @@ async def world_boss_reward(uid, qz):
             if total < 1_200:
                 return {"type": "markdown", "content": "累计贡献达到 1200 后可领取参与奖励；辅助与净化同样计入。"}
             tier = "讨伐" if run[4] <= 0 else "参与"
-            reward = 120 if tier == "讨伐" else 60
+            base_reward = 120 if tier == "讨伐" else 60
+            reward = await calculate_lingshi_output(cursor, uid, base_reward)
             await cursor.execute("INSERT IGNORE INTO world_boss_reward_log (run_id, uid, reward_tier, reward_lingshi) VALUES (%s, %s, %s, %s)", (run[0], uid, tier, reward))
             if cursor.rowcount <= 0:
                 return {"type": "markdown", "content": "本周期该档世界 Boss 奖励已领取。"}
@@ -215,6 +217,8 @@ async def world_boss_reward(uid, qz):
             await conn.commit()
     insight = await grant_world_insight(run_key=run[1], uid=uid)
     content = f"领取世界 Boss「{tier}」奖励成功：灵石 +{reward}。"
+    if reward > base_reward:
+        content += "\n叶凡特性「源术通灵」额外产出20%。"
     if insight:
         content += f"\n获得{insight['role_name']}角色感悟：本体感悟 +2、感悟精华 +10、组合核心 +1。"
         if insight.get("extra_name"):

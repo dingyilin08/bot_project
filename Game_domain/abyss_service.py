@@ -10,6 +10,11 @@ from uuid import uuid4
 
 from sql.mysql import connect_mysql
 from Tool.combat_system import CombatEntity, CombatManager, Skill, normalize_buff_target
+from Game_domain.role_trait_service import (
+    apply_battle_hp,
+    calculate_lingshi_output,
+    has_owned_role,
+)
 
 from .abyss_rules import (
     ABYSS_MAX_KILLS,
@@ -352,12 +357,16 @@ async def _build_role_snapshot(uid, cursor):
     attack = int(gongji * (1 + float(gongji_jc or 0) / 100)) + int(equip.get("gongji", 0))
     defense = int(fangyu * (1 + float(fangyu_jc or 0) / 100)) + int(equip.get("fangyu", 0))
     hp = int(qixue * (1 + float(qixue_jc or 0) / 100)) + int(equip.get("qixue", 0))
+    wang_lin_trait = await has_owned_role(cursor, uid, "王林")
+    hp = apply_battle_hp(hp, wang_lin_trait)
     speed = int(sudu) + int(equip.get("sudu", 0))
     estate = await read_estate_levels(uid, cursor, ensure_rows=False)
     causal = await get_causal_mark_snapshot(uid, cursor)
     season = await get_active_season_effect(cursor)
     research = await get_active_research(uid, cursor)
     effects = solo_pve_effect_snapshot(causal, season)
+    if wang_lin_trait:
+        effects["sources"].append("王林特性：气血 +20%")
     attack, defense, speed = apply_solo_pve_stat_effects(attack, defense, speed, effects)
     skill_bonus = scripture_skill_effect_bonus_bp(estate.get("scripture_library", 1))
     if skill_bonus:
@@ -645,11 +654,14 @@ async def _settle_run_in_transaction(cursor, run, conn=None):
         ):
             total_exp += delta["exp"]
             applied_any = True
-        if delta["lingshi"] and await _claim_reward(
+        credited_lingshi = await calculate_lingshi_output(
+            cursor, run["uid"], delta["lingshi"]
+        )
+        if credited_lingshi and await _claim_reward(
             cursor, f"abyss:{run['uid']}:{layer_no}:lingshi:star:{stars}", run["uid"], "LINGSHI",
-            delta["lingshi"], run["run_uuid"], layer_no,
+            credited_lingshi, run["run_uuid"], layer_no,
         ):
-            total_lingshi += delta["lingshi"]
+            total_lingshi += credited_lingshi
             applied_any = True
         if delta["xianyu"] and await _claim_reward(
             cursor, f"abyss:{run['uid']}:{layer_no}:xianyu:star:{stars}", run["uid"], "XIANYU",

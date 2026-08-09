@@ -42,6 +42,7 @@ from Game_domain.dungeon_reward_rules import (
     calculate_full_clear_currency,
     streak_bonus_bp,
 )
+from Game_domain.role_trait_service import apply_battle_hp, has_owned_role
 
 
 def _dungeon_reward_battle_id(uid, dungeon_id, progress, monster_index, settlement_battle_id=None):
@@ -1452,6 +1453,8 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
                 'shanbi': final_shanbi,
                 'mingzhong': final_mingzhong,
             }
+            wang_lin_trait = await has_owned_role(cursor, uid, "王林")
+            final_qixue = apply_battle_hp(final_qixue, wang_lin_trait)
 
             # 所有长期玩法效果在创建本次怪物战斗时冻结；不回写角色永久属性。
             from Game_main.g14_estate import (
@@ -1467,6 +1470,8 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
             season_effect = await get_active_season_effect(cursor)
             active_research = await get_active_research(uid, cursor)
             pve_effect_snapshot = solo_pve_effect_snapshot(causal_effect, season_effect)
+            if wang_lin_trait:
+                pve_effect_snapshot["sources"].append("王林特性：气血 +20%")
             final_gongji, final_fangyu, final_sudu = apply_solo_pve_stat_effects(
                 final_gongji, final_fangyu, final_sudu, pve_effect_snapshot
             )
@@ -1878,6 +1883,8 @@ async def fight_monster(uid, qz, monster_index, combat_manager=None, settlement_
             items=reward_items,
             equipments=reward_equipments,
         )
+        if total_lingshi:
+            rewards['lingshi'] = reward_result.lingshi
         rewards['special_drop'] = await grant_battle_drop(
             battle_id=reward_battle_id,
             uid=uid,

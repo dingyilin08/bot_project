@@ -17,6 +17,7 @@ from Game_domain.dungeon_daily_limit import (
 )
 from Game_domain.dungeon_reward_rules import calculate_full_clear_currency
 from Game_domain.reward_service import MySQLRewardService
+from Game_domain.role_trait_service import calculate_lingshi_output
 from Game_main.g6_dungeon import ensure_dungeon_clear_schema
 from Game_main.g7_equip import QUALITY_DROP_RATE
 from Game_main.g10_shop import (
@@ -400,9 +401,12 @@ async def sweep_dungeon(uid, qz, dungeon_id, request_id=None):
                         raise DungeonSweepError("副本历练次数扣除失败，请稍后重试。")
 
                     progress = await MySQLRewardService().apply_experience(cursor, role, plan["exp"])
+                    credited_lingshi = await calculate_lingshi_output(
+                        cursor, uid, plan["lingshi"]
+                    )
                     await cursor.execute(
                         "UPDATE user_zt SET lingshi = lingshi + %s WHERE id = %s",
-                        (plan["lingshi"], uid),
+                        (credited_lingshi, uid),
                     )
                     for item_id, amount in plan["item_totals"].items():
                         await cursor.execute(
@@ -430,7 +434,7 @@ async def sweep_dungeon(uid, qz, dungeon_id, request_id=None):
                         "dungeon_id": dungeon_id,
                         "dungeon_name": dungeon["name"],
                         "exp": plan["exp"],
-                        "lingshi": plan["lingshi"],
+                        "lingshi": credited_lingshi,
                         "items": [
                             {
                                 "id": item_id,

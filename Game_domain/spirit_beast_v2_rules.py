@@ -155,12 +155,13 @@ def generate_aptitudes(uid, nonce, quality, minimum_total=0):
     return tuple(values)
 
 
-def roll_quality(clue, ten_pity, sixty_pity, roll):
-    """10次地品、60次天品硬保底；roll 为[0,9999]。"""
+def roll_quality(clue, ten_pity, sixty_pity, roll, heaven_pity=60):
+    """10次地品与可配置天品硬保底；roll 为[0,9999]。"""
     ten_pity = bounded_int(ten_pity)
     sixty_pity = bounded_int(sixty_pity)
     roll = bounded_int(roll, 0, 9999)
-    if sixty_pity >= 59:
+    heaven_pity = bounded_int(heaven_pity, 1, 60)
+    if sixty_pity >= heaven_pity - 1:
         return "天品"
     if ten_pity >= 9:
         return "地品" if roll >= 500 else "天品"

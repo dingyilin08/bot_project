@@ -4,6 +4,7 @@
 from typing import Dict, Optional
 
 from Game_domain.role_special_catalog import get_role_spec
+from Game_domain.role_trait_service import trait_description
 
 
 _ROLE_COPY: Dict[str, Dict[str, str]] = {
@@ -59,6 +60,8 @@ def render_role_special_intro(role_name: str, include_actions: bool = True) -> O
     output = f"##### ⚔️ {normalized_name}｜专属战斗养成玩法\n\n"
     output += "**核心定位：**\n"
     output += f"> {copy['position']}\n\n"
+    output += "**拥有特性：**\n"
+    output += f"> {trait_description(normalized_name)}\n\n"
     output += "**养成主线：**\n"
     output += f"> {copy['growth']}\n"
     output += f"> 本角色专属主线为「{spec['growth_name']}」，材料包括 {spec['drop_name']}、{spec['essence_name']} 与 {spec['core_name']}。\n\n"

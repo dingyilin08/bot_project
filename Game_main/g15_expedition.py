@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from func.pd_func import reg_xz_func
 from sql.mysql import connect_mysql
+from Game_domain.role_trait_service import calculate_lingshi_output
 
 
 MAX_NODES = 6
@@ -177,9 +178,12 @@ async def _finish_node(session, cursor):
         INSERT IGNORE INTO expedition_node_log (session_id, node_no, node_type, selected_choice, reward_lingshi, summary)
         VALUES (%s, %s, %s, %s, %s, %s)
     """, (session["id"], node_no, node_options(node_no)[0], choice, reward, summary))
+    bonus_count = 0
     if cursor.rowcount:
         for uid, _ in members:
-            await cursor.execute("UPDATE user_zt SET lingshi = lingshi + %s WHERE id = %s", (reward, uid))
+            credited_reward = await calculate_lingshi_output(cursor, uid, reward)
+            bonus_count += int(credited_reward > reward)
+            await cursor.execute("UPDATE user_zt SET lingshi = lingshi + %s WHERE id = %s", (credited_reward, uid))
             if mark:
                 await cursor.execute("""
                     INSERT INTO user_causal_mark (uid, mark_name, stack_count, last_session_id)
@@ -191,12 +195,14 @@ async def _finish_node(session, cursor):
         await cursor.execute("UPDATE party SET state = 'LOBBY' WHERE id = %s", (session["party_id"],))
         await cursor.execute("UPDATE party_member SET ready = 0 WHERE party_id = %s AND member_state = 'ACTIVE'", (session["party_id"],))
         session["state"] = "COMPLETED"
-        return f"第 {node_no} 节「{choice}」结算：每人获得 {reward} 灵石。{summary} 本次三千道途已完成！"
+        trait_note = f"其中{bonus_count}名叶凡拥有者额外获得20%。" if bonus_count else ""
+        return f"第 {node_no} 节「{choice}」结算：每人基础获得 {reward} 灵石。{trait_note}{summary} 本次三千道途已完成！"
     deadline = datetime.now() + timedelta(seconds=VOTE_SECONDS)
     await cursor.execute("UPDATE expedition_session SET current_node = current_node + 1, node_deadline = %s WHERE id = %s", (deadline, session["id"]))
     session["current_node"] += 1
     session["node_deadline"] = deadline
-    return f"第 {node_no} 节选择「{choice}」：每人获得 {reward} 灵石。{summary} 已进入下一节点。"
+    trait_note = f"其中{bonus_count}名叶凡拥有者额外获得20%。" if bonus_count else ""
+    return f"第 {node_no} 节选择「{choice}」：每人基础获得 {reward} 灵石。{trait_note}{summary} 已进入下一节点。"
 
 
 async def _advance_if_due(session, cursor):
