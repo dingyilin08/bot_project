@@ -31,6 +31,12 @@ from Game_main.g7_equip import (
 from Game_main.g4_benyuan import get_role_benyuan_skills_for_battle
 from Game_domain.reward_service import MySQLRewardService, RewardEquipment, RewardItem
 from Game_domain.role_special_service import DAILY_DROP_LIMIT, grant_battle_drop, load_battle_special
+from Game_domain.dungeon_daily_limit import (
+    DAILY_DUNGEON_ATTEMPT_LIMIT,
+    consume_daily_attempt,
+    ensure_daily_attempt_schema,
+    get_daily_attempt_status,
+)
 
 
 def _dungeon_reward_battle_id(uid, dungeon_id, progress, monster_index, settlement_battle_id=None):
@@ -98,7 +104,7 @@ def calculate_player_battle_hp(final_qixue, inherited_ratio):
 # ================================
 
 # 每日免费挑战次数
-FREE_DAILY_CHALLENGES = 20
+FREE_DAILY_CHALLENGES = DAILY_DUNGEON_ATTEMPT_LIMIT
 
 # 波次难度递增系数
 WAVE_DIFFICULTY_MULTIPLIER = {
@@ -120,7 +126,7 @@ KILL_STREAK_REWARDS = {
 
 # 经验灵石倍率
 EXP_MULTIPLIER = 15  # 经验获得倍率
-LINGSHI_MULTIPLIER = 50  # 灵石获得倍率（单独控制）
+LINGSHI_MULTIPLIER = 1  # 灵石按副本配置正常结算，防止50倍倍率造成经济膨胀
 
 # 不同世界挑战难度加成（境界克制）
 DIFFERENT_WORLD_MULTIPLIER = 1.20  # 不同世界挑战时怪物属性+20%
@@ -619,39 +625,20 @@ async def abandon_dungeon(uid, dungeon_id):
 
 # 获取今日剩余挑战次数
 async def get_daily_remaining_count(uid):
-    from datetime import date
-    today = date.today()
-
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            # 检查是否需要重置
-            sql = "SELECT dungeon_num, daily_dungeon_reset_time FROM user_zt WHERE id = %s"
-            await cursor.execute(sql, (uid,))
-            result = await cursor.fetchone()
-
-            if not result:
-                return FREE_DAILY_CHALLENGES
-
-            remaining = result[0] if result[0] is not None else FREE_DAILY_CHALLENGES
-            last_reset = result[1]
-
-            # 如果日期不同，重置次数
-            if last_reset != today:
-                await reset_daily_challenge_count(uid)
-                return FREE_DAILY_CHALLENGES
-
-            return max(0, remaining)
+            await ensure_daily_attempt_schema(cursor)
+            status = await get_daily_attempt_status(cursor, uid)
+            await conn.commit()
+            return status["remaining"] if status else FREE_DAILY_CHALLENGES
 
 
 # 重置每日挑战次数
 async def reset_daily_challenge_count(uid):
-    from datetime import date
-    today = date.today()
-
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            sql = "UPDATE user_zt SET dungeon_num = %s, daily_dungeon_reset_time = %s WHERE id = %s"
-            await cursor.execute(sql, (FREE_DAILY_CHALLENGES, today, uid))
+            await ensure_daily_attempt_schema(cursor)
+            await get_daily_attempt_status(cursor, uid)
             await conn.commit()
 
 
@@ -659,14 +646,9 @@ async def reset_daily_challenge_count(uid):
 async def increment_daily_challenge(uid):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            # 先确保今日已重置
-            remaining = await get_daily_remaining_count(uid)
-            if remaining <= 0:
-                return False
-
-            sql = "UPDATE user_zt SET dungeon_num = dungeon_num - 1 WHERE id = %s AND dungeon_num > 0"
-            await cursor.execute(sql, (uid,))
-            success = cursor.rowcount > 0
+            await ensure_daily_attempt_schema(cursor)
+            result = await consume_daily_attempt(cursor, uid)
+            success = result is not None
             await conn.commit()
             return success
 
@@ -1329,7 +1311,10 @@ async def start_challenge_dungeon(uid, qz, dungeon_id):
             # 检查挑战次数
             remaining_count = await get_daily_remaining_count(uid)
             if remaining_count <= 0:
-                return qz + f"今日挑战次数已用完\n每日{FREE_DAILY_CHALLENGES}次 明日重置"
+                return qz + (
+                    f"今日副本历练额度已用完\n基础每日{FREE_DAILY_CHALLENGES}次，"
+                    "可使用体力药补充，或明日重置"
+                )
 
             # 增加挑战次数
             success = await increment_daily_challenge(uid)

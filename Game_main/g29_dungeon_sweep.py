@@ -10,10 +10,14 @@ from uuid import uuid4
 
 from func.pd_func import reg_xz_func
 from sql.mysql import connect_mysql
+from Game_domain.dungeon_daily_limit import (
+    consume_daily_attempt,
+    ensure_daily_attempt_schema,
+    get_daily_attempt_status,
+)
 from Game_domain.reward_service import MySQLRewardService
 from Game_main.g6_dungeon import (
     EXP_MULTIPLIER,
-    FREE_DAILY_CHALLENGES,
     KILL_STREAK_REWARDS,
     LINGSHI_MULTIPLIER,
     ensure_dungeon_clear_schema,
@@ -232,25 +236,15 @@ def _render_sweep_result(reward, duplicate=False):
 
 @reg_xz_func
 async def dungeon_sweep_list(uid, qz):
-    today = date.today()
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
             await _ensure_sweep_schema(cursor)
+            await ensure_daily_attempt_schema(cursor)
             await conn.commit()
-            await cursor.execute(
-                "SELECT dungeon_num, daily_dungeon_reset_time FROM user_zt WHERE id = %s FOR UPDATE",
-                (uid,),
-            )
-            player = await cursor.fetchone()
-            if not player:
+            attempt_status = await get_daily_attempt_status(cursor, uid, lock=True)
+            if not attempt_status:
                 return {"type": "markdown", "content": "未找到玩家数据，请重新注册后再试。"}
-            remaining = int(player[0] if player[0] is not None else FREE_DAILY_CHALLENGES)
-            if player[0] is None or player[1] != today:
-                remaining = FREE_DAILY_CHALLENGES
-                await cursor.execute(
-                    "UPDATE user_zt SET dungeon_num = %s, daily_dungeon_reset_time = %s WHERE id = %s",
-                    (remaining, today, uid),
-                )
+            remaining = attempt_status["remaining"]
             await cursor.execute(
                 "SELECT id, name, dengji FROM user_role WHERE uid = %s AND is_chuzhan = 1 LIMIT 1",
                 (uid,),
@@ -323,13 +317,12 @@ async def sweep_dungeon(uid, qz, dungeon_id, request_id=None):
             try:
                 async with conn.cursor() as cursor:
                     await _ensure_sweep_schema(cursor)
+                    await ensure_daily_attempt_schema(cursor)
                     await conn.commit()
-                    await cursor.execute(
-                        "SELECT dungeon_num, daily_dungeon_reset_time FROM user_zt WHERE id = %s FOR UPDATE",
-                        (uid,),
+                    attempt_status = await get_daily_attempt_status(
+                        cursor, uid, lock=True, stat_date=today
                     )
-                    player = await cursor.fetchone()
-                    if not player:
+                    if not attempt_status:
                         raise DungeonSweepError("未找到玩家数据，请重新注册后再试。")
 
                     await cursor.execute(
@@ -342,15 +335,12 @@ async def sweep_dungeon(uid, qz, dungeon_id, request_id=None):
                         reward = json.loads(duplicate[0])
                         return _render_sweep_result(reward, duplicate=True)
 
-                    remaining = int(player[0] if player[0] is not None else FREE_DAILY_CHALLENGES)
-                    if player[0] is None or player[1] != today:
-                        remaining = FREE_DAILY_CHALLENGES
-                        await cursor.execute(
-                            "UPDATE user_zt SET dungeon_num = %s, daily_dungeon_reset_time = %s WHERE id = %s",
-                            (remaining, today, uid),
-                        )
+                    remaining = attempt_status["remaining"]
                     if remaining <= 0:
-                        raise DungeonSweepError("今日副本历练次数已用尽。可使用体力药恢复次数后再来。")
+                        raise DungeonSweepError(
+                            f"今日副本挑战与扫荡额度已用完（{attempt_status['used']}/{attempt_status['limit']}）。"
+                            "可使用体力药补充额度，或明日再来。"
+                        )
 
                     await cursor.execute(
                         """
@@ -422,11 +412,10 @@ async def sweep_dungeon(uid, qz, dungeon_id, request_id=None):
                         "DELETE FROM user_item WHERE uid = %s AND item_id = %s AND item_num <= 0",
                         (uid, DUNGEON_SWEEP_TICKET_ITEM_ID),
                     )
-                    await cursor.execute(
-                        "UPDATE user_zt SET dungeon_num = dungeon_num - 1 WHERE id = %s AND dungeon_num > 0",
-                        (uid,),
+                    attempt_result = await consume_daily_attempt(
+                        cursor, uid, stat_date=today
                     )
-                    if cursor.rowcount <= 0:
+                    if not attempt_result:
                         raise DungeonSweepError("副本历练次数扣除失败，请稍后重试。")
 
                     progress = await MySQLRewardService().apply_experience(cursor, role, plan["exp"])
@@ -455,7 +444,7 @@ async def sweep_dungeon(uid, qz, dungeon_id, request_id=None):
                         await update_role_power(conn, uid)
 
                     remaining_tickets = tickets - 1
-                    remaining_challenges = remaining - 1
+                    remaining_challenges = attempt_result["remaining"]
                     reward = {
                         "dungeon_id": dungeon_id,
                         "dungeon_name": dungeon["name"],

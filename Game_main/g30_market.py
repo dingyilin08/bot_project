@@ -18,6 +18,7 @@ MAX_ORDER_QUANTITY = 9999
 MAX_ORDER_TOTAL = 1_000_000_000
 MARKET_CATEGORIES = ("丹药", "材料", "功法", "神通", "法宝", "坐骑", "消耗品")
 BLOCKED_MARKERS = ("绑定", "任务", "轮回专属", "专属", "卷轴", "装备", "本源材料", "祈愿")
+MARKET_BLOCKED_ITEM_IDS = frozenset({208, 209, 210, 211, 212})
 MARKET_PRICE_ROUNDING = 10
 MATERIAL_TIER_FLOORS = {1: 100, 2: 300, 3: 900, 4: 2700}
 PILL_CATEGORY_FLOORS = {1: 1500, 2: 5000, 3: 15000}
@@ -94,8 +95,12 @@ def category_for_item(item_name, item_type):
     return "消耗品"
 
 
-def is_market_banned_item(item_name, description="", access="", item_type=None):
+def is_market_banned_item(
+    item_name, description="", access="", item_type=None, item_id=None
+):
     """按物品文案拦截不可交易的养成、祈愿与专属资产。"""
+    if int(item_id or 0) in MARKET_BLOCKED_ITEM_IDS:
+        return True
     if int(item_type or 0) in (1, 4):
         return False
     text = " ".join(str(value or "") for value in (item_name, description, access))
@@ -342,8 +347,8 @@ async def _get_tradable_item(cursor, item_name):
     item_type = int(item_type or 0)
     if item_type not in (1, 2, 3, 4, 5, 6, 7):
         raise MarketError("该物品不是可堆叠的通用道具，无法在坊市交易。")
-    if is_market_banned_item(name, description, access, item_type):
-        raise MarketError("技能卷轴、装备、本源材料、专属碎片、祈愿产出及绑定/任务道具不可在坊市交易。")
+    if is_market_banned_item(name, description, access, item_type, item_id):
+        raise MarketError("商城限购便利道具、技能卷轴、装备、本源材料、专属碎片、祈愿产出及绑定/任务道具不可在坊市交易。")
     item_id = int(item_id)
     if item_type not in (1, 4):
         await cursor.execute(
@@ -511,7 +516,7 @@ async def market_help(uid, qz):
         "",
         "**五、交易规则**",
         f"> 订单有效期为 **{MARKET_EXPIRE_HOURS} 小时**；到期自动返还余货或余款。成交从卖家收入扣除 **8%** 手续费（向下取整并销毁）。",
-        "> 药材与丹药可自由上架或收购（含祈愿产出）；技能卷轴、装备、本源材料、专属碎片及其他祈愿/绑定/任务道具不可交易。搜索和上架设有短暂冷却，防止刷屏。",
+        "> 药材与丹药可自由上架或收购（含祈愿产出）；扫荡副本券、体力药等商城限购便利道具，以及技能卷轴、装备、本源材料、专属碎片和其他祈愿/绑定/任务道具不可交易。搜索和上架设有短暂冷却，防止刷屏。",
         "> 药材底价按品阶和 NPC 回收价（计入 8% 手续费）计算；丹药底价覆盖丹方灵石消耗与所需药材回收价，出售与收购单均须遵守。",
         "***",
         _buttons(("坊市", "返回坊市"), ("坊市列表", "浏览订单")),

@@ -6,15 +6,22 @@ from datetime import date, timedelta
 from func.pd_func import reg_xz_func
 from sql.mysql import connect_mysql
 from Tool.tool_command import pagination_controls
+from Game_domain.dungeon_daily_limit import (
+    DAILY_DUNGEON_ATTEMPT_LIMIT,
+    MAX_DUNGEON_ATTEMPT_LIMIT,
+    ensure_daily_attempt_schema,
+    get_daily_attempt_status,
+    increase_daily_attempt_limit,
+)
 
 
 SHOP_PAGE_SIZE = 6
-FREE_DAILY_CHALLENGES = 20
-DAILY_CHALLENGE_CAP = 40
+FREE_DAILY_CHALLENGES = DAILY_DUNGEON_ATTEMPT_LIMIT
+DAILY_CHALLENGE_CAP = MAX_DUNGEON_ATTEMPT_LIMIT
 STAMINA_POTION_ITEM_ID = 209
 STAMINA_POTION_RESTORE = 5
 DUNGEON_SWEEP_TICKET_ITEM_ID = 211
-DUNGEON_SWEEP_TICKET_DAILY_LIMIT = 20
+DUNGEON_SWEEP_TICKET_DAILY_LIMIT = 10
 DIRECTIONAL_SMELTING_JADE_ITEM_ID = 212
 
 # 商品价格以当前副本、药园和炼丹的灵石产出为基准；商品均可由后续运营在
@@ -177,6 +184,11 @@ async def _ensure_shop_schema(cursor):
                 item["description"], item["daily_limit"], item["weekly_limit"],
             ),
         )
+    # 体力药保持正常供给；每日4瓶，每瓶扩充5次，当日总额度最多40次。
+    await cursor.execute(
+        "UPDATE data_shop_item SET enabled=1,daily_limit=4 WHERE item_id=%s",
+        (STAMINA_POTION_ITEM_ID,),
+    )
 
 
 async def _get_shop_item(cursor, item_name):
@@ -279,7 +291,7 @@ async def show_shop(uid, qz, page=1):
         "***",
         "便捷道具只缩短等待或补充可玩次数，不直接出售装备、技能与副本稀有材料。",
         pagination_controls("商城", page, total_pages),
-        "<qqbot-cmd-input text='购买商品 ' show='购买商品 名称[-数量]' /> | <qqbot-cmd-input text='使用体力药' show='使用1瓶体力药' />",
+        "<qqbot-cmd-input text='购买商品 ' show='购买商品 名称[-数量]' /> | <qqbot-cmd-input text='使用体力药' show='使用1瓶体力药' /> | <qqbot-cmd-input text='副本菜单' show='副本菜单' />",
     ])
     return {"type": "markdown", "content": "\n".join(lines)}
 
@@ -400,48 +412,62 @@ async def use_stamina_potion(uid, qz, param):
     except (TypeError, ValueError):
         count = 0
     if count <= 0:
-        return {"type": "markdown", "content": "指令错误，正确指令：使用体力药 数量\n示例：使用体力药 1"}
+        return {
+            "type": "markdown",
+            "content": "指令错误，正确指令：使用体力药 数量\n示例：使用体力药 1",
+        }
 
-    today = date.today()
+    restore = count * STAMINA_POTION_RESTORE
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
             await _ensure_shop_schema(cursor)
-            await cursor.execute(
-                "SELECT dungeon_num, daily_dungeon_reset_time FROM user_zt WHERE id = %s FOR UPDATE",
-                (uid,),
-            )
-            row = await cursor.fetchone()
-            if not row:
+            await ensure_daily_attempt_schema(cursor)
+            status = await get_daily_attempt_status(cursor, uid, lock=True)
+            if not status:
                 await conn.rollback()
-                return {"type": "markdown", "content": "未找到玩家数据，请重新注册后再试。"}
-            remaining = int(row[0] if row[0] is not None else FREE_DAILY_CHALLENGES)
-            if row[1] != today:
-                remaining = FREE_DAILY_CHALLENGES
-                await cursor.execute(
-                    "UPDATE user_zt SET dungeon_num = %s, daily_dungeon_reset_time = %s WHERE id = %s",
-                    (remaining, today, uid),
+                return {
+                    "type": "markdown",
+                    "content": "未找到玩家数据，请重新注册后再试。",
+                }
+            if status["limit"] + restore > DAILY_CHALLENGE_CAP:
+                await conn.rollback()
+                usable = max(
+                    0,
+                    (DAILY_CHALLENGE_CAP - status["limit"])
+                    // STAMINA_POTION_RESTORE,
                 )
-
-            restore = count * STAMINA_POTION_RESTORE
-            if remaining + restore > DAILY_CHALLENGE_CAP:
+                return {
+                    "type": "markdown",
+                    "content": (
+                        f"今日历练额度为{status['limit']}次，使用后不能超过"
+                        f"{DAILY_CHALLENGE_CAP}次。当前最多还能使用{usable}瓶体力药。"
+                    ),
+                }
+            if not await _deduct_user_item(
+                cursor, uid, STAMINA_POTION_ITEM_ID, count
+            ):
                 await conn.rollback()
-                return {"type": "markdown", "content": f"当前历练次数为{remaining}，使用后不能超过每日上限{DAILY_CHALLENGE_CAP}次。请减少使用数量。"}
-            if not await _deduct_user_item(cursor, uid, STAMINA_POTION_ITEM_ID, count):
+                return {
+                    "type": "markdown",
+                    "content": f"体力药不足，需要{count}瓶。",
+                }
+            result = await increase_daily_attempt_limit(cursor, uid, restore)
+            if not result:
                 await conn.rollback()
-                return {"type": "markdown", "content": f"体力药不足，需要{count}个。"}
-
-            new_remaining = remaining + restore
-            await cursor.execute(
-                "UPDATE user_zt SET dungeon_num = %s, daily_dungeon_reset_time = %s WHERE id = %s",
-                (new_remaining, today, uid),
-            )
+                return {
+                    "type": "markdown",
+                    "content": "今日历练额度已达上限，体力药未消耗。",
+                }
             await conn.commit()
 
     return {
         "type": "markdown",
         "content": "\n".join((
-            "##### 体力恢复成功", f"使用体力药：x {count}", f"恢复历练次数：+{restore}",
-            f"当前副本历练次数：{new_remaining}/{DAILY_CHALLENGE_CAP}", "***",
+            "##### 体力恢复成功",
+            f"使用体力药：**x {count}**",
+            f"今日历练额度：**+{result['added']}**",
+            f"剩余历练次数：**{result['remaining']}**｜当日额度：**{result['limit']}/{DAILY_CHALLENGE_CAP}**",
+            "***",
             "<qqbot-cmd-input text='副本菜单' show='副本菜单' /> | <qqbot-cmd-input text='副本列表' show='副本列表' />",
         )),
     }

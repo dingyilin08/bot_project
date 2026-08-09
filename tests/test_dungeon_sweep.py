@@ -11,6 +11,7 @@ from Game_main.g29_dungeon_sweep import (
     calculate_full_clear_currency,
     parse_dungeon_id,
 )
+from Game_main.g6_dungeon import LINGSHI_MULTIPLIER
 from output_main import jiance
 
 
@@ -23,7 +24,7 @@ class DungeonSweepTests(unittest.TestCase):
         self.assertEqual(ticket["name"], "扫荡副本券")
         self.assertEqual(ticket["price"], 800)
         self.assertEqual(ticket["daily_limit"], DUNGEON_SWEEP_TICKET_DAILY_LIMIT)
-        self.assertEqual(ticket["daily_limit"], 20)
+        self.assertEqual(ticket["daily_limit"], 10)
 
     def test_parse_dungeon_id_only_accepts_positive_integer(self):
         self.assertEqual(parse_dungeon_id(" 12 "), 12)
@@ -44,7 +45,8 @@ class DungeonSweepTests(unittest.TestCase):
             return total
 
         self.assertEqual(exp, expected(150))
-        self.assertEqual(lingshi, expected(500))
+        self.assertEqual(LINGSHI_MULTIPLIER, 1)
+        self.assertEqual(lingshi, expected(10))
 
     def test_reward_plan_is_deterministic_and_includes_completion_drops(self):
         dungeon = {

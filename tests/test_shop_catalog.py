@@ -1,9 +1,11 @@
 import unittest
 
 from Game_main.g10_shop import (
+    DAILY_CHALLENGE_CAP,
     DEFAULT_SHOP_ITEMS,
     DIRECTIONAL_SMELTING_JADE_ITEM_ID,
     STAMINA_POTION_ITEM_ID,
+    STAMINA_POTION_RESTORE,
     parse_name_num,
 )
 from Game_main.g9_yaoyuan import _parse_name_num
@@ -17,6 +19,10 @@ class ShopCatalogTests(unittest.TestCase):
         self.assertTrue(all(item["price"] > 0 for item in DEFAULT_SHOP_ITEMS))
         self.assertTrue(all(item["daily_limit"] > 0 or item["weekly_limit"] > 0 for item in DEFAULT_SHOP_ITEMS))
         self.assertIn(STAMINA_POTION_ITEM_ID, {item["item_id"] for item in DEFAULT_SHOP_ITEMS})
+        stamina = next(item for item in DEFAULT_SHOP_ITEMS if item["item_id"] == STAMINA_POTION_ITEM_ID)
+        self.assertEqual(stamina["daily_limit"], 4)
+        self.assertEqual(STAMINA_POTION_RESTORE, 5)
+        self.assertEqual(DAILY_CHALLENGE_CAP, 40)
         jade = next(item for item in DEFAULT_SHOP_ITEMS if item["item_id"] == DIRECTIONAL_SMELTING_JADE_ITEM_ID)
         self.assertEqual(jade["weekly_limit"], 2)
         self.assertEqual(jade["daily_limit"], 0)

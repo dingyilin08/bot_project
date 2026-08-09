@@ -1,6 +1,7 @@
 import unittest
 
 from Game_main.g30_market import (
+    MARKET_BLOCKED_ITEM_IDS,
     MARKET_EXPIRE_HOURS,
     _render_order_lines,
     calculate_market_fee,
@@ -47,6 +48,12 @@ class MarketTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(is_market_banned_item("束灵符", "可用于副本", "商城购买"))
         self.assertFalse(is_market_banned_item("紫灵草", "药材", "仙玉祈愿产出", 1))
         self.assertFalse(is_market_banned_item("破境丹", "丹药", "仙玉祈愿产出", 4))
+
+    def test_market_bans_limited_convenience_items_by_id(self):
+        self.assertEqual(MARKET_BLOCKED_ITEM_IDS, frozenset({208, 209, 210, 211, 212}))
+        self.assertTrue(is_market_banned_item("体力药", "恢复历练", "商城", 3, 209))
+        self.assertTrue(is_market_banned_item("扫荡副本券", "一键扫荡", "商城", 3, 211))
+        self.assertTrue(is_market_banned_item("临时改名", "普通药材", "掉落", 1, 210))
 
     def test_market_fee_and_categories(self):
         self.assertEqual(calculate_market_fee(100), 8)
