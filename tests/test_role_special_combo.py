@@ -268,7 +268,8 @@ class RoleSpecialComboRuleTests(unittest.TestCase):
             }],
         })
         self.assertIn("专属组合 装备-12", result["content"])
-        self.assertIn("COMBO_DEFENSE_PIERCE", result["content"])
+        self.assertIn("效果：专属一击、破防", result["content"])
+        self.assertNotIn("COMBO_", result["content"])
 
 
 class RoleSpecialComboTransactionTests(unittest.IsolatedAsyncioTestCase):

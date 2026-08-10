@@ -22,6 +22,7 @@ from Game_domain.role_special_service import (
     select_feature,
     unlock,
 )
+from Game_domain.player_text import format_effect_codes
 
 
 COLLECTION_PAGE_SIZE = 4
@@ -88,8 +89,10 @@ def _parse_combo_action(value):
 def _combo_effect_label(effect):
     effect = effect if isinstance(effect, dict) else {}
     mode = "专属主动替换·每场一次" if effect.get("mode") == "ACTIVE_OVERRIDE" else "专属被动替换·每场一次"
-    codes = " / ".join(effect.get("effect_codes") or [effect.get("effect_code", "COMBO_ACTIVE_STRIKE")])
-    return mode, codes
+    codes = effect.get("effect_codes") or [
+        effect.get("effect_code", "COMBO_ACTIVE_STRIKE")
+    ]
+    return mode, format_effect_codes(codes, separator="、")
 
 
 def render_combo_bag(data, notice=""):
@@ -105,7 +108,7 @@ def render_combo_bag(data, notice=""):
         status = "✅ 当前装备" if item["equipped"] else "未装备"
         output += f"**#{item['id']}｜{item['name']}**｜{item['combo_type']}\n"
         output += f"> {status}｜最终倍率 **{item['multiplier']:.1%}**\n"
-        output += f"> {mode}｜规则：`{codes}`\n"
+        output += f"> {mode}｜效果：{codes}\n"
         if not item["equipped"]:
             equip_command = f"专属组合 装备-{item['id']}"
             output += f"> {_button(equip_command, '装备此组合')}\n"

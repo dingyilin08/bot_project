@@ -22,6 +22,7 @@ from Game_domain.role_trait_service import (
     has_owned_role,
     heaven_pity_limit,
 )
+from Game_domain.player_text import format_reward_map
 
 
 WALLET_COLUMNS = {
@@ -49,6 +50,17 @@ def _token(uid, action, *values):
 
 def _display_name(profile):
     return profile.get("nickname") or profile.get("name") or "未知灵兽"
+
+
+def dispatch_reward_text(reward):
+    """格式化派遣到账奖励，确保临时采药凭证按实际折算结果展示。"""
+    display_reward = dict(reward or {})
+    herb_token = int(display_reward.pop("herb_token", 0) or 0)
+    if herb_token:
+        display_reward["spirit_essence"] = (
+            int(display_reward.get("spirit_essence", 0) or 0) + herb_token * 2
+        )
+    return format_reward_map(display_reward)
 
 
 def collection_capacity(garden_level):
@@ -1906,9 +1918,10 @@ async def _dispatch_finish(uid, dispatch_id, cancel):
                 ON DUPLICATE KEY UPDATE dispatch_count=dispatch_count+1
             """, (uid, week_key()))
             await conn.commit()
-    reward_text = "、".join(
-        f"{key}+{value}" for key, value in reward.items() if value
-    ) or "无（派遣时间过短）"
+    # 采药凭证会即时折算为御兽灵息；结算展示必须和实际到账一致。
+    reward_text = dispatch_reward_text(reward)
+    if reward_text == "无":
+        reward_text = "无（派遣时间过短）"
     return _md(
         f"##### ✅ 派遣结算\n\n进度：{ratio * 100:.0f}%｜获得：{reward_text}\n"
         "<qqbot-cmd-input text='灵兽派遣' show='返回派遣' />"
@@ -2032,9 +2045,7 @@ async def beast_realm_challenge(uid, qz, value):
             f"路线建议{required}。\n> {consume}\n"
             "<qqbot-cmd-input text='灵兽阵容' show='调整灵阵' />"
         )
-    reward_text = "、".join(
-        f"{key}+{amount}" for key, amount in reward.items()
-    )
+    reward_text = format_reward_map(reward)
     return _md(
         f"##### ✅ 秘境通关\n\n破解{world}·{route}路线！\n"
         f"> {reward_text}\n"

@@ -23,6 +23,7 @@ from Game_domain.role_special_combo_rules import (
     normalize_combo_multiplier_bp,
     sanitize_combo_effect,
 )
+from Game_domain.player_text import format_unlock_effects
 
 
 PRAY_COST = 160
@@ -500,7 +501,10 @@ async def advance(uid: int) -> str:
                 (int(stage[0]), uid, role_id),
             )
             await conn.commit()
-    return f"{get_role_spec(role_name)['growth_name']}突破至「{stage[1]}」：{', '.join(_json(stage[4]).keys())}。"
+    return (
+        f"{get_role_spec(role_name)['growth_name']}突破至「{stage[1]}」："
+        f"{format_unlock_effects(_json(stage[4]))}。"
+    )
 
 
 def _normalize_name(value: str) -> str:

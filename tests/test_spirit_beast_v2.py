@@ -12,7 +12,7 @@ from Game_domain.spirit_beast_v2_rules import (
     roll_quality,
 )
 from Tool.combat_system import CombatEntity, CombatManager
-from Game_main.g33_spirit_beast_v2 import formation_combat_effect
+from Game_main.g33_spirit_beast_v2 import dispatch_reward_text, formation_combat_effect
 from output_main import jiance
 
 
@@ -78,6 +78,14 @@ class SpiritBeastV2RuleTests(unittest.TestCase):
         self.assertEqual(effect["label"], "攻伐灵契")
         self.assertEqual(effect["buff_type"], "attack_up")
         self.assertGreater(effect["value"], 0)
+
+    def test_dispatch_rewards_never_expose_wallet_column_names(self):
+        reward_text = dispatch_reward_text({
+            "soul_fragment": 1,
+            "beast_material": 5,
+            "spirit_essence": 40,
+        })
+        self.assertEqual(reward_text, "兽魂碎片+1、基础兽材+5、御兽灵息+40")
 
     def test_new_commands_preserve_space_separated_arguments(self):
         cases = {
