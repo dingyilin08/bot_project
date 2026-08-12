@@ -1,7 +1,6 @@
 import unittest
 
 from Game_main.g10_shop import (
-    DAILY_CHALLENGE_CAP,
     DEFAULT_SHOP_ITEMS,
     DIRECTIONAL_SMELTING_JADE_ITEM_ID,
     STAMINA_POTION_ITEM_ID,
@@ -22,7 +21,7 @@ class ShopCatalogTests(unittest.TestCase):
         stamina = next(item for item in DEFAULT_SHOP_ITEMS if item["item_id"] == STAMINA_POTION_ITEM_ID)
         self.assertEqual(stamina["daily_limit"], 4)
         self.assertEqual(STAMINA_POTION_RESTORE, 5)
-        self.assertEqual(DAILY_CHALLENGE_CAP, 40)
+        self.assertIn("使用数量不限", stamina["description"])
         jade = next(item for item in DEFAULT_SHOP_ITEMS if item["item_id"] == DIRECTIONAL_SMELTING_JADE_ITEM_ID)
         self.assertEqual(jade["weekly_limit"], 2)
         self.assertEqual(jade["daily_limit"], 0)

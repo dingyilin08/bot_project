@@ -5,15 +5,11 @@ from datetime import date
 
 
 DAILY_DUNGEON_ATTEMPT_LIMIT = 20
-MAX_DUNGEON_ATTEMPT_LIMIT = 40
 _DAILY_SCHEMA_READY = False
 
 
 def remaining_daily_attempts(used_count, attempt_limit=DAILY_DUNGEON_ATTEMPT_LIMIT):
-    limit = min(
-        MAX_DUNGEON_ATTEMPT_LIMIT,
-        max(DAILY_DUNGEON_ATTEMPT_LIMIT, int(attempt_limit or 0)),
-    )
+    limit = max(DAILY_DUNGEON_ATTEMPT_LIMIT, int(attempt_limit or 0))
     return max(0, limit - max(0, int(used_count or 0)))
 
 
@@ -68,10 +64,7 @@ async def get_daily_attempt_status(cursor, uid, *, lock=False, stat_date=None):
     )
     row = await cursor.fetchone()
     used = int(row[0] or 0)
-    attempt_limit = min(
-        MAX_DUNGEON_ATTEMPT_LIMIT,
-        max(DAILY_DUNGEON_ATTEMPT_LIMIT, int(row[1] or 0)),
-    )
+    attempt_limit = max(DAILY_DUNGEON_ATTEMPT_LIMIT, int(row[1] or 0))
     remaining = remaining_daily_attempts(used, attempt_limit)
     # dungeon_num 继续作为旧菜单/旧版本的只读兼容快照，真实限制只看累计表。
     await cursor.execute(
@@ -116,7 +109,7 @@ async def consume_daily_attempt(cursor, uid, *, stat_date=None):
 
 
 async def increase_daily_attempt_limit(cursor, uid, amount, *, stat_date=None):
-    """使用体力药扩充当日额度；返回扩充后的状态，达到上限时返回 None。"""
+    """使用体力药扩充当日额度；不限制累计扩充次数。"""
     stat_date = stat_date or date.today()
     status = await get_daily_attempt_status(
         cursor, uid, lock=True, stat_date=stat_date
@@ -124,9 +117,9 @@ async def increase_daily_attempt_limit(cursor, uid, amount, *, stat_date=None):
     if not status:
         return None
     amount = max(0, int(amount or 0))
-    new_limit = min(MAX_DUNGEON_ATTEMPT_LIMIT, status["limit"] + amount)
-    if new_limit <= status["limit"]:
+    if amount <= 0:
         return None
+    new_limit = status["limit"] + amount
     await cursor.execute(
         """
         UPDATE user_dungeon_daily_usage

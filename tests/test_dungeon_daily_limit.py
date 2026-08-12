@@ -2,7 +2,7 @@ import unittest
 
 from Game_domain.dungeon_daily_limit import (
     DAILY_DUNGEON_ATTEMPT_LIMIT,
-    MAX_DUNGEON_ATTEMPT_LIMIT,
+    increase_daily_attempt_limit,
     remaining_daily_attempts,
 )
 
@@ -14,12 +14,51 @@ class DungeonDailyLimitTests(unittest.TestCase):
         self.assertEqual(remaining_daily_attempts(19), 1)
         self.assertEqual(remaining_daily_attempts(20), 0)
 
-    def test_stamina_potion_can_expand_but_not_exceed_forty(self):
-        self.assertEqual(MAX_DUNGEON_ATTEMPT_LIMIT, 40)
+    def test_stamina_potion_expansion_has_no_gameplay_cap(self):
         self.assertEqual(remaining_daily_attempts(20, 25), 5)
         self.assertEqual(remaining_daily_attempts(20, 40), 20)
-        self.assertEqual(remaining_daily_attempts(20, 999), 20)
+        self.assertEqual(remaining_daily_attempts(20, 999), 979)
         self.assertEqual(remaining_daily_attempts(80, 40), 0)
+
+
+class _UnlimitedAttemptCursor:
+    def __init__(self, used=20, attempt_limit=999):
+        self.used = used
+        self.attempt_limit = attempt_limit
+        self._row = None
+        self.rowcount = 0
+
+    async def execute(self, sql, params=None):
+        statement = " ".join(sql.split())
+        self._row = None
+        self.rowcount = 0
+        if statement.startswith("SELECT id FROM user_zt"):
+            self._row = (params[0],)
+        elif statement.startswith("INSERT IGNORE INTO user_dungeon_daily_usage"):
+            self.rowcount = 0
+        elif statement.startswith("SELECT used_count,attempt_limit"):
+            self._row = (self.used, self.attempt_limit)
+        elif statement.startswith("UPDATE user_dungeon_daily_usage"):
+            self.attempt_limit = int(params[0])
+            self.rowcount = 1
+        elif statement.startswith("UPDATE user_zt"):
+            self.rowcount = 1
+        else:
+            raise AssertionError(f"未预期的历练额度 SQL：{statement}")
+
+    async def fetchone(self):
+        return self._row
+
+
+class DungeonDailyUnlimitedUsageTests(unittest.IsolatedAsyncioTestCase):
+    async def test_increase_can_continue_beyond_previous_cap(self):
+        cursor = _UnlimitedAttemptCursor(attempt_limit=999)
+        result = await increase_daily_attempt_limit(cursor, 7, 50)
+
+        self.assertEqual(result["limit"], 1049)
+        self.assertEqual(result["added"], 50)
+        self.assertEqual(result["remaining"], 1029)
+        self.assertEqual(cursor.attempt_limit, 1049)
 
 
 if __name__ == "__main__":

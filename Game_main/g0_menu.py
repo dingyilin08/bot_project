@@ -677,7 +677,7 @@ async def show_yaoyuan_menu(uid, qz):
     output += "<qqbot-cmd-input text='施肥 ' show='施肥 田号' />\n\n"
     output += "> 消耗『灵草培育液』（或旧版植物肥料）使药材立即成熟；可在商城购买，示例：施肥 1\n\n"
     output += "<qqbot-cmd-input text='商城' show='商城' />\n\n"
-    output += "> 商城出售体力药、扫荡副本券、灵草培育液与炼丹加速卡等便利道具；体力药可将当日副本额度由20次扩充至最多40次。\n\n"
+    output += "> 商城出售体力药、扫荡副本券、灵草培育液与炼丹加速卡等便利道具；每瓶体力药可增加5次当日副本额度，使用数量不限。\n\n"
     output += "<qqbot-cmd-input text='解锁药田 ' show='解锁药田 田号' />\n\n"
     output += "> 消耗仙玉解锁药田，指令示例：解锁药田 1\n\n"
     output += "<qqbot-cmd-input text='出售药材 ' show='出售药材 药材名-数量' />\n\n"
