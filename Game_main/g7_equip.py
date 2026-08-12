@@ -44,6 +44,9 @@ QUALITY_ICON = {
 
 QUALITY_MULTIPLIER = EQUIPMENT_QUALITY_MULTIPLIER
 
+# 一键出售默认采用安全范围，避免玩家误售强化装备或高品质装备。
+BATCH_SELL_SAFE_QUALITIES = ('凡品', '良品')
+
 # 品质掉落概率
 QUALITY_DROP_RATE = [
     (55, '凡品'),
@@ -172,6 +175,16 @@ def calc_equip_sell_info(equip_min_level, quality, enhance_level):
         'enhance_refund': enhance_refund,
         'total_price': base_price + enhance_refund
     }
+
+
+def parse_batch_sell_qualities(scope):
+    """解析一键出售范围；所有范围都只包含未强化装备。"""
+    normalized = str(scope or '').strip().lstrip('-').strip()
+    if normalized in ('', '安全'):
+        return BATCH_SELL_SAFE_QUALITIES
+    if normalized in BATCH_SELL_SAFE_QUALITIES:
+        return (normalized,)
+    return None
 
 # 强化加成
 ENHANCE_BONUS_PER_LEVEL = EQUIPMENT_ENHANCE_BONUS_PER_LEVEL
@@ -568,7 +581,7 @@ def format_equip_bag_markdown(equipments, page, total_pages, role_info):
 
     lines.append("***")
 
-    lines.append("<qqbot-cmd-input text='装备熔炼 ' show='装备熔炼 编号1-编号2-编号3' /> | <qqbot-cmd-input text='定向熔炉' show='打开定向熔炉' />")
+    lines.append("<qqbot-cmd-input text='一键出售' show='一键出售安全装备' /> | <qqbot-cmd-input text='装备熔炼 ' show='装备熔炼 编号1-编号2-编号3' /> | <qqbot-cmd-input text='定向熔炉' show='打开定向熔炉' />")
     lines.append(f"<qqbot-cmd-input text='当前装备' show='当前装备' /> | <qqbot-cmd-input text='当前角色' show='当前角色' /> | <qqbot-cmd-input text='角色背包' show='角色背包' />")
 
     return "\n".join(lines)
@@ -905,6 +918,41 @@ def format_sell_result_markdown(role_info, equip, sell_info, current_lingshi):
     lines.append("***")
     lines.append("<qqbot-cmd-input text='装备背包' show='装备背包' /> | <qqbot-cmd-input text='当前装备' show='当前装备' />")
 
+    return "\n".join(lines)
+
+
+def format_batch_sell_result_markdown(qualities, quality_counts, sold_count, sell_info, current_lingshi):
+    """格式化一键出售结果。"""
+    scope_text = '、'.join(qualities)
+    count_text = '、'.join(
+        f"{QUALITY_ICON.get(quality, '○')}{quality} ×{quality_counts.get(quality, 0)}"
+        for quality in qualities
+        if quality_counts.get(quality, 0) > 0
+    )
+    lines = [
+        "##### 💰 一键出售成功",
+        "",
+        f"> 出售范围：未穿戴、未强化的{scope_text}装备",
+        f"> 出售数量：{sold_count}件（{count_text}）",
+        "",
+        "**回收明细**",
+        f"> 装备回收：{sell_info['base_price']}灵石",
+        f"> 本次获得：{sell_info['total_price']}灵石",
+    ]
+    if sell_info.get('role_trait_bonus', 0) > 0:
+        lines.append(
+            f"> 叶凡特性「源术通灵」：额外 +{sell_info['role_trait_bonus']}灵石"
+        )
+    lines.extend((
+        "",
+        f"**当前灵石：** {current_lingshi}",
+        "",
+        "> 已自动保留：穿戴中的装备、强化装备、精品及以上装备",
+        "***",
+        "<qqbot-cmd-input text='一键出售' show='继续一键出售' /> | "
+        "<qqbot-cmd-input text='装备背包' show='装备背包' /> | "
+        "<qqbot-cmd-input text='装备菜单' show='装备菜单' />",
+    ))
     return "\n".join(lines)
 
 
@@ -1669,6 +1717,114 @@ async def sell_equip(uid, qz, equip_instance_id):
 
             markdown_content = format_sell_result_markdown(role_info, equip, sell_info, current_lingshi)
             return {"type": "markdown", "content": markdown_content}
+
+
+def _batch_sell_error(message):
+    return {
+        "type": "markdown",
+        "content": "\n".join((
+            "##### ❌ 一键出售失败",
+            "",
+            f"> {message}",
+            "> 默认出售：未穿戴、未强化的凡品与良品装备",
+            "> 可选指令：一键出售 凡品｜一键出售 良品",
+            "***",
+            "<qqbot-cmd-input text='一键出售' show='一键出售安全装备' /> | "
+            "<qqbot-cmd-input text='装备背包' show='装备背包' />",
+        )),
+    }
+
+
+@reg_xz_func
+async def batch_sell_equip(uid, qz, scope=''):
+    """批量出售安全范围内的装备，并在一个事务中结算灵石。"""
+    qualities = parse_batch_sell_qualities(scope)
+    if qualities is None:
+        return _batch_sell_error('出售范围仅支持“凡品”或“良品”。')
+
+    placeholders = ', '.join(['%s'] * len(qualities))
+    async with connect_mysql() as conn:
+        try:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    f"""
+                    SELECT ue.id, ue.quality, COALESCE(ue.level, 0), de.min_level
+                    FROM user_equip ue
+                    JOIN data_equip de ON de.id = ue.equip_id
+                    WHERE ue.uid = %s
+                      AND COALESCE(ue.is_equipped, 0) = 0
+                      AND COALESCE(ue.level, 0) = 0
+                      AND ue.quality IN ({placeholders})
+                    ORDER BY ue.id
+                    FOR UPDATE
+                    """,
+                    (uid, *qualities),
+                )
+                rows = await cursor.fetchall()
+                if not rows:
+                    await conn.rollback()
+                    return _batch_sell_error(
+                        f"没有可出售的未穿戴、未强化{'、'.join(qualities)}装备。"
+                    )
+
+                equip_ids = [int(row[0]) for row in rows]
+                quality_counts = {quality: 0 for quality in qualities}
+                base_sell_price = 0
+                for _, quality, enhance_level, min_level in rows:
+                    quality_counts[str(quality)] = quality_counts.get(str(quality), 0) + 1
+                    base_sell_price += calc_equip_sell_info(
+                        min_level, quality, enhance_level
+                    )['total_price']
+
+                credited_sell_price = await calculate_lingshi_output(
+                    cursor, uid, base_sell_price
+                )
+                id_placeholders = ', '.join(['%s'] * len(equip_ids))
+                await cursor.execute(
+                    f"""
+                    DELETE FROM user_equip
+                    WHERE uid = %s
+                      AND id IN ({id_placeholders})
+                      AND COALESCE(is_equipped, 0) = 0
+                      AND COALESCE(level, 0) = 0
+                      AND quality IN ({placeholders})
+                    """,
+                    (uid, *equip_ids, *qualities),
+                )
+                if cursor.rowcount != len(equip_ids):
+                    await conn.rollback()
+                    return _batch_sell_error('装备状态已变化，请重新打开装备背包后再试。')
+
+                await cursor.execute(
+                    "UPDATE user_zt SET lingshi = lingshi + %s WHERE id = %s",
+                    (credited_sell_price, uid),
+                )
+                if cursor.rowcount != 1:
+                    await conn.rollback()
+                    return _batch_sell_error('玩家灵石账户异常，本次未出售任何装备。')
+
+                await cursor.execute("SELECT lingshi FROM user_zt WHERE id = %s", (uid,))
+                lingshi_result = await cursor.fetchone()
+                if not lingshi_result:
+                    await conn.rollback()
+                    return _batch_sell_error('无法读取灵石余额，本次未出售任何装备。')
+                current_lingshi = int(lingshi_result[0] or 0)
+                await conn.commit()
+        except Exception:
+            await conn.rollback()
+            raise
+
+    sell_info = {
+        'base_price': base_sell_price,
+        'total_price': credited_sell_price,
+        'role_trait_bonus': credited_sell_price - base_sell_price,
+    }
+    return {
+        "type": "markdown",
+        "content": format_batch_sell_result_markdown(
+            qualities, quality_counts, len(equip_ids), sell_info, current_lingshi
+        ),
+    }
 
 
 def parse_smelt_equip_ids(text):
