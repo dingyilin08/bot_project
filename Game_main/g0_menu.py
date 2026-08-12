@@ -757,8 +757,8 @@ async def show_power_menu(uid, qz):
     output += f"**仙玉：** {player_info['xianyu']}\n\n"
     output += "***\n\n"
 
-    output += "<qqbot-cmd-input text='我的战力' show='我的战力' />\n"
-    output += "> 点击后发送可查看当前您出战角色的战力组成\n\n"
+    output += "<qqbot-cmd-input text='战力图片' show='生成战力仙鉴' /> | <qqbot-cmd-input text='我的战力' show='文字战力' />\n"
+    output += "> 生成含出战角色立绘、角色属性与六项战力构成的精美战力仙鉴\n\n"
     output += "<qqbot-cmd-input text='战力排行' show='战力排行' />\n"
     output += "> 点击后发送可选择当前全服/各个角色的战力排行榜\n\n"
     output += "<qqbot-cmd-input text='战力排行 全服' show='战力排行 全服' />\n"
@@ -863,6 +863,7 @@ async def show_game_guide(uid):
     output += "> 本源提升大幅增加角色属性\n\n"
 
     output += "**📊 战力系统：**\n\n"
+    output += "> `战力图片` - 生成出战角色战力仙鉴\n"
     output += "> `我的战力` - 查看当前战力详情\n"
     output += "> `战力排行` - 查看全服战力排行榜\n"
     output += "> 战力由基础、等级、装备、本源、技能、灵兽构成\n\n"

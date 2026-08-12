@@ -21,6 +21,9 @@ aiohttp==3.9.1
 # YAML配置文件解析
 PyYAML==6.0.1
 
+# 玩家战力图片本地渲染
+Pillow==11.1.0
+
 # 标准库（无需安装）
 # asyncio - Python标准库
 # json - Python标准库

@@ -122,6 +122,11 @@ async def calculate_equip_power(conn, role_id: int, uid: int) -> Tuple[int, Dict
     total_power = 0
     set_counts = {}
     equip_details = []
+    equip_attr_bonus = {
+        'gongji': 0, 'fangyu': 0, 'qixue': 0, 'fali': 0, 'sudu': 0,
+        'baoji': 0, 'baoshang': 0, 'shanbi': 0, 'mingzhong': 0,
+        'pofang': 0, 'xixue': 0,
+    }
     
     for equip in equipments:
         equip_id, equip_level, quality = equip[0], _number(equip[1]), equip[2]
@@ -148,6 +153,16 @@ async def calculate_equip_power(conn, role_id: int, uid: int) -> Tuple[int, Dict
         
         single_power = attr_power * quality_multi * enhance_multi
         total_power += single_power
+
+        raw_attrs = {
+            'gongji': base_gongji, 'fangyu': base_fangyu, 'qixue': base_qixue,
+            'fali': base_fali, 'sudu': base_sudu, 'baoji': base_baoji,
+            'baoshang': base_baoshang, 'shanbi': base_shanbi,
+            'mingzhong': base_mingzhong, 'pofang': base_pofang,
+            'xixue': base_xixue,
+        }
+        for attr_name, attr_value in raw_attrs.items():
+            equip_attr_bonus[attr_name] += int(attr_value * quality_multi * enhance_multi)
         
         if set_name:
             set_counts[set_name] = set_counts.get(set_name, 0) + 1
@@ -171,12 +186,17 @@ async def calculate_equip_power(conn, role_id: int, uid: int) -> Tuple[int, Dict
                 break
     
     total_power = int(total_power * (1 + max_set_bonus))
+    equip_attr_bonus = {
+        attr_name: int(attr_value * (1 + max_set_bonus))
+        for attr_name, attr_value in equip_attr_bonus.items()
+    }
     
     set_info = {
         'set_counts': set_counts,
         'active_set': active_set,
         'set_bonus': max_set_bonus,
-        'equip_details': equip_details
+        'equip_details': equip_details,
+        'attr_bonus': equip_attr_bonus,
     }
     
     return total_power, set_info
@@ -444,7 +464,7 @@ async def calculate_total_power(conn, uid: int, role_id: int) -> Tuple[int, Dict
     return total_power, power_details
 
 
-async def update_role_power(conn, uid: int) -> int:
+async def update_role_power(conn, uid: int, return_details: bool = False):
     """
     更新玩家战力到数据库（user_zt表），但不提交事务。
     
@@ -453,7 +473,7 @@ async def update_role_power(conn, uid: int) -> int:
         uid: 玩家ID（user_zt.id）
     
     Returns:
-        更新后的总战力
+        默认返回更新后的总战力；return_details=True 时返回（总战力, 明细）。
     """
     async with conn.cursor() as cursor:
         await cursor.execute("""
@@ -473,7 +493,7 @@ async def update_role_power(conn, uid: int) -> int:
                     power_role_name = '', power_update_time = NOW()
                 WHERE id = %s
             """, (uid,))
-        return 0
+        return (0, {}) if return_details else 0
     
     role_id = current_role[0]
     role_name = current_role[1]
@@ -504,7 +524,7 @@ async def update_role_power(conn, uid: int) -> int:
             role_name,
             uid
         ))
-    return total_power
+    return (total_power, details) if return_details else total_power
 
 
 async def get_user_power_rank(conn, uid: int) -> Tuple[int, int]:

@@ -32,3 +32,6 @@ logs/
 # Deployment artifacts
 releases/
 shared/
+
+# 玩家战力卡运行时缓存（模板本身仍纳入版本控制）
+images/power_card_*.jpg

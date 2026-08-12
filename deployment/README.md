@@ -13,7 +13,7 @@ in repository files.
 
 ```bash
 apt update
-apt install -y python3-venv python3-pip nginx rsync curl
+apt install -y python3-venv python3-pip nginx rsync curl fonts-noto-cjk
 useradd --system --create-home --shell /usr/sbin/nologin qqbot
 useradd --create-home --shell /bin/bash deploy
 install -d -o deploy -g deploy /opt/qq-rpg/releases /opt/qq-rpg/incoming /opt/qq-rpg/shared/logs
