@@ -17,6 +17,7 @@ from Game_domain.event_inbox import MySQLEventInbox
 from Tool.qq_keyboard import attach_keyboard, build_command_keyboard
 from Tool.qq_group_welcome import build_friend_welcome_message, build_group_welcome_message
 from Tool.qq_reply_footer import append_rotating_reply_notice
+from Tool.power_card import cached_power_card_path
 
 send_content = ''
 user_last_call_time = {}
@@ -799,7 +800,8 @@ async def get_image(image_name: str):
     获取图片
     访问 /images/图片名称 可以获取图片
     """
-    image_path = os.path.join(IMAGES_DIR, image_name)
+    runtime_card = cached_power_card_path(image_name)
+    image_path = str(runtime_card) if runtime_card else os.path.join(IMAGES_DIR, image_name)
     
     if not os.path.exists(image_path):
         raise HTTPException(status_code=404, detail="图片不存在")

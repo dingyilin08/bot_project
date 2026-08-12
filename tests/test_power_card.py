@@ -47,8 +47,19 @@ class PowerCardRenderTests(unittest.TestCase):
             self.assertTrue((IMAGES_DIR / filename).is_file(), filename)
 
     def test_production_font_candidates_include_noto_cjk(self):
+        self.assertTrue(power_card.PACKAGED_FONT_PATH.is_file())
         self.assertTrue(any("NotoSansCJK" in item for item in power_card.FONT_CANDIDATES["regular"]))
         self.assertTrue(any("NotoSerifCJK" in item for item in power_card.FONT_CANDIDATES["display"]))
+
+    def test_runtime_cache_path_only_accepts_fingerprinted_cards(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            valid_name = "power_card_" + "a" * 24 + ".jpg"
+            valid_path = Path(temp_dir) / valid_name
+            valid_path.write_bytes(b"jpeg")
+            with patch.object(power_card, "POWER_CARD_CACHE_DIR", Path(temp_dir)):
+                self.assertEqual(valid_path, power_card.cached_power_card_path(valid_name))
+                self.assertIsNone(power_card.cached_power_card_path("../secret.jpg"))
+                self.assertIsNone(power_card.cached_power_card_path("power_card_bad.jpg"))
 
     def test_render_uses_content_cache_and_expected_dimensions(self):
         with tempfile.TemporaryDirectory() as temp_dir:

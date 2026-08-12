@@ -10,6 +10,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
+import tempfile
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -20,6 +23,10 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFont, ImageOps
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 IMAGES_DIR = PROJECT_ROOT / "images"
 BACKGROUND_PATH = IMAGES_DIR / "power_card_background.png"
+PACKAGED_FONT_PATH = PROJECT_ROOT / "assets" / "fonts" / "NotoSansCJKsc-Regular.otf"
+POWER_CARD_CACHE_DIR = Path(
+    os.getenv("POWER_CARD_CACHE_DIR", str(Path(tempfile.gettempdir()) / "qq-rpg-power-cards"))
+)
 CARD_SIZE = (1080, 1350)
 TEMPLATE_VERSION = "power-card-v1.1"
 
@@ -35,11 +42,13 @@ ROLE_IMAGE_FILES = {
 
 FONT_CANDIDATES = {
     "regular": (
+        str(PACKAGED_FONT_PATH),
         "C:/Windows/Fonts/msyh.ttc",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
     ),
     "bold": (
+        str(PACKAGED_FONT_PATH),
         "C:/Windows/Fonts/msyhbd.ttc",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
         "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
@@ -47,12 +56,14 @@ FONT_CANDIDATES = {
     "display": (
         "C:/Windows/Fonts/STXINGKA.TTF",
         "C:/Windows/Fonts/simkai.ttf",
+        str(PACKAGED_FONT_PATH),
         "/usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc",
         "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
     ),
 }
 
 
+@lru_cache(maxsize=64)
 def _font(size: int, style: str = "regular") -> ImageFont.FreeTypeFont:
     for candidate in FONT_CANDIDATES.get(style, FONT_CANDIDATES["regular"]):
         if Path(candidate).is_file():
@@ -153,6 +164,14 @@ def power_card_cache_name(data: dict[str, Any], images_dir: Path | str = IMAGES_
     return f"power_card_{hashlib.sha256(encoded).hexdigest()[:24]}.jpg"
 
 
+def cached_power_card_path(filename: str) -> Path | None:
+    """安全解析运行时卡片；仅允许渲染器生成的指纹文件名。"""
+    if not re.fullmatch(r"power_card_[0-9a-f]{24}\.jpg", str(filename or "")):
+        return None
+    candidate = POWER_CARD_CACHE_DIR / filename
+    return candidate if candidate.is_file() else None
+
+
 def render_power_card(
     data: dict[str, Any],
     *,
@@ -161,7 +180,7 @@ def render_power_card(
 ) -> Path:
     """渲染并缓存一张 1080×1350 JPEG 战力仙鉴。"""
     images_path = Path(images_dir)
-    output_path = Path(output_dir) if output_dir else images_path
+    output_path = Path(output_dir) if output_dir else POWER_CARD_CACHE_DIR
     output_path.mkdir(parents=True, exist_ok=True)
     target = output_path / power_card_cache_name(data, images_path)
     if target.is_file() and target.stat().st_size > 20_000:
