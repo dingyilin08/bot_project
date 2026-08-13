@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from PIL import Image
+from PIL import Image, ImageFont
 
 import output_main
 from Tool import power_card
@@ -48,9 +48,16 @@ class PowerCardRenderTests(unittest.TestCase):
 
     def test_production_font_candidates_include_noto_cjk(self):
         self.assertTrue(power_card.PACKAGED_FONT_PATH.is_file())
-        self.assertLess(power_card.PACKAGED_FONT_PATH.stat().st_size, 4_000_000)
+        self.assertLess(power_card.PACKAGED_FONT_PATH.stat().st_size, 20_000_000)
         self.assertTrue(any("NotoSansCJK" in item for item in power_card.FONT_CANDIDATES["regular"]))
         self.assertTrue(any("NotoSerifCJK" in item for item in power_card.FONT_CANDIDATES["display"]))
+
+    def test_packaged_font_contains_card_punctuation(self):
+        font = ImageFont.truetype(power_card.PACKAGED_FONT_PATH, size=32)
+        missing_glyph = bytes(font.getmask("\U0010ffff"))
+        for character in "·「」『』，。！？：；（）【】《》、—…":
+            with self.subTest(character=character):
+                self.assertNotEqual(missing_glyph, bytes(font.getmask(character)))
 
     def test_runtime_cache_path_only_accepts_fingerprinted_cards(self):
         with tempfile.TemporaryDirectory() as temp_dir:
