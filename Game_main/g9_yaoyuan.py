@@ -48,6 +48,19 @@ TIER_OUTPUT_RANGE = {1: (8, 12), 2: (6, 10), 3: (4, 8), 4: (2, 5)}
 ROLE_BASE_ATTRS = {"gongji", "fangyu", "qixue", "fali", "sudu"}
 ROLE_RATE_ATTRS = {"baoji", "baoshang", "shanbi", "mingzhong", "pofang", "xixue"}
 ROLE_ALL_ATTRS = ROLE_BASE_ATTRS | ROLE_RATE_ATTRS
+ROLE_ATTR_NAMES = {
+    "gongji": "攻击",
+    "fangyu": "防御",
+    "qixue": "气血",
+    "fali": "法力",
+    "sudu": "速度",
+    "baoji": "暴击",
+    "baoshang": "暴击伤害",
+    "shanbi": "闪避",
+    "mingzhong": "命中",
+    "pofang": "破防",
+    "xixue": "吸血",
+}
 
 _YAOYUAN_SCHEMA_READY = False
 
@@ -81,6 +94,18 @@ def _json_loads(raw):
         except Exception:
             return None
     return None
+
+
+def _format_pill_attr_changes(attr_add):
+    """将服丹产生的数据库属性键转换为玩家可读文案。"""
+    lines = []
+    for attr_key, add_value in attr_add.items():
+        label = ROLE_ATTR_NAMES.get(attr_key, "属性")
+        if attr_key in ROLE_RATE_ATTRS:
+            lines.append(f"> {label} + {round(add_value / 100, 2)}%")
+        else:
+            lines.append(f"> {label} + {add_value}")
+    return lines
 
 
 def _empty_farm_slot():
@@ -2091,11 +2116,7 @@ async def fu_dan(uid, qz, param):
                 lines.append(f"本次永久属性效力：{round(permanent_factor * 100, 1)}%（同类丹药耐药）")
             if attr_add:
                 lines.append("**属性变化：**")
-                for k, v in attr_add.items():
-                    if k in ROLE_RATE_ATTRS:
-                        lines.append(f"> {k} + {round(v / 100, 2)}%")
-                    else:
-                        lines.append(f"> {k} + {v}")
+                lines.extend(_format_pill_attr_changes(attr_add))
             if exp_add > 0:
                 lines.append(f"> 经验 + {exp_add}（当前经验 {role_exp + exp_add}）")
             if lingshi_add > 0:
