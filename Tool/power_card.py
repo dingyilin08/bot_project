@@ -26,11 +26,12 @@ BACKGROUND_PATH = IMAGES_DIR / "power_card_background.png"
 # 随包提供完整的 Noto Sans CJK SC，避免玩家昵称、境界名和中文标点因
 # 字体子集漏字而显示为“方框叉号”。字体对象由 _font 缓存，不影响热路径响应速度。
 PACKAGED_FONT_PATH = PROJECT_ROOT / "assets" / "fonts" / "NotoSansCJKsc-Regular.otf"
+CALLIGRAPHY_FONT_PATH = PROJECT_ROOT / "assets" / "fonts" / "MaShanZheng-Regular.ttf"
 POWER_CARD_CACHE_DIR = Path(
     os.getenv("POWER_CARD_CACHE_DIR", str(Path(tempfile.gettempdir()) / "qq-rpg-power-cards"))
 )
 CARD_SIZE = (1080, 1350)
-TEMPLATE_VERSION = "power-card-v1.2"
+TEMPLATE_VERSION = "power-card-v1.3"
 
 ROLE_IMAGE_FILES = {
     "萧炎": "xiaoyan.png",
@@ -56,6 +57,7 @@ FONT_CANDIDATES = {
         "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
     ),
     "display": (
+        str(CALLIGRAPHY_FONT_PATH),
         "C:/Windows/Fonts/STXINGKA.TTF",
         "C:/Windows/Fonts/simkai.ttf",
         str(PACKAGED_FONT_PATH),
@@ -210,7 +212,8 @@ def render_power_card(
     muted = (82, 112, 108)
 
     # 顶部题签
-    title = "问道诸天 · 战力仙鉴"
+    # 毛笔字体不含西文中点，以题签留白分隔两段，避免缺字方框。
+    title = "问道诸天　战力仙鉴"
     title_font = _font(57, "display")
     title_box = draw.textbbox((0, 0), title, font=title_font)
     draw.text(((1080 - (title_box[2] - title_box[0])) / 2, 57), title, font=title_font, fill=ink)
@@ -221,7 +224,7 @@ def render_power_card(
 
     # 左侧角色题名
     _rounded_panel(draw, (76, 1000, 454, 1106), fill=(239, 249, 246, 230), outline=(188, 145, 57, 205), radius=18)
-    role_font = _font(42, "bold")
+    role_font = _font(46, "display")
     role_box = draw.textbbox((0, 0), role_name, font=role_font)
     draw.text((265 - (role_box[2] - role_box[0]) / 2, 1011), role_name, font=role_font, fill=ink)
     role_meta = f"{_short_text(data.get('stage'), 10, '未定境')}  ·  Lv.{_number(data.get('level'))}"
@@ -231,7 +234,7 @@ def render_power_card(
 
     # 右侧总战力与排名
     _rounded_panel(draw, (552, 286, 1042, 435), fill=(246, 252, 249, 226), outline=(188, 145, 57, 205), radius=22)
-    draw.text((583, 307), "当前总战力", font=_font(24), fill=muted)
+    draw.text((583, 302), "当前总战力", font=_font(29, "display"), fill=muted)
     total_text = format_number(data.get("total_power"))
     draw.text((580, 336), total_text, font=_font(52, "bold"), fill=(27, 107, 103))
     rank = _number(data.get("rank"))
@@ -241,7 +244,7 @@ def render_power_card(
 
     # 当前属性
     _rounded_panel(draw, (552, 454, 1042, 675), radius=20)
-    draw.text((580, 471), "当前角色属性", font=_font(28, "bold"), fill=ink)
+    draw.text((580, 465), "当前角色属性", font=_font(34, "display"), fill=ink)
     draw.line((580, 510, 1014, 510), fill=(104, 175, 164, 130), width=2)
     stats = data.get("stats") or {}
     stat_items = (
@@ -256,7 +259,7 @@ def render_power_card(
 
     # 六项战力构成
     _rounded_panel(draw, (552, 693, 1042, 1020), radius=20)
-    draw.text((580, 710), "战力构成", font=_font(28, "bold"), fill=ink)
+    draw.text((580, 704), "战力构成", font=_font(34, "display"), fill=ink)
     components = data.get("components") or []
     values = [_number(item.get("value")) for item in components]
     max_value = max(values or [1]) or 1
@@ -276,7 +279,7 @@ def render_power_card(
 
     # 养成摘要
     _rounded_panel(draw, (552, 1037, 1042, 1163), radius=19)
-    draw.text((580, 1052), "养成概览", font=_font(25, "bold"), fill=ink)
+    draw.text((580, 1046), "养成概览", font=_font(32, "display"), fill=ink)
     draw.text((580, 1090), f"本源  {_short_text(data.get('benyuan'), 13)}", font=_font(19), fill=muted)
     draw.text((805, 1090), f"装备  {_short_text(data.get('equipment'), 12)}", font=_font(19), fill=muted)
     draw.text((580, 1122), f"技能  {_short_text(data.get('skills'), 29)}", font=_font(18), fill=muted)

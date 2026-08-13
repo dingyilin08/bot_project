@@ -46,11 +46,23 @@ class PowerCardRenderTests(unittest.TestCase):
         for filename in ROLE_IMAGE_FILES.values():
             self.assertTrue((IMAGES_DIR / filename).is_file(), filename)
 
-    def test_production_font_candidates_include_noto_cjk(self):
+    def test_production_font_candidates_include_packaged_fonts(self):
         self.assertTrue(power_card.PACKAGED_FONT_PATH.is_file())
         self.assertLess(power_card.PACKAGED_FONT_PATH.stat().st_size, 20_000_000)
+        self.assertTrue(power_card.CALLIGRAPHY_FONT_PATH.is_file())
+        self.assertLess(power_card.CALLIGRAPHY_FONT_PATH.stat().st_size, 7_000_000)
         self.assertTrue(any("NotoSansCJK" in item for item in power_card.FONT_CANDIDATES["regular"]))
-        self.assertTrue(any("NotoSerifCJK" in item for item in power_card.FONT_CANDIDATES["display"]))
+        self.assertEqual(
+            str(power_card.CALLIGRAPHY_FONT_PATH),
+            power_card.FONT_CANDIDATES["display"][0],
+        )
+
+    def test_calligraphy_font_contains_fixed_display_copy(self):
+        font = ImageFont.truetype(power_card.CALLIGRAPHY_FONT_PATH, size=36)
+        missing_glyph = bytes(font.getmask("\U0010ffff"))
+        for character in "问道诸天战力仙鉴当前总角色属性构成养概览王林":
+            with self.subTest(character=character):
+                self.assertNotEqual(missing_glyph, bytes(font.getmask(character)))
 
     def test_packaged_font_contains_card_punctuation(self):
         font = ImageFont.truetype(power_card.PACKAGED_FONT_PATH, size=32)
