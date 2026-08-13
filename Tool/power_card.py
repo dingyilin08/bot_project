@@ -23,6 +23,8 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFont, ImageOps
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 IMAGES_DIR = PROJECT_ROOT / "images"
 BACKGROUND_PATH = IMAGES_DIR / "power_card_background.png"
+# 这是 Noto Sans CJK SC 的 GB2312 常用汉字子集，控制发布体积的同时覆盖
+# 战力卡固定文案、六名角色名以及绝大多数中文玩家名。
 PACKAGED_FONT_PATH = PROJECT_ROOT / "assets" / "fonts" / "NotoSansCJKsc-Regular.otf"
 POWER_CARD_CACHE_DIR = Path(
     os.getenv("POWER_CARD_CACHE_DIR", str(Path(tempfile.gettempdir()) / "qq-rpg-power-cards"))

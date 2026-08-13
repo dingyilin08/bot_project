@@ -48,6 +48,7 @@ class PowerCardRenderTests(unittest.TestCase):
 
     def test_production_font_candidates_include_noto_cjk(self):
         self.assertTrue(power_card.PACKAGED_FONT_PATH.is_file())
+        self.assertLess(power_card.PACKAGED_FONT_PATH.stat().st_size, 4_000_000)
         self.assertTrue(any("NotoSansCJK" in item for item in power_card.FONT_CANDIDATES["regular"]))
         self.assertTrue(any("NotoSerifCJK" in item for item in power_card.FONT_CANDIDATES["display"]))
 
