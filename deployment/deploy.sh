@@ -18,9 +18,6 @@ if [[ ! -d "$SOURCE_DIR" ]]; then
 fi
 
 mkdir -p "$APP_ROOT/releases" "$APP_ROOT/shared/logs"
-if [[ ! -d "$APP_ROOT/shared/power-cards" ]]; then
-    install -d -m 1777 "$APP_ROOT/shared/power-cards"
-fi
 if [[ -L "$CURRENT_LINK" ]]; then
     PREVIOUS_RELEASE="$(readlink -f "$CURRENT_LINK")"
 fi
