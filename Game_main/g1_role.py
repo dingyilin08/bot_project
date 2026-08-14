@@ -19,6 +19,7 @@ from Game_main.g21_season import cosmetic_identity, get_equipped_cosmetics
 from Game_domain.spirit_beast_rules import calculate_spirit_beast_power
 from Game_domain.spirit_beast_v2_rules import calculate_v2_power
 from Game_main.g12_spirit_beast import get_role_beast_profile
+from Game_domain.reincarnation_service import ensure_reincarnation_schema
 
 
 ITEM_TYPE_NAMES = {
@@ -532,12 +533,13 @@ async def _role_spirit_beast_text(uid, role_id, cursor):
 async def role_attr(uid, qz, role_id):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            sql = "SELECT id, `name`, stage, dengji, exp, gongji, gongji_jc, fangyu, fangyu_jc, qixue, qixue_jc, fali, sudu, baoji, baoshang, shanbi, mingzhong, pofang, xixue, skill1_id, skill2_id, skill3_id FROM user_role WHERE uid = %s and id = %s"
+            await ensure_reincarnation_schema(cursor)
+            sql = "SELECT id, `name`, stage, dengji, exp, reincarnation_count, gongji, gongji_jc, fangyu, fangyu_jc, qixue, qixue_jc, fali, sudu, baoji, baoshang, shanbi, mingzhong, pofang, xixue, skill1_id, skill2_id, skill3_id FROM user_role WHERE uid = %s and id = %s"
             await cursor.execute(sql, (uid, role_id))
             result = await cursor.fetchone()
             if result is None:
                 return {"type": "markdown", "content": qz + "角色不存在，请重新输入！\n\n示例：角色属性 角色编号"}
-            role_id, role_name, stage, dengji, exp, gongji, gongji_jc, fangyu, fangyu_jc, qixue, qixue_jc, fali, sudu, baoji, baoshang, shanbi, mingzhong, pofang, xixue, skill1_id, skill2_id, skill3_id = result
+            role_id, role_name, stage, dengji, exp, reincarnation_count, gongji, gongji_jc, fangyu, fangyu_jc, qixue, qixue_jc, fali, sudu, baoji, baoshang, shanbi, mingzhong, pofang, xixue, skill1_id, skill2_id, skill3_id = result
 
             skill_1 = await get_skill_name(cursor, skill1_id) if skill1_id is not None else "未装备"
             skill_2 = await get_skill_name(cursor, skill2_id) if skill2_id is not None else "未装备"
@@ -585,6 +587,7 @@ async def role_attr(uid, qz, role_id):
             if aura:
                 output += f"> ✨ 外观特效：{aura}\n\n"
             output += f"**境界：** {stage} | **等级：** {dengji}\n"
+            output += f"**轮回：** {reincarnation_count}世\n"
             output += f"**经验：** {exp}/{max_exp}\n\n"
             output += image
             output += "***"
@@ -612,12 +615,13 @@ async def role_attr(uid, qz, role_id):
 async def cz_role_attr(uid, qz):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            sql = "SELECT id, `name`, stage, dengji, exp, gongji, gongji_jc, fangyu, fangyu_jc, qixue, qixue_jc, fali, sudu, baoji, baoshang, shanbi, mingzhong, pofang, xixue, skill1_id, skill2_id, skill3_id FROM user_role WHERE uid = %s and is_chuzhan = 1 LIMIT 1"
+            await ensure_reincarnation_schema(cursor)
+            sql = "SELECT id, `name`, stage, dengji, exp, reincarnation_count, gongji, gongji_jc, fangyu, fangyu_jc, qixue, qixue_jc, fali, sudu, baoji, baoshang, shanbi, mingzhong, pofang, xixue, skill1_id, skill2_id, skill3_id FROM user_role WHERE uid = %s and is_chuzhan = 1 LIMIT 1"
             await cursor.execute(sql, (uid, ))
             result = await cursor.fetchone()
             if result is None:
                 return {"type": "markdown", "content": qz + "当前没有出战角色，请先选择角色出战！"}
-            role_id, role_name, stage, dengji, exp, gongji, gongji_jc, fangyu, fangyu_jc, qixue, qixue_jc, fali, sudu, baoji, baoshang, shanbi, mingzhong, pofang, xixue, skill1_id, skill2_id, skill3_id = result
+            role_id, role_name, stage, dengji, exp, reincarnation_count, gongji, gongji_jc, fangyu, fangyu_jc, qixue, qixue_jc, fali, sudu, baoji, baoshang, shanbi, mingzhong, pofang, xixue, skill1_id, skill2_id, skill3_id = result
 
             skill_1 = await get_skill_name(cursor, skill1_id) if skill1_id is not None else "未装备"
             skill_2 = await get_skill_name(cursor, skill2_id) if skill2_id is not None else "未装备"
@@ -665,6 +669,7 @@ async def cz_role_attr(uid, qz):
             if aura:
                 output += f"> ✨ 外观特效：{aura}\n\n"
             output += f"**境界：** {stage} | **等级：** {dengji}\n"
+            output += f"**轮回：** {reincarnation_count}世\n"
             output += f"**经验：** {exp}/{max_exp}\n\n"
             output += image
             output += "\n***\n"
@@ -682,7 +687,7 @@ async def cz_role_attr(uid, qz):
             output += "**随行灵兽：**\n"
             output += await _role_spirit_beast_text(uid, role_id, cursor)
 
-            kj = await all_write_command(uid, ("收回", "灵兽", "参悟", "角色背包", "悟道进阶", "查看本源", "赛季装扮"))
+            kj = await all_write_command(uid, ("收回", "灵兽", "参悟", "角色背包", "悟道进阶", "轮回重生", "查看本源", "赛季装扮"))
 
             return {"type": "markdown", "content": output + kj}
 
@@ -902,6 +907,7 @@ async def jinjie_role(uid, qz):
 async def role_bag(uid, qz, page_num=1):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
+            await ensure_reincarnation_schema(cursor)
             try:
                 page_num = int(page_num)
             except ValueError:
@@ -920,16 +926,16 @@ async def role_bag(uid, qz, page_num=1):
             total_pages = (total_records + page_size - 1) // page_size
             page_num = min(page_num, total_pages)
             offset = (page_num - 1) * page_size
-            sql = "SELECT id, `name`, dengji FROM user_role WHERE uid = %s and is_chuzhan = 0 LIMIT %s OFFSET %s"
+            sql = "SELECT id, `name`, dengji, reincarnation_count FROM user_role WHERE uid = %s and is_chuzhan = 0 LIMIT %s OFFSET %s"
             await cursor.execute(sql, (uid, page_size, offset))
             result = await cursor.fetchall()
 
             output = f"##### 角色背包({page_num}/{total_pages})\n"
             for i in result:
-                role_id, role_name, dengji = i
+                role_id, role_name, dengji, reincarnation_count = i
                 stage = await role_stage(role_name, dengji)
                 role_button = f"<qqbot-cmd-input text='角色属性 {role_id}' show='角色属性 {role_id}' />"
-                output += f"「{role_id}」 {role_button} Lv.{dengji}[{stage}]\n"
+                output += f"「{role_id}」 {role_button} Lv.{dengji}[{stage}]｜轮回{reincarnation_count}世\n"
 
             output += f"***\n"
 

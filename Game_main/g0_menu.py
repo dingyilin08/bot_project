@@ -24,7 +24,7 @@ MENU_CONFIG = {
         "name": "角色管理",
         "icon": "👤",
         "description": "查看角色属性、装备背包、角色升级",
-        "commands": ["当前角色", "角色背包", "物品背包", "悟道进阶"]
+        "commands": ["当前角色", "角色背包", "物品背包", "悟道进阶", "轮回重生"]
     },
     "cultivation": {
         "name": "修练系统",
@@ -432,6 +432,8 @@ async def show_role_menu(uid, qz):
     output += "> 点击蓝字后发送可查看当前出战角色属性，示例：当前角色\n\n"
     output += "<qqbot-cmd-input text='悟道进阶' show='悟道进阶' />\n"
     output += "> 当前角色等级达到境界巅峰时，可发送'悟道进阶'，突破下个境界\n\n"
+    output += "<qqbot-cmd-input text='轮回重生' show='轮回重生' />\n"
+    output += "> 当前角色达到100级后可轮回重生，保留10%裸属性，最高第9世\n\n"
     output += "<qqbot-cmd-input text='出战' show='出战 角色编号' />\n"
     output += "> 点击蓝字后输入角色编号可出战该角色，示例：出战 10001\n\n"
     output += "<qqbot-cmd-input text='收回' show='收回' />\n"
@@ -787,6 +789,7 @@ async def show_help(uid):
 async def show_update_log(uid):
     """显示当前线上版本的玩家可见更新内容。"""
     output = f"##### 📜 更新日志｜{PLAYER_VERSION}\n\n"
+    output += "**🔄 九世轮回开放**\n> 角色达到100级后可发送“轮回重生”，确认后回到1级并踏入下一世；每次继承上一世10%裸属性，最高第9世，装备、本源、技能与灵兽均会保留。\n\n"
     output += "**🧭 今日修行上线**\n> 发送“今日修行”即可查看参悟、副本与日常任务的当前状态，并直接前往最优先的三项操作。主菜单已置顶该入口。\n\n"
     output += "**🛡️ 指令异常保护**\n> 核心指令发生未预期异常时，机器人会优先返回异常提示与消息编号，避免玩家因无回复而连续重复操作。\n\n"
     output += "**📚 指引版本统一**\n> 玩法介绍、更新日志与主菜单共用同一版本标记，避免旧版本按钮误导。\n\n"
