@@ -3,8 +3,10 @@ import unittest
 
 from Game_main.g1_role import _item_info_button
 from Game_main.g4_benyuan import (
+    BENYUAN_ATTR_CONFIG,
     _benyuan_material_requirements,
     _lock_and_consume_benyuan_materials,
+    format_benyuan_attr_gain,
 )
 from Game_main.g6_dungeon import _dungeon_reward_battle_id
 from Tool.tool_canwu import canwu_remaining_seconds, roll_canwu_duration
@@ -77,6 +79,11 @@ class ReportedBugfixTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(is_stage)
         self.assertEqual(requirements, [(101, 3), (102, 2), (103, 1)])
+
+    def test_benyuan_upgrade_gain_uses_chinese_name_and_correct_percent(self):
+        self.assertEqual(format_benyuan_attr_gain(BENYUAN_ATTR_CONFIG[1], 1), "攻击+1%")
+        self.assertEqual(format_benyuan_attr_gain(BENYUAN_ATTR_CONFIG[5], 10), "暴伤+0.1%")
+        self.assertEqual(format_benyuan_attr_gain(BENYUAN_ATTR_CONFIG[5], 20), "暴伤+0.2%")
 
     async def test_benyuan_missing_later_material_deducts_nothing(self):
         cursor = InventoryCursor({(7, 101): 10, (7, 102): 1})

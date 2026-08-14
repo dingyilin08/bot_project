@@ -1,6 +1,6 @@
 import unittest
 
-from Game_main.g7_equip import format_equip_detail_markdown
+from Game_main.g7_equip import format_equip_bag_markdown, format_equip_detail_markdown
 
 
 def make_equip():
@@ -28,6 +28,22 @@ def make_equip():
 
 
 class EquipFormattingTests(unittest.TestCase):
+    def test_bag_buttons_use_short_labels_and_keep_complete_commands(self):
+        unequipped = {**make_equip(), "is_equipped": False}
+        equipped = {**make_equip(), "id": 83, "part": "weapon", "is_equipped": True}
+        content = format_equip_bag_markdown(
+            [unequipped, equipped],
+            1,
+            1,
+            {"id": 1, "name": "测试角色", "level": 1},
+        )
+
+        self.assertIn("text='穿戴装备 82' show='穿戴'", content)
+        self.assertIn("text='装备详情 82' show='详情'", content)
+        self.assertIn("text='强化装备 82' show='强化'", content)
+        self.assertIn("text='出售装备 82' show='出售'", content)
+        self.assertIn("text='卸下装备 武器' show='卸下'", content)
+
     def test_detail_buttons_format_for_unequipped_item(self):
         content = format_equip_detail_markdown(make_equip(), {})
 

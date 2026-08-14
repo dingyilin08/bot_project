@@ -580,9 +580,9 @@ def format_equip_bag_markdown(equipments, page, total_pages, role_info):
             lines.append(f"**[{equip['id']}] {equip['template_name']}** {quality_icon}{equip['quality']}+{equip['level']}\n")
 
             if equip['is_equipped']:
-                lines.append(f"> <qqbot-cmd-input text='卸下装备 {PART_CN.get(equip['part'])}' show='卸下装备 {PART_CN.get(equip['part'])}' /> <qqbot-cmd-input text='装备详情 {equip['id']}' show='装备详情 {equip['id']}' /> <qqbot-cmd-input text='强化装备 {equip['id']}' show='强化装备 {equip['id']}' />\n")
+                lines.append(f"> <qqbot-cmd-input text='卸下装备 {PART_CN.get(equip['part'])}' show='卸下' /> | <qqbot-cmd-input text='装备详情 {equip['id']}' show='详情' /> | <qqbot-cmd-input text='强化装备 {equip['id']}' show='强化' />\n")
             else:
-                lines.append(f"> <qqbot-cmd-input text='穿戴装备 {equip['id']}' show='穿戴装备 {equip['id']}' /> <qqbot-cmd-input text='装备详情 {equip['id']}' show='装备详情 {equip['id']}' /> <qqbot-cmd-input text='强化装备 {equip['id']}' show='强化装备 {equip['id']}' /> <qqbot-cmd-input text='出售装备 {equip['id']}' show='出售装备 {equip['id']}' />\n")
+                lines.append(f"> <qqbot-cmd-input text='穿戴装备 {equip['id']}' show='穿戴' /> | <qqbot-cmd-input text='装备详情 {equip['id']}' show='详情' /> | <qqbot-cmd-input text='强化装备 {equip['id']}' show='强化' /> | <qqbot-cmd-input text='出售装备 {equip['id']}' show='出售' />\n")
 
     lines.append(pagination_controls("装备背包", page, total_pages) + "\n")
 

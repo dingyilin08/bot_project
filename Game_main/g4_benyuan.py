@@ -10,6 +10,25 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+BENYUAN_ATTR_CONFIG = {
+    1: {"label": "攻击", "role_field": "gongji_jc", "by_field": "gj_jc", "base_inc": 1, "display_divisor": 1},
+    2: {"label": "防御", "role_field": "fangyu_jc", "by_field": "fy_jc", "base_inc": 1, "display_divisor": 1},
+    3: {"label": "气血", "role_field": "qixue_jc", "by_field": "qx_jc", "base_inc": 1, "display_divisor": 1},
+    4: {"label": "暴击", "role_field": "baoji", "by_field": "bj_jc", "base_inc": 10, "display_divisor": 100},
+    5: {"label": "暴伤", "role_field": "baoshang", "by_field": "bs_jc", "base_inc": 10, "display_divisor": 100},
+    6: {"label": "闪避", "role_field": "shanbi", "by_field": "sb_jc", "base_inc": 10, "display_divisor": 100},
+    7: {"label": "命中", "role_field": "mingzhong", "by_field": "mz_jc", "base_inc": 10, "display_divisor": 100},
+    8: {"label": "破防", "role_field": "pofang", "by_field": "pf_jc", "base_inc": 10, "display_divisor": 100},
+    9: {"label": "吸血", "role_field": "xixue", "by_field": "xx_jc", "base_inc": 10, "display_divisor": 100},
+}
+
+
+def format_benyuan_attr_gain(config, inc_value):
+    """将本源的数据库增量换算为玩家可读的中文百分比。"""
+    display_value = inc_value / config["display_divisor"]
+    return f"{config['label']}+{display_value:g}%"
+
+
 BENYUAN_SKILL_SEED = [
     # 萧炎 - 斗破苍穹
     {"id": 1001, "role_name": "萧炎", "benyuan_name": "异火本源", "unlock_level": 20, "skill_name": "异火灼脉", "skill_type": 4, "value": 35, "is_percent": 1, "cooldown": 3, "buff_type": "HP_down", "buff_value": 8, "buff_duration": 3, "buff_target": 2, "skill_desc": "异火灼脉，持续焚烧敌方本源。", "priority": 1},
@@ -480,22 +499,10 @@ async def up_benyuan(uid, qz):
                 }
 
             r = random.randint(1, 9)
-            ATTR_CONFIG = {
-                1: {'role_field': 'gongji_jc', 'by_field': 'gj_jc', 'base_inc': 1, 'percent': '%'},
-                2: {'role_field': 'fangyu_jc', 'by_field': 'fy_jc', 'base_inc': 1, 'percent': '%'},
-                3: {'role_field': 'qixue_jc', 'by_field': 'qx_jc', 'base_inc': 1, 'percent': '%'},
-                4: {'role_field': 'baoji', 'by_field': 'bj_jc', 'base_inc': 10, 'percent': '0.1%'},
-                5: {'role_field': 'baoshang', 'by_field': 'bs_jc', 'base_inc': 10, 'percent': '0.1%'},
-                6: {'role_field': 'shanbi', 'by_field': 'sb_jc', 'base_inc': 10, 'percent': '0.1%'},
-                7: {'role_field': 'mingzhong', 'by_field': 'mz_jc', 'base_inc': 10, 'percent': '0.1%'},
-                8: {'role_field': 'pofang', 'by_field': 'pf_jc', 'base_inc': 10, 'percent': '0.1%'},
-                9: {'role_field': 'xixue', 'by_field': 'xx_jc', 'base_inc': 10, 'percent': '0.1%'},
-            }
-            config = ATTR_CONFIG.get(r)
+            config = BENYUAN_ATTR_CONFIG[r]
             # 计算增量值
             multiplier = 2 if is_up_stage == 1 else 1
             inc_value = config['base_inc'] * multiplier
-            display_value = float(config['base_inc'] * multiplier) / (100 if '%' in config['percent'] else 1)
             # 更新角色表
             role_sql = f"UPDATE user_role SET {config['role_field']} = {config['role_field']} + %s WHERE uid = %s AND id = %s LIMIT 1"
             await cursor.execute(role_sql, (inc_value, uid, role_id))
@@ -516,7 +523,7 @@ async def up_benyuan(uid, qz):
             await conn.commit()
 
             # 设置显示文本
-            up_attr = f"{config['role_field'].split('_')[0].capitalize()}+{display_value}{config['percent']}"
+            up_attr = format_benyuan_attr_gain(config, inc_value)
             if 20 <= by_dengji < 40:
                 stage = f"五转·"
             elif 40 <= by_dengji < 60:
