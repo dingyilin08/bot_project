@@ -16,6 +16,7 @@ from Game_main.g36_reincarnation import (
     render_reincarnation_preview,
     render_reincarnation_success,
 )
+from Game_main.g7_equip import can_role_wear_equipment, format_wear_result_markdown
 from output_main import jiance
 
 
@@ -24,6 +25,31 @@ def _attributes(value):
 
 
 class ReincarnationRuleTests(unittest.TestCase):
+    def test_reincarnated_roles_ignore_equipment_level_requirements(self):
+        self.assertFalse(can_role_wear_equipment(1, 90, 1))
+        self.assertTrue(can_role_wear_equipment(90, 90, 1))
+        self.assertTrue(can_role_wear_equipment(1, 90, 2))
+        self.assertTrue(can_role_wear_equipment(1, 90, 9))
+
+    def test_wear_result_explains_reincarnation_level_bypass(self):
+        content = format_wear_result_markdown(
+            {
+                "id": 10001,
+                "name": "王林",
+                "level": 1,
+                "reincarnation_count": 2,
+            },
+            {
+                "part": "weapon",
+                "template_name": "九阶仙剑",
+                "quality": "仙品",
+                "level": 0,
+                "min_level": 90,
+            },
+            attrs_change={},
+        )
+        self.assertIn("第2世不受装备等级限制", content)
+
     def test_rebirth_uses_template_plus_ten_percent_of_current_base_stats(self):
         current = _attributes(999)
         template = _attributes(100)

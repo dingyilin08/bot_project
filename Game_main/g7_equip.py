@@ -28,6 +28,7 @@ from Game_domain.role_trait_service import (
     calculate_lingshi_output,
     has_owned_role,
 )
+from Game_domain.reincarnation_service import ensure_reincarnation_schema
 
 # ================================
 # 常量定义
@@ -556,6 +557,12 @@ async def calc_role_equip_bonus(role_id, cursor=None):
 # Markdown格式化函数
 # ================================
 
+
+def can_role_wear_equipment(role_level, equip_min_level, reincarnation_count=1):
+    """第2世起免除装备等级要求；第1世保持原有等级规则。"""
+    return int(reincarnation_count or 1) > 1 or int(role_level) >= int(equip_min_level)
+
+
 def format_equip_bag_markdown(equipments, page, total_pages, role_info):
     """格式化装备背包"""
     lines = []
@@ -697,6 +704,14 @@ def format_wear_result_markdown(role_info, equip, old_equip=None, attrs_change=N
         lines.append(f">{part_icon} **{equip['template_name']}** {quality_icon}{equip['quality']}+{equip['level']}")
         lines.append("**穿戴结果**")
         lines.append(f"> 已成功穿戴到{PART_CN.get(equip['part'], equip['part'])}槽")
+
+    if (
+        int(role_info.get('reincarnation_count', 1) or 1) > 1
+        and int(role_info['level']) < int(equip['min_level'])
+    ):
+        lines.append(
+            f"> 轮回特权：第{role_info['reincarnation_count']}世不受装备等级限制"
+        )
 
     lines.append("")
     lines.append("**属性变化**")
@@ -1131,6 +1146,8 @@ async def wear_equip(uid, qz, equip_instance_id):
 
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
+            # 在任何行锁之前完成旧服字段检查，避免 DDL 隐式提交穿戴事务。
+            await ensure_reincarnation_schema(cursor)
             await cursor.execute(
                 "SELECT ue.id, ue.uid, ue.equip_id, ue.level, ue.quality, ue.enhance_fail_count, ue.is_equipped, ue.equipped_role_id,"
                 " de.name, de.set_name, de.part, de.min_level,"
@@ -1187,7 +1204,7 @@ async def wear_equip(uid, qz, equip_instance_id):
                     lines.append("<qqbot-cmd-input text='装备背包' show='装备背包' /> | <qqbot-cmd-input text='角色背包' show='角色背包' />")
                     return {"type": "markdown", "content": "\n".join(lines)}
 
-            sql = "SELECT id, `name`, dengji, world FROM user_role WHERE uid = %s AND is_chuzhan = 1 LIMIT 1 FOR UPDATE"
+            sql = "SELECT id, `name`, dengji, world, reincarnation_count FROM user_role WHERE uid = %s AND is_chuzhan = 1 LIMIT 1 FOR UPDATE"
             await cursor.execute(sql, (uid,))
             role_result = await cursor.fetchone()
 
@@ -1200,9 +1217,11 @@ async def wear_equip(uid, qz, equip_instance_id):
                 lines.append("<qqbot-cmd-input text='角色背包' show='角色背包' /> | <qqbot-cmd-input text='出战' show='出战角色' />")
                 return {"type": "markdown", "content": "\n".join(lines)}
 
-            role_id, role_name, role_level, role_world = role_result
+            role_id, role_name, role_level, role_world, reincarnation_count = role_result
 
-            if role_level < equip['min_level']:
+            if not can_role_wear_equipment(
+                role_level, equip['min_level'], reincarnation_count
+            ):
                 lines = []
                 lines.append("##### ❌ 穿戴失败")
                 lines.append(f"**角色：** [{role_id}] {role_name} Lv.{role_level}〔{role_world}〕")
@@ -1258,7 +1277,13 @@ async def wear_equip(uid, qz, equip_instance_id):
             for attr in ['gongji', 'fangyu', 'qixue', 'fali', 'sudu', 'baoji', 'baoshang', 'shanbi', 'mingzhong', 'pofang', 'xixue']:
                 attrs_change[attr] = new_bonus[attr] - old_bonus[attr]
 
-            role_info = {'id': role_id, 'name': role_name, 'level': role_level, 'world': role_world}
+            role_info = {
+                'id': role_id,
+                'name': role_name,
+                'level': role_level,
+                'world': role_world,
+                'reincarnation_count': reincarnation_count,
+            }
 
             updated_equip = await get_user_equip(equip_instance_id, cursor)
 
