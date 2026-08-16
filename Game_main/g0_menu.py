@@ -12,6 +12,10 @@ from func.pd_func import *
 import time
 from Game_domain.gm_state import is_admin as is_gm_admin
 from Game_domain.game_version import PLAYER_VERSION
+from Game_domain.monthly_card_service import (
+    ensure_monthly_card_schema,
+    monthly_card_display_name,
+)
 
 
 # ================================
@@ -128,14 +132,22 @@ async def get_player_basic_info(uid):
     """获取玩家基本信息"""
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
-            sql = "SELECT `name`, lingshi, xianyu FROM user_zt WHERE id = %s LIMIT 1"
+            await ensure_monthly_card_schema(cursor)
+            sql = """
+                SELECT uz.`name`,uz.lingshi,uz.xianyu,
+                       CASE WHEN mc.expires_on>=CURDATE() THEN 1 ELSE 0 END
+                FROM user_zt uz
+                LEFT JOIN user_monthly_card mc ON mc.uid=uz.id
+                WHERE uz.id=%s LIMIT 1
+            """
             await cursor.execute(sql, (uid,))
             result = await cursor.fetchone()
             if result:
                 return {
                     'name': result[0],
                     'lingshi': result[1],
-                    'xianyu': result[2]
+                    'xianyu': result[2],
+                    'monthly_card_active': bool(result[3]),
                 }
             return None
 
@@ -250,7 +262,10 @@ async def show_main_menu(uid, qz):
         role_display = "未出战角色"
 
     output = "##### 🏮 问道诸天｜主菜单\n\n"
-    output += f"**玩家：** {player_info['name']}\n"
+    player_name = monthly_card_display_name(
+        player_info['name'], player_info.get('monthly_card_active', False)
+    )
+    output += f"**玩家：** {player_name}\n"
     output += f"**当前角色：** {role_display}\n"
     output += f"**灵石：** {player_info['lingshi']} | **仙玉：** {player_info['xianyu']}\n\n"
     output += "> 不确定下一步时，先进入「今日修行」；其余入口按系统分区保留。\n\n"

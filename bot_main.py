@@ -19,6 +19,7 @@ from Tool.qq_group_welcome import build_friend_welcome_message, build_group_welc
 from Tool.qq_event_delivery import send_event_with_retry
 from Tool.qq_reply_footer import attach_rotating_reply_notice
 from Game_domain.event_inbox import MySQLEventInbox
+from Game_domain.monthly_card_service import record_monthly_card_player_activity
 
 test_config = read(os.path.join(os.path.dirname(__file__), "config.yaml"))
 _log = botpy_logging.get_logger()
@@ -63,6 +64,8 @@ async def output_content(user_content, user_openid, qun_openid=None, request_id=
     )
     con_arr0, con_arr1 = await jiance(parser_content)
     send_content = await content(con_arr0, con_arr1, user_openid, qun_openid, request_id=request_id)
+    if con_arr0 and send_content is not None:
+        await record_monthly_card_player_activity(user_openid)
     send_content = apply_image_mode(send_content)
     return attach_keyboard(send_content, is_group=qun_openid is not None)
 

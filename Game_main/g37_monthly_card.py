@@ -9,6 +9,7 @@ from Game_domain.monthly_card_service import (
     MONTHLY_CARD_DAILY_XIANYU,
     MONTHLY_CARD_DAYS,
     MONTHLY_CARD_MAX_REMAINING_DAYS,
+    MONTHLY_CARD_TITLE,
     MonthlyCardError,
     claim_monthly_card,
     create_monthly_card_codes,
@@ -45,6 +46,7 @@ async def monthly_card_home(uid, qz):
         state = "✅ 今日已领取" if status["claimed_today"] else "🎁 今日可领取"
         lines.extend((
             "**当前权益**",
+            f"> 专属称号：**「{MONTHLY_CARD_TITLE}」**（有效期内自动展示）",
             f"> 状态：**生效中**｜{state}",
             f"> 到期日：**{status['expires_on']}**｜含今日剩余 **{status['remaining_days']}天**",
             f"> 累计激活：{status['total_days_activated']}天｜累计领取：{status['total_days_claimed']}天",

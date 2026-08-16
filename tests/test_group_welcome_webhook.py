@@ -593,6 +593,8 @@ class GroupWelcomeWebhookTests(unittest.IsolatedAsyncioTestCase):
         ), patch.object(
             main, "content", AsyncMock(return_value="保存成功")
         ), patch.object(
+            main, "record_monthly_card_player_activity", AsyncMock(return_value=None)
+        ), patch.object(
             main.logging, "FileHandler", return_value=main.logging.NullHandler()
         ):
             result = await main.output_content(raw_command, "gm-world-message-user")

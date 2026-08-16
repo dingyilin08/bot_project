@@ -3,6 +3,8 @@
 
 import re
 import secrets
+import logging
+import time
 from datetime import datetime, timedelta
 from uuid import uuid4
 
@@ -17,10 +19,16 @@ MONTHLY_CARD_MAX_REMAINING_DAYS = 180
 MONTHLY_CARD_ACTIVATION_XIANYU = 600
 MONTHLY_CARD_DAILY_XIANYU = 100
 MONTHLY_CARD_DAILY_LINGSHI = 200
+MONTHLY_CARD_TITLE = "月华玩家"
+MONTHLY_CARD_LOGIN_OFFLINE_HOURS = 6
+MONTHLY_CARD_LOGIN_EVENT_TTL_MINUTES = 30
+MONTHLY_CARD_PRESENCE_CACHE_SECONDS = 300
 MONTHLY_CARD_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 MONTHLY_CARD_CODE_RANDOM_LENGTH = 12
 MAX_CODES_PER_BATCH = 20
 _MONTHLY_CARD_SCHEMA_READY = False
+_presence_check_cache = {}
+logger = logging.getLogger(__name__)
 
 
 class MonthlyCardError(ValueError):
@@ -77,6 +85,26 @@ def calculate_stacked_expiry(today, current_expires_on, added_days=MONTHLY_CARD_
             f"月卡最多累计{MONTHLY_CARD_MAX_REMAINING_DAYS}天，请在剩余天数减少后再续卡。"
         )
     return new_expires_on
+
+
+def monthly_card_display_name(player_name, active=True):
+    name = re.sub(r"[^\u4e00-\u9fffa-zA-Z0-9·]", "", str(player_name or ""))[:8]
+    name = name or "无名道友"
+    return f"「{MONTHLY_CARD_TITLE}」{name}" if active else name
+
+
+def monthly_card_login_message(player_name):
+    safe_name = monthly_card_display_name(player_name, active=False)
+    return f"尊贵的{MONTHLY_CARD_TITLE}{safe_name}已上线！"
+
+
+def should_announce_monthly_card_login(now, last_seen_at, last_announced_at):
+    """离线满6小时且当天尚未播报时，视为一次可公告的重新上线。"""
+    if last_announced_at and last_announced_at.date() == now.date():
+        return False
+    if last_seen_at is None:
+        return True
+    return last_seen_at <= now - timedelta(hours=MONTHLY_CARD_LOGIN_OFFLINE_HOURS)
 
 
 async def ensure_monthly_card_schema(cursor):
@@ -157,7 +185,116 @@ async def ensure_monthly_card_schema(cursor):
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='玩家_月卡每日领取流水'
         """
     )
+    await cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_monthly_card_presence (
+            uid INT NOT NULL,
+            last_seen_at DATETIME NOT NULL,
+            last_announced_at DATETIME NULL,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (uid),
+            KEY idx_monthly_card_presence_seen (last_seen_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='玩家_月卡在线状态'
+        """
+    )
+    await cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS world_message_event_queue (
+            id BIGINT NOT NULL AUTO_INCREMENT,
+            event_key VARCHAR(96) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+            content VARCHAR(180) NOT NULL,
+            status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+            available_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            published_at DATETIME NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY uk_world_message_event_key (event_key),
+            KEY idx_world_message_event_pending (status, available_at, expires_at, id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='临时世界消息事件队列'
+        """
+    )
     _MONTHLY_CARD_SCHEMA_READY = True
+
+
+async def record_monthly_card_player_activity(openid):
+    """记录月卡玩家活跃，并在符合上线规则时写入临时世界消息队列。
+
+    该能力属于回复增强，任何数据库异常都必须降级，不能阻断正常游戏指令。
+    """
+    if not openid:
+        return None
+    cache_key = str(openid)
+    monotonic_now = time.monotonic()
+    cached_at = _presence_check_cache.get(cache_key)
+    if cached_at is not None and monotonic_now - cached_at < MONTHLY_CARD_PRESENCE_CACHE_SECONDS:
+        return None
+    _presence_check_cache[cache_key] = monotonic_now
+
+    try:
+        async with connect_mysql() as conn:
+            try:
+                async with conn.cursor() as cursor:
+                    await ensure_monthly_card_schema(cursor)
+                    await cursor.execute(
+                        """
+                        SELECT uz.id,uz.`name`,mc.expires_on,p.last_seen_at,
+                               p.last_announced_at,CURDATE(),NOW()
+                        FROM user_zt uz
+                        LEFT JOIN user_monthly_card mc ON mc.uid=uz.id
+                        LEFT JOIN user_monthly_card_presence p ON p.uid=uz.id
+                        WHERE uz.openid=%s LIMIT 1 FOR UPDATE
+                        """,
+                        (openid,),
+                    )
+                    row = await cursor.fetchone()
+                    if not row:
+                        await conn.rollback()
+                        return None
+                    uid, player_name, expires_on, last_seen_at, last_announced_at, today, now = row
+                    if not expires_on or expires_on < today:
+                        await conn.rollback()
+                        return None
+
+                    announce = should_announce_monthly_card_login(
+                        now, last_seen_at, last_announced_at
+                    )
+                    announced_at = now if announce else last_announced_at
+                    await cursor.execute(
+                        """
+                        INSERT INTO user_monthly_card_presence(uid,last_seen_at,last_announced_at)
+                        VALUES(%s,%s,%s)
+                        ON DUPLICATE KEY UPDATE
+                            last_seen_at=VALUES(last_seen_at),
+                            last_announced_at=VALUES(last_announced_at)
+                        """,
+                        (uid, now, announced_at),
+                    )
+                    message = None
+                    if announce:
+                        event_key = f"monthly-login:{int(uid)}:{today:%Y%m%d}"
+                        message = monthly_card_login_message(player_name)
+                        expires_at = now + timedelta(
+                            minutes=MONTHLY_CARD_LOGIN_EVENT_TTL_MINUTES
+                        )
+                        await cursor.execute(
+                            """
+                            INSERT IGNORE INTO world_message_event_queue(
+                                event_key,content,status,available_at,expires_at
+                            ) VALUES(%s,%s,'PENDING',%s,%s)
+                            """,
+                            (event_key, message, now, expires_at),
+                        )
+                        if cursor.rowcount <= 0:
+                            message = None
+                await conn.commit()
+            except BaseException:
+                await conn.rollback()
+                raise
+        return message
+    except Exception:
+        logger.exception("记录月卡玩家上线状态失败，已降级为普通回复")
+        return None
 
 
 async def create_monthly_card_codes(operator_uid, count):

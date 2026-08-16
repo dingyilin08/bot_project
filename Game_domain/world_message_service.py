@@ -256,6 +256,24 @@ async def next_world_message_slot() -> Optional[str]:
     try:
         async with connect_mysql() as conn:
             async with conn.cursor() as cursor:
+                # 临时玩法事件优先于常驻攻略轮播；发布后立即标记，避免重复展示。
+                await cursor.execute(
+                    """SELECT id,content FROM world_message_event_queue
+                       WHERE status='PENDING' AND available_at<=NOW() AND expires_at>NOW()
+                       ORDER BY id ASC LIMIT 1 FOR UPDATE"""
+                )
+                event_message = await cursor.fetchone()
+                if event_message:
+                    await cursor.execute(
+                        """UPDATE world_message_event_queue
+                           SET status='PUBLISHED',published_at=NOW()
+                           WHERE id=%s AND status='PENDING'""",
+                        (int(event_message[0]),),
+                    )
+                    await conn.commit()
+                    _rotation_failure_logged = False
+                    return str(event_message[1])
+
                 await cursor.execute(
                     """INSERT IGNORE INTO world_message_state
                        (state_key,next_source,last_message_id)

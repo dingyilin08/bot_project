@@ -18,6 +18,7 @@ from Tool.qq_keyboard import attach_keyboard, build_command_keyboard
 from Tool.qq_group_welcome import build_friend_welcome_message, build_group_welcome_message
 from Tool.qq_reply_footer import append_rotating_reply_notice
 from Tool.power_card import cached_power_card_path
+from Game_domain.monthly_card_service import record_monthly_card_player_activity
 
 send_content = ''
 user_last_call_time = {}
@@ -66,6 +67,8 @@ async def output_content(user_content, user_openid, qun_openid=None, request_id=
 
     con_arr0, con_arr1 = await jiance(raw_user_content)
     send_content = await content(con_arr0, con_arr1, user_openid, qun_openid, request_id=request_id)
+    if con_arr0 and send_content is not None:
+        await record_monthly_card_player_activity(user_openid)
     send_content = apply_image_mode(send_content)
     send_content = attach_keyboard(send_content, is_group=qun_openid is not None)
     end_time = time.perf_counter()

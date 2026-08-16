@@ -15,9 +15,10 @@ from output_main import jiance
 
 
 class _RotationCursor:
-    def __init__(self, state, messages):
+    def __init__(self, state, messages, events=None):
         self.state = state
         self.messages = messages
+        self.events = list(events or [])
         self.result = None
 
     async def __aenter__(self):
@@ -29,6 +30,13 @@ class _RotationCursor:
     async def execute(self, sql, params=()):
         statement = " ".join(sql.split())
         self.result = None
+        if statement.startswith("SELECT id,content FROM world_message_event_queue"):
+            self.result = self.events[0] if self.events else None
+            return
+        if statement.startswith("UPDATE world_message_event_queue"):
+            if self.events and int(params[0]) == int(self.events[0][0]):
+                self.events.pop(0)
+            return
         if statement.startswith("INSERT IGNORE INTO world_message_state"):
             return
         if "SELECT next_source,last_message_id" in statement:
@@ -57,8 +65,8 @@ class _RotationCursor:
 
 
 class _RotationConnection:
-    def __init__(self, state, messages):
-        self.cursor_instance = _RotationCursor(state, messages)
+    def __init__(self, state, messages, events=None):
+        self.cursor_instance = _RotationCursor(state, messages, events)
         self.commits = 0
 
     def cursor(self):
@@ -251,6 +259,26 @@ class ReplyFooterTests(unittest.IsolatedAsyncioTestCase):
 
 
 class WorldMessageRotationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_temporary_login_event_is_published_before_regular_rotation(self):
+        state = {"next_source": service.OFFICIAL_SLOT, "last_message_id": None}
+        connection = _RotationConnection(
+            state,
+            [(1, "攻略一")],
+            events=[(9, "尊贵的月华玩家凌霄已上线！")],
+        )
+
+        @asynccontextmanager
+        async def fake_connect_mysql():
+            yield connection
+
+        with patch.object(service, "connect_mysql", fake_connect_mysql):
+            first = await service.next_world_message_slot()
+            second = await service.next_world_message_slot()
+
+        self.assertEqual("尊贵的月华玩家凌霄已上线！", first)
+        self.assertIsNone(second)
+        self.assertEqual(2, connection.commits)
+
     async def test_global_slots_alternate_and_world_messages_round_robin(self):
         state = {"next_source": service.OFFICIAL_SLOT, "last_message_id": None}
         connection = _RotationConnection(state, [(1, "攻略一"), (2, "攻略二")])

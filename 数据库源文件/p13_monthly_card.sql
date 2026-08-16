@@ -61,3 +61,26 @@ CREATE TABLE IF NOT EXISTS user_monthly_card_claim_log (
     UNIQUE KEY uk_monthly_card_daily_claim (uid, claim_date),
     KEY idx_monthly_card_claim_user (uid, claimed_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='玩家_月卡每日领取流水';
+
+CREATE TABLE IF NOT EXISTS user_monthly_card_presence (
+    uid INT NOT NULL,
+    last_seen_at DATETIME NOT NULL,
+    last_announced_at DATETIME NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (uid),
+    KEY idx_monthly_card_presence_seen (last_seen_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='玩家_月卡在线状态';
+
+CREATE TABLE IF NOT EXISTS world_message_event_queue (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    event_key VARCHAR(96) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    content VARCHAR(180) NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    available_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    published_at DATETIME NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_world_message_event_key (event_key),
+    KEY idx_world_message_event_pending (status, available_at, expires_at, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='临时世界消息事件队列';

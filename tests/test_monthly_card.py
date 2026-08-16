@@ -1,24 +1,73 @@
 import unittest
-from datetime import date
+from contextlib import asynccontextmanager
+from datetime import date, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 import output_main
+from Game_domain import monthly_card_service as monthly_service
 from Game_domain.monthly_card_service import (
     MONTHLY_CARD_ACTIVATION_XIANYU,
     MONTHLY_CARD_DAILY_LINGSHI,
     MONTHLY_CARD_DAILY_XIANYU,
     MONTHLY_CARD_DAYS,
     MONTHLY_CARD_MAX_REMAINING_DAYS,
+    MONTHLY_CARD_TITLE,
     MonthlyCardError,
     calculate_stacked_expiry,
     display_monthly_card_code,
     generate_monthly_card_code,
+    monthly_card_display_name,
+    monthly_card_login_message,
     normalize_monthly_card_code,
     parse_generate_count,
     remaining_days,
+    record_monthly_card_player_activity,
+    should_announce_monthly_card_login,
 )
 from Game_main import g0_menu, g24_gm
 from output_main import jiance
+
+
+class _ActivityCursor:
+    def __init__(self, row):
+        self.row = row
+        self.result = None
+        self.rowcount = 0
+        self.executions = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, traceback):
+        return False
+
+    async def execute(self, sql, params=()):
+        statement = " ".join(sql.split())
+        self.executions.append((statement, params))
+        self.result = None
+        self.rowcount = 1
+        if statement.startswith("SELECT uz.id,uz.`name`"):
+            self.result = self.row
+
+    async def fetchone(self):
+        return self.result
+
+
+class _ActivityConnection:
+    def __init__(self, row):
+        self.cursor_instance = _ActivityCursor(row)
+        self.commits = 0
+        self.rollbacks = 0
+
+    def cursor(self):
+        return self.cursor_instance
+
+    async def commit(self):
+        self.commits += 1
+
+    async def rollback(self):
+        self.rollbacks += 1
 
 
 class MonthlyCardRuleTests(unittest.TestCase):
@@ -33,6 +82,35 @@ class MonthlyCardRuleTests(unittest.TestCase):
             3600,
         )
         self.assertEqual(MONTHLY_CARD_DAYS * MONTHLY_CARD_DAILY_LINGSHI, 6000)
+
+    def test_monthly_title_and_login_copy_are_safe_and_exact(self):
+        self.assertEqual(MONTHLY_CARD_TITLE, "月华玩家")
+        self.assertEqual(monthly_card_display_name("凌霄"), "「月华玩家」凌霄")
+        self.assertEqual(
+            monthly_card_login_message("凌*霄[]"),
+            "尊贵的月华玩家凌霄已上线！",
+        )
+
+    def test_login_announcement_requires_six_hours_offline_and_daily_limit(self):
+        now = datetime(2026, 8, 16, 12, 0, 0)
+        self.assertTrue(should_announce_monthly_card_login(now, None, None))
+        self.assertFalse(
+            should_announce_monthly_card_login(
+                now, now - timedelta(hours=5, minutes=59), None
+            )
+        )
+        self.assertTrue(
+            should_announce_monthly_card_login(
+                now, now - timedelta(hours=6), None
+            )
+        )
+        self.assertFalse(
+            should_announce_monthly_card_login(
+                now,
+                now - timedelta(hours=8),
+                datetime(2026, 8, 16, 8, 0, 0),
+            )
+        )
 
     def test_code_generation_and_normalization(self):
         codes = {generate_monthly_card_code() for _ in range(100)}
@@ -86,12 +164,69 @@ class MonthlyCardRuleTests(unittest.TestCase):
         self.assertIn("user_monthly_card", sql)
         self.assertIn("user_monthly_card_activation_log", sql)
         self.assertIn("user_monthly_card_claim_log", sql)
+        self.assertIn("user_monthly_card_presence", sql)
+        self.assertIn("world_message_event_queue", sql)
         self.assertIn("UNIQUE KEY uk_monthly_card_code", sql)
         self.assertIn("UNIQUE KEY uk_monthly_card_activation_code", sql)
         self.assertIn("UNIQUE KEY uk_monthly_card_daily_claim (uid, claim_date)", sql)
+        self.assertIn("UNIQUE KEY uk_world_message_event_key", sql)
 
 
 class MonthlyCardCommandTests(unittest.IsolatedAsyncioTestCase):
+    async def test_active_player_login_is_queued_once_and_cached(self):
+        today = date(2026, 8, 16)
+        now = datetime(2026, 8, 16, 12, 0, 0)
+        connection = _ActivityConnection(
+            (10001, "凌霄", date(2026, 9, 1), None, None, today, now)
+        )
+
+        @asynccontextmanager
+        async def fake_connect_mysql():
+            yield connection
+
+        old_ready = monthly_service._MONTHLY_CARD_SCHEMA_READY
+        monthly_service._MONTHLY_CARD_SCHEMA_READY = True
+        monthly_service._presence_check_cache.clear()
+        try:
+            with patch.object(monthly_service, "connect_mysql", fake_connect_mysql):
+                first = await record_monthly_card_player_activity("openid-1")
+                second = await record_monthly_card_player_activity("openid-1")
+        finally:
+            monthly_service._MONTHLY_CARD_SCHEMA_READY = old_ready
+            monthly_service._presence_check_cache.clear()
+
+        self.assertEqual("尊贵的月华玩家凌霄已上线！", first)
+        self.assertIsNone(second)
+        self.assertEqual(1, connection.commits)
+        statements = [sql for sql, _ in connection.cursor_instance.executions]
+        self.assertTrue(any("INSERT INTO user_monthly_card_presence" in sql for sql in statements))
+        self.assertTrue(any("INSERT IGNORE INTO world_message_event_queue" in sql for sql in statements))
+
+    async def test_active_member_title_is_shown_in_main_menu(self):
+        original_player = g0_menu.get_player_basic_info
+        original_role = g0_menu.get_current_role_info
+
+        async def fake_player(_uid):
+            return {
+                "name": "凌霄",
+                "lingshi": 100,
+                "xianyu": 200,
+                "monthly_card_active": True,
+            }
+
+        async def fake_role(_uid):
+            return None
+
+        g0_menu.get_player_basic_info = fake_player
+        g0_menu.get_current_role_info = fake_role
+        try:
+            content = (await g0_menu.show_main_menu.__wrapped__(1, ""))["content"]
+        finally:
+            g0_menu.get_player_basic_info = original_player
+            g0_menu.get_current_role_info = original_role
+
+        self.assertIn("**玩家：** 「月华玩家」凌霄", content)
+
     async def test_parser_accepts_monthly_card_commands_and_preserves_codes(self):
         code = "MC-ABCD-EFGH-JKLM"
         self.assertEqual(await jiance("月卡"), ("月卡", ""))
