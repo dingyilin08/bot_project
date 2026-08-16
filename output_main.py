@@ -44,6 +44,7 @@ from Game_main.g33_spirit_beast_v2 import *   # 诸天灵契 V2
 from Game_main.g34_xianyu_redeem import *      # 一次性仙玉兑换码
 from Game_main.g35_daily_compass import *      # 今日修行指引
 from Game_main.g36_reincarnation import *       # 角色轮回重生
+from Game_main.g37_monthly_card import *         # 月卡权益
 from Game_main.g0_menu import *          # 菜单系统
 from Tool.qq_keyboard import attach_keyboard
 from Game_domain.gm_service import GMError, authenticate_admin
@@ -55,6 +56,7 @@ youhouzhui = '注册游戏|选择角色|角色介绍|玩法介绍|角色属性|�
 wuhouzhui += '|定向熔炉'
 wuhouzhui += '|日常任务|签到|签到记录|签到奖励|攻略|开荒攻略|角色攻略|战斗攻略|资源攻略'
 wuhouzhui += '|今日修行'
+wuhouzhui += '|月卡|领取月卡'
 wuhouzhui += '|因果印记|赛季装扮|坊市菜单|坊市帮助'
 wuhouzhui += '|邀请菜单|我的邀请码|邀请列表|领取邀请奖励'
 wuhouzhui += '|深渊|深渊菜单|深渊怪物|深渊结算|离开深渊'
@@ -68,7 +70,7 @@ youhouzhui += '|深渊预览|挑战深渊怪物|挑战深渊|深渊定级|深渊
 youhouzhui += '|坊市上架|坊市购买|坊市收购|坊市出售|坊市底价|坊市列表|坊市交易记录|我的摊位|撤摊|坊市'
 youhouzhui += '|GM世界消息添加|GM世界消息修改|GM世界消息启用|GM世界消息停用|GM世界消息删除'
 youhouzhui += '|GM全服发放灵石|GM全服发放仙玉'
-youhouzhui += '|兑换|GM生成兑换码'
+youhouzhui += '|兑换|GM生成兑换码|月卡兑换|GM生成月卡码'
 youhouzhui += '|轮回重生'
 youhouzhui += '|专属图鉴'
 youhouzhui += '|灵兽初契|灵兽详情|灵兽图鉴|灵兽寻踪|灵兽线索|灵兽重复|灵兽培养|灵兽喂养|灵兽突破|灵兽洗髓|灵兽洗髓确认|灵兽洗髓取消|灵兽血脉|灵兽血脉激活|灵兽技能|灵兽技能参悟|灵兽技能装配|灵兽技能卸下|灵兽照料|灵兽一键照料|灵兽上阵|灵兽下阵|灵兽预设|灵兽派遣开始|灵兽派遣领取|灵兽派遣取消|万灵秘境挑战|灵兽传记|灵兽传记选择|灵兽归真|灵兽归真确认|灵兽归真取消|灵兽批量归真确认|灵兽批量归真取消|灵兽改名|灵兽锁定|灵兽切磋'
@@ -88,7 +90,7 @@ market_value_commands = (
     '坊市出售', '坊市底价', '坊市列表', '我的摊位', '撤摊', '坊市',
 )
 registration_value_commands = ('注册游戏',)
-redeem_value_commands = ('GM生成兑换码', '兑换')
+redeem_value_commands = ('GM生成月卡码', 'GM生成兑换码', '月卡兑换', '兑换')
 spirit_beast_value_commands = (
     '灵兽批量归真确认', '灵兽批量归真取消',
     '灵兽派遣领取', '灵兽派遣取消', '灵兽派遣开始',
@@ -330,6 +332,8 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         return await use_stamina_potion(uid, con_arr1 or 1)
     elif con_arr0 == '兑换':
         return await redeem_xianyu(uid, con_arr1)
+    elif con_arr0 == '月卡兑换':
+        return await monthly_card_redeem(uid, con_arr1)
     elif con_arr0 == '坊市':
         return await market_home(uid, con_arr1)
     elif con_arr0 == '坊市帮助':
@@ -769,6 +773,8 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         return await gm_grant_all_xianyu(uid, con_arr1, request_id=request_id)
     elif con_arr0 == 'GM生成兑换码':
         return await gm_create_xianyu_redeem_codes(uid, con_arr1)
+    elif con_arr0 == 'GM生成月卡码':
+        return await gm_create_monthly_card_codes(uid, con_arr1)
     elif con_arr0 == 'GM世界消息':
         return await gm_world_message_menu(uid)
     elif con_arr0 == 'GM世界消息添加':
@@ -818,6 +824,10 @@ async def content(con_arr0, con_arr1, openid, group_openid=None, request_id=None
         return await signin_home(uid)
     elif con_arr0 == '签到奖励':
         return await signin_reward_preview(uid)
+    elif con_arr0 == '月卡':
+        return await monthly_card_home(uid)
+    elif con_arr0 == '领取月卡':
+        return await monthly_card_claim(uid)
     elif con_arr0 == '邀请菜单':
         return await invitation_menu(uid)
     elif con_arr0 == '填写邀请码':

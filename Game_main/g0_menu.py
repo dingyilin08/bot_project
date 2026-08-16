@@ -389,6 +389,7 @@ async def show_activity_menu(uid, qz):
     output = "##### 🌌 活动菜单\n\n"
     output += "每日签到积累七日与三十日奖励；轮海深渊提供无尽单人挑战；世界 Boss 提供贡献与专属感悟。赛季天象会影响新开启的 PVE。\n\n"
     output += "<qqbot-cmd-input text='签到' show='每日签到' /> | <qqbot-cmd-input text='签到记录' show='签到记录' />\n\n"
+    output += "<qqbot-cmd-input text='月卡' show='问道月卡' /> | <qqbot-cmd-input text='领取月卡' show='领取月卡奖励' />\n\n"
     output += "<qqbot-cmd-input text='深渊' show='轮海深渊' /> | <qqbot-cmd-input text='深渊排行' show='深渊排行' />\n\n"
     output += "<qqbot-cmd-input text='邀请菜单' show='道友邀请' />\n\n"
     output += "<qqbot-cmd-input text='兑换 ' show='仙玉兑换码*' />\n"
