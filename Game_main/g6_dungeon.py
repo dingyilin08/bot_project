@@ -785,7 +785,7 @@ def format_dungeon_markdown(dungeons, page, total_pages, role_info, remaining_co
         if can_challenge and remaining_count > 0:
             lines.append(f"**{dungeon_id}. {dungeon['name']}**")
             lines.append(f"> 所属世界：{dungeon['world']} | {dungeon['min_level']}级可挑战")
-            lines.append(f"> 🗒︎<qqbot-cmd-input text='副本信息 {dungeon_id}' show='详情：{dungeon['name']}' /> ⚔️<qqbot-cmd-input text='挑战副本 {dungeon_id}' show='挑战：{dungeon['name']}' />")
+            lines.append(f"> 🗒︎<qqbot-cmd-input text='副本信息 {dungeon_id}' show='详情' /> ⚔️<qqbot-cmd-input text='挑战副本 {dungeon_id}' show='挑战' />")
         elif can_challenge:
             lines.append(f"**{dungeon_id}. {dungeon['name']}**)")
             lines.append(f"> 所属世界：{dungeon['world']} | {dungeon['min_level']}级可挑战")
