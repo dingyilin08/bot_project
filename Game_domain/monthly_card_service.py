@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timedelta
 from uuid import uuid4
 
-from pymysql.err import IntegrityError
+from pymysql.err import IntegrityError, ProgrammingError
 
 from Game_domain.gm_service import require_admin
 from sql.mysql import connect_mysql
@@ -23,6 +23,11 @@ MONTHLY_CARD_TITLE = "月华玩家"
 MONTHLY_CARD_LOGIN_OFFLINE_HOURS = 6
 MONTHLY_CARD_LOGIN_EVENT_TTL_MINUTES = 30
 MONTHLY_CARD_PRESENCE_CACHE_SECONDS = 300
+MONTHLY_CARD_ALCHEMY_REDUCTION_BP = 2000
+MONTHLY_CARD_FARM_REDUCTION_BP = 2000
+MONTHLY_CARD_CULTIVATION_REDUCTION_BP = 1500
+MONTHLY_CARD_DUNGEON_ATTEMPT_BONUS = 5
+MONTHLY_CARD_MARKET_FEE_BP = 500
 MONTHLY_CARD_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 MONTHLY_CARD_CODE_RANDOM_LENGTH = 12
 MAX_CODES_PER_BATCH = 20
@@ -105,6 +110,43 @@ def should_announce_monthly_card_login(now, last_seen_at, last_announced_at):
     if last_seen_at is None:
         return True
     return last_seen_at <= now - timedelta(hours=MONTHLY_CARD_LOGIN_OFFLINE_HOURS)
+
+
+def apply_monthly_card_duration(base_seconds, active, reduction_bp, *, minimum=1):
+    """对新开始的计时任务应用一次月卡减时，并统一向上取整。"""
+    base_seconds = max(int(minimum), int(base_seconds or 0))
+    if not active:
+        return base_seconds
+    reduction_bp = min(5000, max(0, int(reduction_bp or 0)))
+    duration = (base_seconds * (10000 - reduction_bp) + 9999) // 10000
+    return max(int(minimum), duration)
+
+
+def adjusted_start_timestamp_for_duration(now_timestamp, base_seconds, duration):
+    """兼容药园旧计时结构：回拨起点，将本次实际时长冻结到任务中。"""
+    base_seconds = max(1, int(base_seconds))
+    duration = min(base_seconds, max(1, int(duration)))
+    return int(now_timestamp) - (base_seconds - duration)
+
+
+async def has_active_monthly_card(cursor, uid, *, on_date=None):
+    """在调用方事务中查询月卡是否有效，供各玩法统一复用。"""
+    sql = (
+        "SELECT 1 FROM user_monthly_card "
+        "WHERE uid=%s AND expires_on>=CURDATE() LIMIT 1"
+        if on_date is None
+        else "SELECT 1 FROM user_monthly_card "
+        "WHERE uid=%s AND expires_on>=%s LIMIT 1"
+    )
+    params = (uid,) if on_date is None else (uid, on_date)
+    try:
+        await cursor.execute(sql, params)
+    except ProgrammingError as error:
+        if int(error.args[0] or 0) != 1146:
+            raise
+        await ensure_monthly_card_schema(cursor)
+        await cursor.execute(sql, params)
+    return bool(await cursor.fetchone())
 
 
 async def ensure_monthly_card_schema(cursor):

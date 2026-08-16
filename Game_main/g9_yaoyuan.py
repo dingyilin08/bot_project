@@ -14,10 +14,16 @@ from func.pd_func import *
 from Tool.tool_power import update_role_power
 from Tool.tool_command import pagination_controls
 from Game_domain.role_trait_service import (
-    adjusted_start_timestamp,
     apply_production_duration,
     calculate_lingshi_output,
     has_owned_role,
+)
+from Game_domain.monthly_card_service import (
+    MONTHLY_CARD_ALCHEMY_REDUCTION_BP,
+    MONTHLY_CARD_FARM_REDUCTION_BP,
+    adjusted_start_timestamp_for_duration,
+    apply_monthly_card_duration,
+    has_active_monthly_card,
 )
 
 
@@ -1238,6 +1244,7 @@ async def bo_zhong(uid, qz, param):
 
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
+            monthly_card_active = await has_active_monthly_card(cursor, uid)
             await _ensure_yaoyuan_schema(cursor)
             await _init_yaotian(uid, cursor)
 
@@ -1274,8 +1281,12 @@ async def bo_zhong(uid, qz, param):
             slot["is_zz"] = 1
             slot["zz_id"] = int(seed["id"])
             han_li_trait = await has_owned_role(cursor, uid, "韩立")
-            slot["time"] = adjusted_start_timestamp(
-                time.time(), FARM_MATURE_SECONDS, han_li_trait
+            farm_duration = apply_production_duration(FARM_MATURE_SECONDS, han_li_trait)
+            farm_duration = apply_monthly_card_duration(
+                farm_duration, monthly_card_active, MONTHLY_CARD_FARM_REDUCTION_BP
+            )
+            slot["time"] = adjusted_start_timestamp_for_duration(
+                time.time(), FARM_MATURE_SECONDS, farm_duration
             )
             slots[plot_no - 1] = slot
             await _save_slots(uid, slots, cursor, "user_yaotian", "yt", [plot_no])
@@ -1285,10 +1296,11 @@ async def bo_zhong(uid, qz, param):
             lines = []
             lines.append("##### 播种成功")
             lines.append(f"药田{plot_no} 已播种：{seed['name']}")
-            farm_duration = apply_production_duration(FARM_MATURE_SECONDS, han_li_trait)
             lines.append(f"预计成熟：{_format_seconds(farm_duration)}")
             if han_li_trait:
                 lines.append("> 韩立特性「掌天培灵」生效：种植耗时缩短20%。")
+            if monthly_card_active:
+                lines.append("> 月卡特权「灵田滋养」生效：本次种植再缩短20%。")
             lines.append("***")
             lines.append("<qqbot-cmd-input text='药园' show='药园' /> | <qqbot-cmd-input text='一键播种 ' show='一键播种*' />")
             return {"type": "markdown", "content": "\n".join(lines)}
@@ -1302,6 +1314,7 @@ async def yj_bozhong(uid, qz, seed_name):
 
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
+            monthly_card_active = await has_active_monthly_card(cursor, uid)
             await _ensure_yaoyuan_schema(cursor)
             await _init_yaotian(uid, cursor)
 
@@ -1332,8 +1345,12 @@ async def yj_bozhong(uid, qz, seed_name):
             plant_num = min(len(empty_indices), own_num)
             now_ts = int(time.time())
             han_li_trait = await has_owned_role(cursor, uid, "韩立")
-            planted_at = adjusted_start_timestamp(
-                now_ts, FARM_MATURE_SECONDS, han_li_trait
+            farm_duration = apply_production_duration(FARM_MATURE_SECONDS, han_li_trait)
+            farm_duration = apply_monthly_card_duration(
+                farm_duration, monthly_card_active, MONTHLY_CARD_FARM_REDUCTION_BP
+            )
+            planted_at = adjusted_start_timestamp_for_duration(
+                now_ts, FARM_MATURE_SECONDS, farm_duration
             )
             changed = []
             for idx in empty_indices[:plant_num]:
@@ -1360,10 +1377,11 @@ async def yj_bozhong(uid, qz, seed_name):
             lines.append("##### 一键播种完成")
             lines.append(f"种子：{seed['name']}")
             lines.append(f"播种药田数量：{plant_num}")
-            farm_duration = apply_production_duration(FARM_MATURE_SECONDS, han_li_trait)
             lines.append(f"预计成熟：{_format_seconds(farm_duration)}")
             if han_li_trait:
                 lines.append("> 韩立特性「掌天培灵」生效：种植耗时缩短20%。")
+            if monthly_card_active:
+                lines.append("> 月卡特权「灵田滋养」生效：本次种植再缩短20%。")
             lines.append("***")
             lines.append("<qqbot-cmd-input text='药园' show='药园' /> | <qqbot-cmd-input text='种子背包' show='种子背包' />")
             return {"type": "markdown", "content": "\n".join(lines)}
@@ -1711,6 +1729,7 @@ async def lian_dan(uid, qz, param):
 
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
+            monthly_card_active = await has_active_monthly_card(cursor, uid)
             await _ensure_yaoyuan_schema(cursor)
             await _init_danlu(uid, cursor)
             role_info = await _get_current_role(cursor, uid)
@@ -1776,8 +1795,14 @@ async def lian_dan(uid, qz, param):
 
             now_ts = int(time.time())
             xiao_yan_trait = await has_owned_role(cursor, uid, "萧炎")
-            alchemy_started_at = adjusted_start_timestamp(
-                now_ts, ALCHEMY_SECONDS, xiao_yan_trait
+            alchemy_duration = apply_production_duration(ALCHEMY_SECONDS, xiao_yan_trait)
+            alchemy_duration = apply_monthly_card_duration(
+                alchemy_duration,
+                monthly_card_active,
+                MONTHLY_CARD_ALCHEMY_REDUCTION_BP,
+            )
+            alchemy_started_at = adjusted_start_timestamp_for_duration(
+                now_ts, ALCHEMY_SECONDS, alchemy_duration
             )
             from Game_main.g18_alchemy_study import get_alchemy_mastery
             from Game_main.g19_sect import get_active_research
@@ -1812,10 +1837,11 @@ async def lian_dan(uid, qz, param):
             lines.append("##### 炼丹开始")
             lines.append(f"丹炉{furnace_no}：{recipe['name']}")
             lines.append(f"消耗灵石：{need_lingshi}")
-            alchemy_duration = apply_production_duration(ALCHEMY_SECONDS, xiao_yan_trait)
             lines.append(f"炼制时长：{_format_seconds(alchemy_duration)}")
             if xiao_yan_trait:
                 lines.append("> 萧炎特性「帝炎丹心」生效：炼丹耗时缩短20%。")
+            if monthly_card_active:
+                lines.append("> 月卡特权「丹火增益」生效：本炉炼制再缩短20%。")
             lines.append(f"火候：{fire_style}｜当前熟练度：{mastery}")
             lines.append("成功率：保守95% / 均衡90% / 冒险83%")
             if sect_research:

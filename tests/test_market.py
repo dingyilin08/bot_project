@@ -58,6 +58,8 @@ class MarketTests(unittest.IsolatedAsyncioTestCase):
     def test_market_fee_and_categories(self):
         self.assertEqual(calculate_market_fee(100), 8)
         self.assertEqual(calculate_market_fee(19), 1)
+        self.assertEqual(calculate_market_fee(100, monthly_card_active=True), 5)
+        self.assertEqual(calculate_market_fee(19, monthly_card_active=True), 0)
         self.assertEqual(category_for_item("渡厄丹", 4), "丹药")
         self.assertEqual(category_for_item("赤焰砂", 2), "材料")
         self.assertEqual(category_for_item("束灵符", 3), "消耗品")

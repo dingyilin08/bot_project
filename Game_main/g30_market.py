@@ -7,6 +7,11 @@ import time
 
 from func.pd_func import pd_reg_func, reg_xz_func
 from sql.mysql import connect_mysql
+from Game_domain.monthly_card_service import (
+    MONTHLY_CARD_MARKET_FEE_BP,
+    ensure_monthly_card_schema,
+    has_active_monthly_card,
+)
 
 
 MARKET_PAGE_SIZE = 8
@@ -29,9 +34,10 @@ class MarketError(ValueError):
     pass
 
 
-def calculate_market_fee(gross):
-    """成交手续费按卖方收入的 8% 向下取整，避免灵石小数。"""
-    return max(0, int(gross) * MARKET_FEE_BP // 10000)
+def calculate_market_fee(gross, monthly_card_active=False):
+    """普通卖家8%，有效月卡卖家5%；均向下取整避免灵石小数。"""
+    fee_bp = MONTHLY_CARD_MARKET_FEE_BP if monthly_card_active else MARKET_FEE_BP
+    return max(0, int(gross) * fee_bp // 10000)
 
 
 def _round_market_price_up(value):
@@ -162,6 +168,8 @@ def _pagination(command, page, total_pages):
 
 
 async def _ensure_market_schema(cursor):
+    # 坊市会在成交中读取卖家月卡状态，因此必须在任何订单加锁前建好权益表。
+    await ensure_monthly_card_schema(cursor)
     await cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS user_market_order (
@@ -515,7 +523,7 @@ async def market_help(uid, qz):
         "> 查看系统最低单价，以及近 14 日的成交均价、最低价和最高价。",
         "",
         "**五、交易规则**",
-        f"> 订单有效期为 **{MARKET_EXPIRE_HOURS} 小时**；到期自动返还余货或余款。成交从卖家收入扣除 **8%** 手续费（向下取整并销毁）。",
+        f"> 订单有效期为 **{MARKET_EXPIRE_HOURS} 小时**；到期自动返还余货或余款。普通卖家手续费 **8%**，有效月卡卖家仅 **5%**（向下取整并销毁）。",
         "> 药材与丹药可自由上架或收购（含祈愿产出）；扫荡副本券、体力药等商城限购便利道具，以及技能卷轴、装备、本源材料、专属碎片和其他祈愿/绑定/任务道具不可交易。搜索和上架设有短暂冷却，防止刷屏。",
         "> 药材底价按品阶和 NPC 回收价（计入 8% 手续费）计算；丹药底价覆盖丹方灵石消耗与所需药材回收价，出售与收购单均须遵守。",
         "***",
@@ -641,7 +649,8 @@ async def market_create_buy(uid, qz, param):
 
 async def _record_trade(cursor, order_id, buyer_uid, seller_uid, item_id, item_name, quantity, unit_price):
     gross = int(quantity) * int(unit_price)
-    fee = calculate_market_fee(gross)
+    monthly_card_active = await has_active_monthly_card(cursor, seller_uid)
+    fee = calculate_market_fee(gross, monthly_card_active)
     income = gross - fee
     await cursor.execute(
         "UPDATE user_zt SET lingshi = lingshi + %s WHERE id = %s",
@@ -916,7 +925,7 @@ async def show_market_menu(uid, qz):
     lines = [
         "##### 🏮 坊市菜单",
         "> 玩家之间的全服托管交易。点击蓝色指令即可直接发送或补全指令。",
-        "> 出售余货与收购余款会在 72 小时到期后自动返还；卖家成交收入扣除 8% 手续费。",
+        "> 出售余货与收购余款会在 72 小时到期后自动返还；普通卖家手续费8%，有效月卡卖家5%。",
         "***",
         "**查看坊市**",
         _buttons(("坊市", "坊市首页"), ("坊市列表", "坊市列表")),

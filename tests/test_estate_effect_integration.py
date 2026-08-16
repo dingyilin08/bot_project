@@ -196,6 +196,9 @@ class EstateEffectIntegrationTests(unittest.IsolatedAsyncioTestCase):
             patch.object(canwu_module, "connect_mysql", lambda: connection),
             patch.object(canwu_module, "ensure_canwu_duration_column", AsyncMock()),
             patch.object(
+                canwu_module, "has_active_monthly_card", AsyncMock(return_value=False)
+            ),
+            patch.object(
                 canwu_module,
                 "read_estate_levels",
                 AsyncMock(return_value={

@@ -2,7 +2,7 @@ import unittest
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import output_main
 from Game_domain import monthly_card_service as monthly_service
@@ -13,7 +13,12 @@ from Game_domain.monthly_card_service import (
     MONTHLY_CARD_DAYS,
     MONTHLY_CARD_MAX_REMAINING_DAYS,
     MONTHLY_CARD_TITLE,
+    MONTHLY_CARD_ALCHEMY_REDUCTION_BP,
+    MONTHLY_CARD_CULTIVATION_REDUCTION_BP,
+    MONTHLY_CARD_FARM_REDUCTION_BP,
     MonthlyCardError,
+    adjusted_start_timestamp_for_duration,
+    apply_monthly_card_duration,
     calculate_stacked_expiry,
     display_monthly_card_code,
     generate_monthly_card_code,
@@ -25,7 +30,7 @@ from Game_domain.monthly_card_service import (
     record_monthly_card_player_activity,
     should_announce_monthly_card_login,
 )
-from Game_main import g0_menu, g24_gm
+from Game_main import g0_menu, g24_gm, g37_monthly_card
 from output_main import jiance
 
 
@@ -82,6 +87,23 @@ class MonthlyCardRuleTests(unittest.TestCase):
             3600,
         )
         self.assertEqual(MONTHLY_CARD_DAYS * MONTHLY_CARD_DAILY_LINGSHI, 6000)
+
+    def test_timed_perks_are_rounded_and_snapshot_safe(self):
+        alchemy = apply_monthly_card_duration(
+            3600, True, MONTHLY_CARD_ALCHEMY_REDUCTION_BP
+        )
+        farm = apply_monthly_card_duration(
+            7200, True, MONTHLY_CARD_FARM_REDUCTION_BP
+        )
+        cultivation = apply_monthly_card_duration(
+            99, True, MONTHLY_CARD_CULTIVATION_REDUCTION_BP, minimum=30
+        )
+        self.assertEqual((alchemy, farm, cultivation), (2880, 5760, 85))
+        self.assertEqual(
+            adjusted_start_timestamp_for_duration(10000, 3600, alchemy),
+            9280,
+        )
+        self.assertEqual(apply_monthly_card_duration(3600, False, 2000), 3600)
 
     def test_monthly_title_and_login_copy_are_safe_and_exact(self):
         self.assertEqual(MONTHLY_CARD_TITLE, "月华玩家")
@@ -173,6 +195,37 @@ class MonthlyCardRuleTests(unittest.TestCase):
 
 
 class MonthlyCardCommandTests(unittest.IsolatedAsyncioTestCase):
+    async def test_home_explains_all_live_benefits_in_plain_language(self):
+        status = {
+            "active": True,
+            "claimed_today": False,
+            "expires_on": date(2026, 9, 14),
+            "remaining_days": 30,
+            "total_days_activated": 30,
+            "total_days_claimed": 0,
+            "recent_claims": (),
+        }
+        with patch.object(
+            g37_monthly_card,
+            "get_monthly_card_status",
+            AsyncMock(return_value=status),
+        ):
+            content = (
+                await g37_monthly_card.monthly_card_home.__wrapped__(10001, "")
+            )["content"]
+
+        for text in (
+            "每天领取",
+            "月华玩家",
+            "炼丹等待时间",
+            "药材成熟时间",
+            "参悟等待时间",
+            "20次变为25次",
+            "由8%降为5%",
+            "无需手动开启",
+        ):
+            self.assertIn(text, content)
+
     async def test_active_player_login_is_queued_once_and_cached(self):
         today = date(2026, 8, 16)
         now = datetime(2026, 8, 16, 12, 0, 0)

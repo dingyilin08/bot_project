@@ -37,16 +37,13 @@ async def monthly_card_home(uid, qz):
     lines = [
         "##### 🌙 问道月卡",
         "",
-        f"> 激活即得 **{MONTHLY_CARD_ACTIVATION_XIANYU}仙玉**，并开启 **{MONTHLY_CARD_DAYS}个自然日**领取期。",
-        f"> 每日可领：**{MONTHLY_CARD_DAILY_XIANYU}仙玉 + {MONTHLY_CARD_DAILY_LINGSHI}灵石**。",
-        "> 每个自然日限领一次，漏领不补；续卡顺延，有效期最多累计180天。",
+        f"> 激活立即获得 **{MONTHLY_CARD_ACTIVATION_XIANYU}仙玉**，月卡可使用 **{MONTHLY_CARD_DAYS}天**。",
         "",
     ]
     if status["active"]:
         state = "✅ 今日已领取" if status["claimed_today"] else "🎁 今日可领取"
         lines.extend((
             "**当前权益**",
-            f"> 专属称号：**「{MONTHLY_CARD_TITLE}」**（有效期内自动展示）",
             f"> 状态：**生效中**｜{state}",
             f"> 到期日：**{status['expires_on']}**｜含今日剩余 **{status['remaining_days']}天**",
             f"> 累计激活：{status['total_days_activated']}天｜累计领取：{status['total_days_claimed']}天",
@@ -58,6 +55,20 @@ async def monthly_card_home(uid, qz):
             f"> 状态：**未激活或已到期**{expired}",
             "> 获得月卡码后发送“月卡兑换 月卡码”即可激活。",
         ))
+    lines.extend((
+        "",
+        "**激活后可享受**",
+        f"> 🎁 每天领取 **{MONTHLY_CARD_DAILY_XIANYU}仙玉 + {MONTHLY_CARD_DAILY_LINGSHI}灵石**（每天一次，漏领不补）",
+        f"> 🌙 自动佩戴专属称号 **「{MONTHLY_CARD_TITLE}」**，重新上线还会显示专属世界消息",
+        "> 🔥 炼丹等待时间 **缩短20%**，开炉时自动生效",
+        "> 🌱 药材成熟时间 **缩短20%**，播种时自动生效",
+        "> 🧘 参悟等待时间 **缩短15%**，开始参悟时自动生效",
+        "> ⚔️ 每天副本历练次数 **增加5次**（20次变为25次）",
+        "> 🏮 坊市卖出物品的手续费 **由8%降为5%**",
+        "",
+        "> 所有特权无需手动开启；月卡有效时自动生效，到期后自动恢复普通规则。",
+        "> 炼丹、种植和参悟按任务开始时的月卡状态计算，已开始的任务不会中途改变。",
+    ))
     if status["recent_claims"]:
         lines.extend(("", "**近期领取**"))
         lines.extend(

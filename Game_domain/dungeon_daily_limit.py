@@ -3,6 +3,11 @@
 
 from datetime import date
 
+from Game_domain.monthly_card_service import (
+    MONTHLY_CARD_DUNGEON_ATTEMPT_BONUS,
+    has_active_monthly_card,
+)
+
 
 DAILY_DUNGEON_ATTEMPT_LIMIT = 20
 _DAILY_SCHEMA_READY = False
@@ -45,6 +50,9 @@ async def ensure_daily_attempt_schema(cursor):
 
 async def get_daily_attempt_status(cursor, uid, *, lock=False, stat_date=None):
     stat_date = stat_date or date.today()
+    monthly_card_active = await has_active_monthly_card(
+        cursor, uid, on_date=stat_date
+    )
     await cursor.execute("SELECT id FROM user_zt WHERE id=%s LIMIT 1", (uid,))
     if not await cursor.fetchone():
         return None
@@ -64,7 +72,11 @@ async def get_daily_attempt_status(cursor, uid, *, lock=False, stat_date=None):
     )
     row = await cursor.fetchone()
     used = int(row[0] or 0)
-    attempt_limit = max(DAILY_DUNGEON_ATTEMPT_LIMIT, int(row[1] or 0))
+    stored_limit = max(DAILY_DUNGEON_ATTEMPT_LIMIT, int(row[1] or 0))
+    monthly_bonus = (
+        MONTHLY_CARD_DUNGEON_ATTEMPT_BONUS if monthly_card_active else 0
+    )
+    attempt_limit = stored_limit + monthly_bonus
     remaining = remaining_daily_attempts(used, attempt_limit)
     # dungeon_num 继续作为旧菜单/旧版本的只读兼容快照，真实限制只看累计表。
     await cursor.execute(
@@ -75,7 +87,13 @@ async def get_daily_attempt_status(cursor, uid, *, lock=False, stat_date=None):
         """,
         (remaining, stat_date, uid),
     )
-    return {"used": used, "remaining": remaining, "limit": attempt_limit}
+    return {
+        "used": used,
+        "remaining": remaining,
+        "limit": attempt_limit,
+        "stored_limit": stored_limit,
+        "monthly_card_bonus": monthly_bonus,
+    }
 
 
 async def consume_daily_attempt(cursor, uid, *, stat_date=None):
@@ -89,9 +107,9 @@ async def consume_daily_attempt(cursor, uid, *, stat_date=None):
         """
         UPDATE user_dungeon_daily_usage
         SET used_count=used_count+1
-        WHERE uid=%s AND stat_date=%s AND used_count<attempt_limit
+        WHERE uid=%s AND stat_date=%s AND used_count<%s
         """,
-        (uid, stat_date),
+        (uid, stat_date, status["limit"]),
     )
     if cursor.rowcount <= 0:
         return None
@@ -119,15 +137,16 @@ async def increase_daily_attempt_limit(cursor, uid, amount, *, stat_date=None):
     amount = max(0, int(amount or 0))
     if amount <= 0:
         return None
-    new_limit = status["limit"] + amount
+    new_stored_limit = status["stored_limit"] + amount
     await cursor.execute(
         """
         UPDATE user_dungeon_daily_usage
         SET attempt_limit=%s
         WHERE uid=%s AND stat_date=%s
         """,
-        (new_limit, uid, stat_date),
+        (new_stored_limit, uid, stat_date),
     )
+    new_limit = new_stored_limit + status["monthly_card_bonus"]
     remaining = remaining_daily_attempts(status["used"], new_limit)
     await cursor.execute(
         """

@@ -11,10 +11,16 @@ from Tool.tool_canwu import (
     roll_canwu_duration,
 )
 from Game_main.g14_estate import (
+    MIN_CANWU_SECONDS,
     apply_cultivation_duration,
     cultivation_duration_reduction_bp,
     format_basis_points,
     read_estate_levels,
+)
+from Game_domain.monthly_card_service import (
+    MONTHLY_CARD_CULTIVATION_REDUCTION_BP,
+    apply_monthly_card_duration,
+    has_active_monthly_card,
 )
 
 
@@ -81,6 +87,7 @@ async def _apply_canwu_experience(cursor, role_id, role_name, level, current_exp
 async def canwu_role(uid, qz):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
+            monthly_card_active = await has_active_monthly_card(cursor, uid)
             await ensure_canwu_duration_column(cursor)
             # 建筑行先于用户状态加锁，保证与洞府升级使用同一锁顺序；
             # 最终效果写入 cw_duration，之后升级聚灵阵不会追溯当前任务。
@@ -123,6 +130,12 @@ async def canwu_role(uid, qz):
             spirit_array_level = estate_levels["spirit_array"]
             reduction_bp = cultivation_duration_reduction_bp(spirit_array_level)
             duration = apply_cultivation_duration(base_duration, spirit_array_level)
+            duration = apply_monthly_card_duration(
+                duration,
+                monthly_card_active,
+                MONTHLY_CARD_CULTIVATION_REDUCTION_BP,
+                minimum=MIN_CANWU_SECONDS,
+            )
 
             sql = "UPDATE user_zt SET is_canwu = 1, cw_role = %s, cw_timestamp = %s, cw_duration = %s, cw_exp = %s WHERE id = %s"
             await cursor.execute(sql, (id, int(time.time()), duration, add_exp, uid))
@@ -139,6 +152,8 @@ async def canwu_role(uid, qz):
                 f"**聚灵阵快照：** Lv.{spirit_array_level}，"
                 f"时长-{format_basis_points(reduction_bp)}%（本次已冻结）\n"
             )
+            if monthly_card_active:
+                output += "**月卡特权：** 悟道静室生效，本次参悟再缩短15%\n"
             output += f"**本次参悟可获得经验：** {add_exp}\n"
 
             kj = await all_write_command(uid, ("参悟状态", "当前角色", "领取参悟经验"))

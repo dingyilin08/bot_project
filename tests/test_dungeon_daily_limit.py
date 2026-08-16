@@ -1,7 +1,9 @@
 import unittest
+from unittest.mock import AsyncMock, patch
 
 from Game_domain.dungeon_daily_limit import (
     DAILY_DUNGEON_ATTEMPT_LIMIT,
+    get_daily_attempt_status,
     increase_daily_attempt_limit,
     remaining_daily_attempts,
 )
@@ -53,12 +55,29 @@ class _UnlimitedAttemptCursor:
 class DungeonDailyUnlimitedUsageTests(unittest.IsolatedAsyncioTestCase):
     async def test_increase_can_continue_beyond_previous_cap(self):
         cursor = _UnlimitedAttemptCursor(attempt_limit=999)
-        result = await increase_daily_attempt_limit(cursor, 7, 50)
+        with patch(
+            "Game_domain.dungeon_daily_limit.has_active_monthly_card",
+            AsyncMock(return_value=False),
+        ):
+            result = await increase_daily_attempt_limit(cursor, 7, 50)
 
         self.assertEqual(result["limit"], 1049)
         self.assertEqual(result["added"], 50)
         self.assertEqual(result["remaining"], 1029)
         self.assertEqual(cursor.attempt_limit, 1049)
+
+    async def test_monthly_card_adds_five_without_changing_stored_limit(self):
+        cursor = _UnlimitedAttemptCursor(used=3, attempt_limit=20)
+        with patch(
+            "Game_domain.dungeon_daily_limit.has_active_monthly_card",
+            AsyncMock(return_value=True),
+        ):
+            result = await get_daily_attempt_status(cursor, 7)
+
+        self.assertEqual(result["stored_limit"], 20)
+        self.assertEqual(result["monthly_card_bonus"], 5)
+        self.assertEqual(result["limit"], 25)
+        self.assertEqual(result["remaining"], 22)
 
 
 if __name__ == "__main__":
