@@ -20,6 +20,7 @@ from Tool.qq_event_delivery import send_event_with_retry
 from Tool.qq_reply_footer import attach_rotating_reply_notice
 from Game_domain.event_inbox import MySQLEventInbox
 from Game_domain.monthly_card_service import record_monthly_card_player_activity
+from Tool.power_portrait import image_attachments
 
 test_config = read(os.path.join(os.path.dirname(__file__), "config.yaml"))
 _log = botpy_logging.get_logger()
@@ -28,7 +29,16 @@ user_last_call_time = {}
 event_inbox = MySQLEventInbox()
 
 
-async def output_content(user_content, user_openid, qun_openid=None, request_id=None):
+async def output_content(
+    user_content,
+    user_openid,
+    qun_openid=None,
+    request_id=None,
+    attachments=None,
+):
+    user_content = await resolve_power_portrait_message(
+        user_content, user_openid, attachments
+    )
     raw_user_content = user_content
     user_content = user_content.upper()
 
@@ -63,7 +73,14 @@ async def output_content(user_content, user_openid, qun_openid=None, request_id=
         else user_content
     )
     con_arr0, con_arr1 = await jiance(parser_content)
-    send_content = await content(con_arr0, con_arr1, user_openid, qun_openid, request_id=request_id)
+    send_content = await content(
+        con_arr0,
+        con_arr1,
+        user_openid,
+        qun_openid,
+        request_id=request_id,
+        attachments=attachments,
+    )
     if con_arr0 and send_content is not None:
         await record_monthly_card_player_activity(user_openid)
     send_content = apply_image_mode(send_content)
@@ -142,24 +159,37 @@ class MyClient(botpy.Client):
         """统一处理 @ 消息与已开启全量接收后的群消息事件。"""
         user_openid = message.author.member_openid        # 用户的openid
         qun_openid = message.group_openid                 # qq群的openid
+        attachments = image_attachments(getattr(message, "attachments", None))
 
         if not await event_inbox.claim(
             message.id,
             source="websocket",
             event_type=event_type,
-            body={"content": message.content, "group_openid": qun_openid},
+            body={
+                "content": message.content,
+                "group_openid": qun_openid,
+                "attachments": attachments,
+            },
         ):
             return
 
         if (
             event_type == "GROUP_MESSAGE_CREATE"
-            and not await should_reply_to_full_group_message(message.content, user_openid)
+            and not await should_reply_to_full_group_message(
+                message.content, user_openid, attachments
+            )
         ):
             await event_inbox.mark_processed(message.id)
             _log.info("忽略非游戏指令的全量群消息: %s", message.id)
             return
 
-        send_content = await output_content(message.content, user_openid, qun_openid, request_id=message.id)
+        send_content = await output_content(
+            message.content,
+            user_openid,
+            qun_openid,
+            request_id=message.id,
+            attachments=attachments,
+        )
         send_content = await attach_rotating_reply_notice(send_content)
 
         _log.info(f"群聊玩家消息[{user_openid}]：{redact_sensitive_content(message.content.strip())}")
@@ -200,16 +230,26 @@ class MyClient(botpy.Client):
     # 私聊消息
     async def on_c2c_message_create(self, message: C2CMessage):
         user_openid = message.author.user_openid  # 用户的openid
+        attachments = image_attachments(getattr(message, "attachments", None))
 
         if not await event_inbox.claim(
             message.id,
             source="websocket",
             event_type="C2C_MESSAGE_CREATE",
-            body={"content": message.content, "user_openid": user_openid},
+            body={
+                "content": message.content,
+                "user_openid": user_openid,
+                "attachments": attachments,
+            },
         ):
             return
 
-        send_content = await output_content(message.content, user_openid, request_id=message.id)
+        send_content = await output_content(
+            message.content,
+            user_openid,
+            request_id=message.id,
+            attachments=attachments,
+        )
         send_content = await attach_rotating_reply_notice(send_content)
 
         _log.info(f"私聊玩家消息[{user_openid}]：{redact_sensitive_content(message.content)}")

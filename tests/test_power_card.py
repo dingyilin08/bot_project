@@ -93,6 +93,17 @@ class PowerCardRenderTests(unittest.TestCase):
                 self.assertEqual(CARD_SIZE, image.size)
                 self.assertEqual("JPEG", image.format)
 
+    def test_custom_approved_portrait_changes_card_cache_fingerprint(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            custom = Path(temp_dir) / ("portrait_" + "a" * 32 + ".jpg")
+            Image.new("RGB", (900, 1400), (150, 80, 60)).save(custom, "JPEG")
+            default_data = sample_card_data()
+            custom_data = {**sample_card_data(), "portrait_path": str(custom)}
+            self.assertNotEqual(
+                power_card.power_card_cache_name(default_data),
+                power_card.power_card_cache_name(custom_data),
+            )
+
 
 class PowerCardCommandTests(unittest.TestCase):
     def test_power_image_command_is_registered(self):

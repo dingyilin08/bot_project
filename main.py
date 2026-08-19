@@ -23,7 +23,13 @@ from Game_domain.monthly_card_service import record_monthly_card_player_activity
 send_content = ''
 user_last_call_time = {}
 
-async def output_content(user_content, user_openid, qun_openid=None, request_id=None):
+async def output_content(
+    user_content,
+    user_openid,
+    qun_openid=None,
+    request_id=None,
+    attachments=None,
+):
     import logging as lg
     lg.basicConfig(
         level=lg.INFO,
@@ -36,6 +42,9 @@ async def output_content(user_content, user_openid, qun_openid=None, request_id=
     c_logger = lg.getLogger(__name__)
 
     # try:
+    user_content = await resolve_power_portrait_message(
+        user_content, user_openid, attachments
+    )
     raw_user_content = user_content
     user_content = user_content.upper()
 
@@ -66,7 +75,14 @@ async def output_content(user_content, user_openid, qun_openid=None, request_id=
     # 内测群：1341185812BBA8426C8E1AD1BB254DAF
 
     con_arr0, con_arr1 = await jiance(raw_user_content)
-    send_content = await content(con_arr0, con_arr1, user_openid, qun_openid, request_id=request_id)
+    send_content = await content(
+        con_arr0,
+        con_arr1,
+        user_openid,
+        qun_openid,
+        request_id=request_id,
+        attachments=attachments,
+    )
     if con_arr0 and send_content is not None:
         await record_monthly_card_player_activity(user_openid)
     send_content = apply_image_mode(send_content)
@@ -646,6 +662,7 @@ async def handle_webhook(request: Request):
             # 事件体与 @ 消息一致，均可使用消息 ID 被动回复。
             elif payload.t in ("GROUP_AT_MESSAGE_CREATE", "GROUP_MESSAGE_CREATE"):
                 content = filter_group_message_content(json_data.get("content", ""))
+                attachments = json_data.get("attachments") or []
                 author = json_data.get("author") or {}
                 # union_openid 在部分事件中可能为空；群消息稳定提供 member_openid。
                 user_openid = author.get("union_openid") or author.get("member_openid")
@@ -662,13 +679,20 @@ async def handle_webhook(request: Request):
                 logging.info(f"群聊【{group_openid}】{user_openid}：{redact_sensitive_content(content)}")
                 should_reply = (
                     payload.t == "GROUP_AT_MESSAGE_CREATE"
-                    or await should_reply_to_full_group_message(content, user_openid)
+                    or await should_reply_to_full_group_message(
+                        content, user_openid, attachments
+                    )
                 )
                 if not should_reply:
                     logging.info("忽略非游戏指令的全量群消息: %s", msg_id)
                 else:
                     # 发送群聊消息
-                    result = await output_content(content, user_openid, group_openid, request_id=msg_id)
+                    output_kwargs = {"request_id": msg_id}
+                    if attachments:
+                        output_kwargs["attachments"] = attachments
+                    result = await output_content(
+                        content, user_openid, group_openid, **output_kwargs
+                    )
 
                     # 检查返回消息类型
                     if isinstance(result, dict):
@@ -694,8 +718,12 @@ async def handle_webhook(request: Request):
 
             # 私聊消息处理
             elif payload.t == "C2C_MESSAGE_CREATE":
-                content = filter_message_content(json_data["content"])
-                user_openid = json_data["author"]["union_openid"]
+                content = filter_message_content(json_data.get("content", ""))
+                attachments = json_data.get("attachments") or []
+                author = json_data.get("author") or {}
+                user_openid = author.get("union_openid") or author.get("user_openid")
+                if not user_openid:
+                    raise RuntimeError("私聊消息缺少发送者 OpenID")
                 msg_id = json_data["id"]
                 reply_context = {
                     "kind": "c2c",
@@ -704,7 +732,10 @@ async def handle_webhook(request: Request):
                     "reply_type": None,
                 }
                 logging.info(f"私聊【{user_openid}】：{redact_sensitive_content(content)}")
-                result = await output_content(content, user_openid, request_id=msg_id)
+                output_kwargs = {"request_id": msg_id}
+                if attachments:
+                    output_kwargs["attachments"] = attachments
+                result = await output_content(content, user_openid, **output_kwargs)
 
                 # 检查返回消息类型
                 if isinstance(result, dict):
@@ -803,8 +834,15 @@ async def get_image(image_name: str):
     获取图片
     访问 /images/图片名称 可以获取图片
     """
+    from Tool.power_portrait import portrait_file_path
+
     runtime_card = cached_power_card_path(image_name)
-    image_path = str(runtime_card) if runtime_card else os.path.join(IMAGES_DIR, image_name)
+    runtime_portrait = portrait_file_path(image_name)
+    image_path = (
+        str(runtime_card or runtime_portrait)
+        if runtime_card or runtime_portrait
+        else os.path.join(IMAGES_DIR, image_name)
+    )
     
     if not os.path.exists(image_path):
         raise HTTPException(status_code=404, detail="图片不存在")

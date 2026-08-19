@@ -777,6 +777,8 @@ async def show_power_menu(uid, qz):
 
     output += "<qqbot-cmd-input text='战力图片' show='生成战力仙鉴' /> | <qqbot-cmd-input text='我的战力' show='文字战力' />\n"
     output += "> 生成含出战角色立绘、角色属性与六项战力构成的精美战力仙鉴\n\n"
+    output += "<qqbot-cmd-input text='更换战力立绘' show='上传自定义立绘' /> | <qqbot-cmd-input text='立绘状态' show='立绘审核状态' />\n"
+    output += "> 玩家可上传一张角色立绘；GM 审核通过前继续显示当前立绘\n\n"
     output += "<qqbot-cmd-input text='战力排行' show='战力排行' />\n"
     output += "> 点击后发送可选择当前全服/各个角色的战力排行榜\n\n"
     output += "<qqbot-cmd-input text='战力排行 全服' show='战力排行 全服' />\n"

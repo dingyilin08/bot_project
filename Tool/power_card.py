@@ -31,7 +31,7 @@ POWER_CARD_CACHE_DIR = Path(
     os.getenv("POWER_CARD_CACHE_DIR", str(Path(tempfile.gettempdir()) / "qq-rpg-power-cards"))
 )
 CARD_SIZE = (1080, 1350)
-TEMPLATE_VERSION = "power-card-v1.3"
+TEMPLATE_VERSION = "power-card-v1.4"
 
 ROLE_IMAGE_FILES = {
     "萧炎": "xiaoyan.png",
@@ -154,10 +154,17 @@ def _asset_fingerprint(path: Path) -> str:
     return f"{path.name}:{stat.st_size}:{stat.st_mtime_ns}"
 
 
+def _role_portrait_path(data: dict[str, Any], images_path: Path) -> Path:
+    custom_path = Path(str(data.get("portrait_path") or ""))
+    if custom_path.is_file():
+        return custom_path
+    return images_path / ROLE_IMAGE_FILES.get(str(data.get("role_name")), "")
+
+
 def power_card_cache_name(data: dict[str, Any], images_dir: Path | str = IMAGES_DIR) -> str:
     """返回不暴露 UID 的稳定缓存文件名。"""
     images_path = Path(images_dir)
-    role_path = images_path / ROLE_IMAGE_FILES.get(str(data.get("role_name")), "")
+    role_path = _role_portrait_path(data, images_path)
     payload = {
         "template": TEMPLATE_VERSION,
         "data": data,
@@ -200,7 +207,7 @@ def render_power_card(
     ).convert("RGBA")
 
     role_name = str(data.get("role_name") or "未知角色")
-    role_path = images_path / ROLE_IMAGE_FILES.get(role_name, "")
+    role_path = _role_portrait_path(data, images_path)
     if role_path.is_file():
         canvas.alpha_composite(_fit_role_image(role_path), (66, 286))
 

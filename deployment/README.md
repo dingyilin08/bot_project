@@ -17,6 +17,7 @@ apt install -y python3-venv python3-pip nginx rsync curl
 useradd --system --create-home --shell /usr/sbin/nologin qqbot
 useradd --create-home --shell /bin/bash deploy
 install -d -o deploy -g deploy /opt/qq-rpg/releases /opt/qq-rpg/incoming /opt/qq-rpg/shared/logs
+install -d -m 750 -o qqbot -g qqbot /opt/qq-rpg/shared/power_portraits
 install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
 printf '%s\n' 'DEPLOY_PUBLIC_KEY' > /home/deploy/.ssh/authorized_keys
 chown deploy:deploy /home/deploy/.ssh/authorized_keys
@@ -38,6 +39,14 @@ absolute path writable by `qqbot`). This YAML preserves verified GM UIDs and
 the global image mode across service restarts and release switches.
 `POWER_CARD_CACHE_DIR` defaults to `/tmp/qq-rpg-power-cards`, which remains
 writable under the service's private temporary directory.
+Set `POWER_PORTRAIT_DIR=/opt/qq-rpg/shared/power_portraits`; this directory
+contains player uploads and must remain outside versioned release folders.
+
+Before publishing the player portrait feature, execute the idempotent migration:
+
+```bash
+mysql -u bot_project -p bot_project < /opt/qq-rpg/current/数据库源文件/p14_power_portrait.sql
+```
 
 ```bash
 install -d -m 700 /etc/qq-rpg

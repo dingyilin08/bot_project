@@ -12,6 +12,7 @@ from Tool.tool_command import all_write_command
 from Tool.power_card import render_power_card
 from func.pd_func import reg_xz_func
 from config import IMG_BASE_URL
+from Game_domain.power_portrait_service import active_portrait_path
 
 
 logger = logging.getLogger(__name__)
@@ -204,6 +205,15 @@ async def power_image(uid, qz):
             "type": "markdown",
             "content": "##### ⚠️ 暂无战力数据\n\n> 请先选择一名角色并设为出战。\n\n<qqbot-cmd-input text='角色背包' show='角色背包' /> | <qqbot-cmd-input text='出战 ' show='出战角色*' />",
         }
+
+    try:
+        custom_portrait = await active_portrait_path(uid)
+    except Exception:
+        # 迁移尚未执行或共享文件临时不可用时，原战力图片仍可使用默认立绘。
+        logger.exception("读取玩家 %s 的审核立绘失败，回退角色默认立绘", uid)
+        custom_portrait = None
+    if custom_portrait:
+        card_data["portrait_path"] = str(custom_portrait)
 
     try:
         image_path = await asyncio.to_thread(render_power_card, card_data)
