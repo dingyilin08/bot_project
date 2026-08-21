@@ -13,6 +13,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from Game_domain.gm_service import GMError, grant_item, grant_xianyu
+from Game_domain.dao_heart_service import (
+    DaoHeartError,
+    choose_daily_path,
+    get_daily_state,
+)
 from Game_domain.web_auth_service import (
     ADMIN_SCOPE,
     PLAYER_SCOPE,
@@ -53,6 +58,11 @@ class LinkLoginRequest(BaseModel):
 
 class CommandRequest(BaseModel):
     command: str = Field(min_length=1, max_length=120)
+    request_id: str | None = Field(default=None, max_length=80)
+
+
+class DaoHeartChoiceRequest(BaseModel):
+    choice: str = Field(min_length=1, max_length=24)
     request_id: str | None = Field(default=None, max_length=80)
 
 
@@ -230,6 +240,28 @@ async def player_command(payload: CommandRequest, request: Request):
             request_id=payload.request_id,
         )
     except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/api/web/dao-heart")
+async def player_dao_heart(request: Request):
+    identity = await _identity(request, PLAYER_SCOPE)
+    try:
+        return await get_daily_state(identity.uid)
+    except DaoHeartError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/api/web/dao-heart/choice")
+async def player_dao_heart_choice(payload: DaoHeartChoiceRequest, request: Request):
+    identity = await _identity(request, PLAYER_SCOPE, write=True)
+    try:
+        return await choose_daily_path(
+            identity.uid,
+            payload.choice,
+            request_id=payload.request_id,
+        )
+    except DaoHeartError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 

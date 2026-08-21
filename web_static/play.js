@@ -137,6 +137,68 @@
     return card;
   }
 
+  function renderDaoHeart(data) {
+    collectionContent.replaceChildren();
+    const event = data.event;
+    const summary = document.createElement("article");
+    summary.className = "collection-card dao-heart-summary";
+    const title = document.createElement("h4");
+    title.textContent = event.title;
+    const description = document.createElement("p");
+    description.textContent = event.description;
+    const seed = document.createElement("p");
+    seed.className = "collection-meta";
+    seed.textContent = `今日天机种 ${event.seed}｜同一日结果固定`;
+    const tendencies = document.createElement("p");
+    tendencies.textContent = `清明 ${data.tendencies.clarity} · 勇毅 ${data.tendencies.courage} · 仁心 ${data.tendencies.compassion}`;
+    summary.append(title, description, seed, tendencies);
+    collectionContent.appendChild(summary);
+
+    if (data.chosen) {
+      const result = data.result || {};
+      collectionContent.appendChild(collectionCard(
+        `今日已择 · ${result.choice_label || data.choice_key}`,
+        result.result_text || "今日问境已经完成。",
+        `${(result.buff || {}).text || "道心余韵今日有效"} · 灵石 +${number((result.reward || {}).lingshi)}`,
+      ));
+      return;
+    }
+    (event.choices || []).forEach((choice) => {
+      const card = collectionCard(
+        `${choice.label} · ${choice.tendency}`,
+        choice.description,
+        `灵石 +${number(choice.reward.lingshi)} · ${choice.buff}`,
+      );
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = `选择${choice.tendency}之道`;
+      button.addEventListener("click", () => chooseDaoHeart(choice.key));
+      card.appendChild(button);
+      collectionContent.appendChild(card);
+    });
+  }
+
+  async function chooseDaoHeart(choice) {
+    if (busy) return;
+    setBusy(true, "正在叩问本心……");
+    try {
+      const result = await api("/api/web/dao-heart/choice", {
+        method: "POST",
+        body: JSON.stringify({ choice, request_id: `web-dao-${crypto.randomUUID()}` }),
+      });
+      renderResponse({
+        content: `##### ${result.event_title} · ${result.choice_label}\n\n${result.result_text}\n\n获得灵石 ×${result.reward.lingshi}\n${result.buff.text}`,
+        actions: [{ label: "开始参悟", command: "参悟" }],
+      });
+      renderDaoHeart(await api("/api/web/dao-heart"));
+      await loadDashboard();
+    } catch (error) {
+      renderResponse({ content: `##### 道心抉择未完成\n\n${error.message}`, actions: [] });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function loadCollection(view) {
     currentCollection = view;
     collectionContent.replaceChildren();
@@ -166,6 +228,9 @@
         ));
       });
       if (!(data.items || []).length) collectionContent.textContent = "背包空空如也。";
+    } else if (view === "dao-heart") {
+      document.querySelector("#collection-title").textContent = "道心问境";
+      renderDaoHeart(await api("/api/web/dao-heart"));
     }
   }
 

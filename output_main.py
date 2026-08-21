@@ -47,6 +47,7 @@ from Game_main.g36_reincarnation import *       # 角色轮回重生
 from Game_main.g37_monthly_card import *         # 月卡权益
 from Game_main.g38_power_portrait import *          # 玩家战力立绘与 GM 审核
 from Game_main.g39_web_portal import *              # Web 玩家端与隔离管理端绑定
+from Game_main.g40_dao_heart import *               # 每日道心问境
 from Game_main.g0_menu import *          # 菜单系统
 from Tool.qq_keyboard import attach_keyboard
 from Game_domain.gm_service import GMError, authenticate_admin
@@ -62,6 +63,7 @@ wuhouzhui += '|今日修行'
 wuhouzhui += '|月卡|领取月卡'
 wuhouzhui += '|更换战力立绘|立绘状态|GM立绘审核'
 wuhouzhui += '|网页绑定|GM网页绑定'
+wuhouzhui += '|道心问境'
 wuhouzhui += '|因果印记|赛季装扮|坊市菜单|坊市帮助'
 wuhouzhui += '|邀请菜单|我的邀请码|邀请列表|领取邀请奖励'
 wuhouzhui += '|深渊|深渊菜单|深渊怪物|深渊结算|离开深渊'
@@ -78,6 +80,7 @@ youhouzhui += '|GM全服发放灵石|GM全服发放仙玉'
 youhouzhui += '|兑换|GM生成兑换码|月卡兑换|GM生成月卡码'
 youhouzhui += '|GM查看立绘|GM通过立绘|GM驳回立绘'
 youhouzhui += '|轮回重生'
+youhouzhui += '|道心抉择'
 youhouzhui += '|专属图鉴'
 youhouzhui += '|灵兽初契|灵兽详情|灵兽图鉴|灵兽寻踪|灵兽线索|灵兽重复|灵兽培养|灵兽喂养|灵兽突破|灵兽洗髓|灵兽洗髓确认|灵兽洗髓取消|灵兽血脉|灵兽血脉激活|灵兽技能|灵兽技能参悟|灵兽技能装配|灵兽技能卸下|灵兽照料|灵兽一键照料|灵兽上阵|灵兽下阵|灵兽预设|灵兽派遣开始|灵兽派遣领取|灵兽派遣取消|万灵秘境挑战|灵兽传记|灵兽传记选择|灵兽归真|灵兽归真确认|灵兽归真取消|灵兽批量归真确认|灵兽批量归真取消|灵兽改名|灵兽锁定|灵兽切磋'
 
@@ -842,6 +845,10 @@ async def content(
         return await daily_task_home(uid)
     elif con_arr0 == '今日修行':
         return await daily_compass_home(uid)
+    elif con_arr0 == '道心问境':
+        return await dao_heart_home(uid)
+    elif con_arr0 == '道心抉择':
+        return await dao_heart_choose(uid, con_arr1, request_id=request_id)
     elif con_arr0 == '日常领取':
         if con_arr1 == "":
             return "指令错误，正确指令：日常领取 任务编号（或 全部）"

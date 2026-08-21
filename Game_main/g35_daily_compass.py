@@ -106,7 +106,9 @@ def build_daily_compass(snapshot):
         "**常用收取**",
         f"{_button('收回', '一键收回')} | {_button('洞府', '洞府收取')} | {_button('灵兽派遣', '灵兽派遣')}",
         "",
-        f"{_button('日常任务', '日常任务')} | {_button('主菜单', '主菜单')} | {_button('活动菜单', '今日活动')}",
+        f"{_button('道心问境', '道心问境')} | {_button('日常任务', '日常任务')} | {_button('活动菜单', '今日活动')}",
+        "",
+        _button('主菜单', '主菜单'),
     ))
     return {"type": "markdown", "content": "\n".join(lines)}
 

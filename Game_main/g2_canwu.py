@@ -22,6 +22,10 @@ from Game_domain.monthly_card_service import (
     apply_monthly_card_duration,
     has_active_monthly_card,
 )
+from Game_domain.dao_heart_service import (
+    apply_basis_points,
+    get_active_cultivation_effects,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -88,6 +92,7 @@ async def canwu_role(uid, qz):
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
             monthly_card_active = await has_active_monthly_card(cursor, uid)
+            dao_heart_effects = await get_active_cultivation_effects(cursor, uid)
             await ensure_canwu_duration_column(cursor)
             # 建筑行先于用户状态加锁，保证与洞府升级使用同一锁顺序；
             # 最终效果写入 cw_duration，之后升级聚灵阵不会追溯当前任务。
@@ -126,6 +131,11 @@ async def canwu_role(uid, qz):
 
             max_exp = await up_need_exp(dengji)
             add_exp = int(random.randint(0, max_exp) * 0.25 + max_exp * 0.1)
+            add_exp = apply_basis_points(
+                add_exp,
+                dao_heart_effects["experience_bonus_bp"],
+                increase=True,
+            )
             base_duration = roll_canwu_duration()
             spirit_array_level = estate_levels["spirit_array"]
             reduction_bp = cultivation_duration_reduction_bp(spirit_array_level)
@@ -134,6 +144,12 @@ async def canwu_role(uid, qz):
                 duration,
                 monthly_card_active,
                 MONTHLY_CARD_CULTIVATION_REDUCTION_BP,
+                minimum=MIN_CANWU_SECONDS,
+            )
+            duration = apply_basis_points(
+                duration,
+                dao_heart_effects["duration_reduction_bp"],
+                increase=False,
                 minimum=MIN_CANWU_SECONDS,
             )
 
@@ -154,6 +170,16 @@ async def canwu_role(uid, qz):
             )
             if monthly_card_active:
                 output += "**月卡特权：** 悟道静室生效，本次参悟再缩短15%\n"
+            if dao_heart_effects["experience_bonus_bp"]:
+                output += (
+                    "**道心余韵：** 本次参悟经验 "
+                    f"+{dao_heart_effects['experience_bonus_bp'] / 100:g}%（本次已冻结）\n"
+                )
+            if dao_heart_effects["duration_reduction_bp"]:
+                output += (
+                    "**道心余韵：** 本次参悟时长 "
+                    f"-{dao_heart_effects['duration_reduction_bp'] / 100:g}%（本次已冻结）\n"
+                )
             output += f"**本次参悟可获得经验：** {add_exp}\n"
 
             kj = await all_write_command(uid, ("参悟状态", "当前角色", "领取参悟经验"))

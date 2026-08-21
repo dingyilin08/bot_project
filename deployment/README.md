@@ -55,6 +55,12 @@ the Web-only secrets to `/etc/qq-rpg/qq-rpg.env`:
 mysql -u bot_project -p bot_project < /opt/qq-rpg/current/数据库源文件/p15_web_portal.sql
 ```
 
+Before enabling the daily Dao Heart encounter, execute its idempotent migration:
+
+```bash
+mysql -u bot_project -p bot_project < /opt/qq-rpg/current/数据库源文件/p16_dao_heart.sql
+```
+
 ```dotenv
 WEB_AUTH_SECRET=replace-with-at-least-32-random-characters
 WEB_PUBLIC_ORIGIN=https://YOUR_DOMAIN
