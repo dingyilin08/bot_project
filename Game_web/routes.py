@@ -25,6 +25,8 @@ from Game_domain.web_auth_service import (
 from Game_web.portal_service import (
     get_dashboard,
     list_admin_audit,
+    list_player_inventory,
+    list_player_roles,
     search_items,
     search_players,
     write_admin_audit,
@@ -204,6 +206,18 @@ async def player_logout(request: Request, response: Response):
 async def player_dashboard(request: Request):
     identity = await _identity(request, PLAYER_SCOPE)
     return await get_dashboard(identity.uid)
+
+
+@router.get("/api/web/roles")
+async def player_roles(request: Request):
+    identity = await _identity(request, PLAYER_SCOPE)
+    return {"roles": await list_player_roles(identity.uid)}
+
+
+@router.get("/api/web/inventory")
+async def player_inventory(request: Request, page: int = 1, page_size: int = 40):
+    identity = await _identity(request, PLAYER_SCOPE)
+    return await list_player_inventory(identity.uid, page, page_size)
 
 
 @router.post("/api/web/command")

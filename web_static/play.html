@@ -51,14 +51,14 @@
     <aside class="side-nav" aria-label="主要功能">
       <p class="nav-title">修行诸事</p>
       <button class="nav-button active" type="button" data-command="今日修行"><span>今</span>今日修行</button>
-      <button class="nav-button" type="button" data-command="当前角色"><span>身</span>角色道体</button>
+      <button class="nav-button" type="button" data-command="当前角色" data-view="roles"><span>身</span>角色道体</button>
       <button class="nav-button" type="button" data-command="参悟状态"><span>悟</span>参悟修炼</button>
       <button class="nav-button" type="button" data-command="副本列表"><span>战</span>秘境战斗</button>
       <button class="nav-button" type="button" data-command="药园"><span>药</span>药园丹炉</button>
       <button class="nav-button" type="button" data-command="灵兽"><span>灵</span>诸天灵契</button>
       <button class="nav-button" type="button" data-command="洞府"><span>府</span>洞府经营</button>
       <button class="nav-button" type="button" data-command="宗门"><span>宗</span>宗门师徒</button>
-      <button class="nav-button" type="button" data-command="物品背包"><span>囊</span>乾坤背包</button>
+      <button class="nav-button" type="button" data-command="物品背包" data-view="inventory"><span>囊</span>乾坤背包</button>
       <button class="nav-button" type="button" data-command="坊市"><span>市</span>诸天坊市</button>
     </aside>
 
@@ -70,6 +70,13 @@
         </div>
         <span id="request-state" class="status-pill">道场已连接</span>
       </div>
+      <section id="collection-panel" class="collection-panel" hidden>
+        <div class="collection-heading">
+          <h3 id="collection-title">道藏</h3>
+          <button id="close-collection" class="text-button" type="button">收起</button>
+        </div>
+        <div id="collection-content" class="collection-grid"></div>
+      </section>
       <div id="result-panel" class="result-panel" aria-live="polite">
         <p class="empty-state">正在展开今日天机……</p>
       </div>

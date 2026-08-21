@@ -18,6 +18,7 @@ from Game_domain.web_auth_service import (
 )
 from Game_web.presentation import adapt_game_response, dispatch_web_command
 from Game_web.routes import ADMIN_SESSION_COOKIE, PLAYER_SESSION_COOKIE
+from Game_web.portal_service import list_player_inventory, list_player_roles
 from Game_main import g24_gm
 from output_main import jiance
 
@@ -70,6 +71,26 @@ class _Connection:
 
     async def rollback(self):
         self.rolled_back = True
+
+
+class _PortalCursor:
+    def __init__(self):
+        self.calls = []
+
+    async def execute(self, sql, params=None):
+        self.calls.append((" ".join(sql.split()), params))
+
+    async def fetchone(self):
+        return (2,)
+
+    async def fetchall(self):
+        statement = self.calls[-1][0]
+        if "FROM user_role" in statement:
+            return [(10001, "韩立", 12, 345, "结丹境", "凡人修仙传", 1, 900, 800, 4800, 400, 108)]
+        return [
+            (2, "赤焰砂", 2, "火焰结晶", "挑战副本", 5),
+            (34, "吸掌卷轴", 3, "技能卷轴", "挑战副本", 1),
+        ]
 
 
 class WebAuthTests(unittest.TestCase):
@@ -141,6 +162,33 @@ class WebPresentationTests(unittest.TestCase):
         self.assertIn("每日签到", result["content"])
         self.assertEqual([{"label": "每日签到", "command": "签到"}], result["actions"])
 
+    def test_keyboard_commands_supply_fixed_battle_actions(self):
+        result = adapt_game_response({
+            "type": "markdown",
+            "content": "##### 回合战斗",
+            "keyboard_commands": [
+                {"command": "战斗行动 普攻", "label": "普通攻击", "style": 1},
+                ("战斗行动 防御", "防御"),
+            ],
+        })
+        self.assertEqual(
+            [
+                {"label": "普通攻击", "command": "战斗行动 普攻"},
+                {"label": "防御", "command": "战斗行动 防御"},
+            ],
+            result["actions"],
+        )
+
+    def test_parameterized_action_keeps_input_requirement(self):
+        result = adapt_game_response({
+            "type": "markdown",
+            "content": "<qqbot-cmd-input text='选择角色 ' show='选择角色*' />",
+        })
+        self.assertEqual(
+            [{"label": "选择角色", "command": "选择角色", "requires_input": True}],
+            result["actions"],
+        )
+
     def test_player_web_blocks_gm_commands_before_identity_lookup(self):
         with self.assertRaisesRegex(ValueError, "不能执行管理指令"):
             asyncio.run(dispatch_web_command(10001, "GM发放仙玉 10002-10"))
@@ -162,6 +210,23 @@ class WebPresentationTests(unittest.TestCase):
         self.assertIn("GM网页绑定", commands)
 
 
+class WebPortalServiceTests(unittest.TestCase):
+    def test_structured_roles_and_inventory_are_scoped_to_uid(self):
+        cursor = _PortalCursor()
+        connection = _Connection(cursor)
+        with patch("Game_web.portal_service.connect_mysql", return_value=connection):
+            roles = asyncio.run(list_player_roles(10001))
+            inventory = asyncio.run(list_player_inventory(10001, page=1, page_size=40))
+
+        self.assertEqual("韩立", roles[0]["name"])
+        self.assertTrue(roles[0]["active"])
+        self.assertEqual(2, inventory["total"])
+        self.assertEqual("赤焰砂", inventory["items"][0]["name"])
+        uid_params = [params for sql, params in cursor.calls if "uid=%s" in sql]
+        self.assertTrue(uid_params)
+        self.assertTrue(all(params[0] == 10001 for params in uid_params))
+
+
 class WebPortalStructureTests(unittest.TestCase):
     def test_routes_and_isolated_cookie_names_exist(self):
         paths = {route.path for route in main.app.routes if hasattr(route, "path")}
@@ -170,6 +235,8 @@ class WebPortalStructureTests(unittest.TestCase):
             "/admin",
             "/api/web/auth/link",
             "/api/web/command",
+            "/api/web/roles",
+            "/api/web/inventory",
             "/api/admin/auth/link",
             "/api/admin/grants/item",
             "/api/admin/grants/xianyu",

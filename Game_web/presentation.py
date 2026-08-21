@@ -44,21 +44,50 @@ class _QQCommandParser(HTMLParser):
         if tag != "qqbot-cmd-input":
             return
         attributes = dict(attrs)
-        command = str(attributes.get("text", "")).strip()
+        raw_command = str(attributes.get("text", ""))
+        command = raw_command.strip()
         label = str(attributes.get("show", command)).strip().rstrip("*").strip()
         if command and len(command) <= MAX_WEB_COMMAND_LENGTH:
-            self.actions.append({"label": label or command, "command": command})
+            action = {"label": label or command, "command": command}
+            if raw_command.endswith(" "):
+                action["requires_input"] = True
+            self.actions.append(action)
 
 
 def _deduplicate_actions(actions):
     seen = set()
     result = []
     for action in actions:
-        key = (action["label"], action["command"])
+        key = (action["label"], action["command"], action.get("requires_input", False))
         if key not in seen:
             seen.add(key)
             result.append(action)
     return result[:24]
+
+
+def _keyboard_actions(response) -> list:
+    if not isinstance(response, dict):
+        return []
+    actions = []
+    for item in response.get("keyboard_commands") or []:
+        if isinstance(item, dict):
+            raw_command = str(item.get("command", ""))
+            command = raw_command.strip()
+            label = str(item.get("label", command)).strip().rstrip("*").strip()
+            requires_input = item.get("complete") is False or raw_command.endswith(" ")
+        elif isinstance(item, (list, tuple)) and item:
+            raw_command = str(item[0])
+            command = raw_command.strip()
+            label = str(item[1] if len(item) > 1 else item[0]).strip().rstrip("*").strip()
+            requires_input = raw_command.endswith(" ")
+        else:
+            continue
+        if command and len(command) <= MAX_WEB_COMMAND_LENGTH:
+            action = {"label": label or command, "command": command}
+            if requires_input:
+                action["requires_input"] = True
+            actions.append(action)
+    return actions
 
 
 def adapt_game_response(response) -> dict:
@@ -86,7 +115,7 @@ def adapt_game_response(response) -> dict:
     return {
         "type": response_type,
         "content": content.strip(),
-        "actions": _deduplicate_actions(parser.actions),
+        "actions": _deduplicate_actions(_keyboard_actions(response) + parser.actions),
     }
 
 

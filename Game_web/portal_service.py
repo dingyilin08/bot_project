@@ -66,6 +66,75 @@ async def get_dashboard(uid: int) -> dict:
     return dashboard
 
 
+async def list_player_roles(uid: int) -> list:
+    async with connect_mysql() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                """SELECT id,`name`,dengji,exp,stage,world,is_chuzhan,
+                          gongji,fangyu,qixue,fali,sudu
+                   FROM user_role WHERE uid=%s
+                   ORDER BY is_chuzhan DESC,id ASC""",
+                (int(uid),),
+            )
+            rows = await cursor.fetchall()
+    return [
+        {
+            "id": int(row[0]),
+            "name": row[1],
+            "level": int(row[2] or 0),
+            "exp": int(row[3] or 0),
+            "stage": row[4] or "未入境",
+            "world": row[5] or "诸天",
+            "active": bool(row[6]),
+            "attack": int(row[7] or 0),
+            "defense": int(row[8] or 0),
+            "health": int(row[9] or 0),
+            "mana": int(row[10] or 0),
+            "speed": int(row[11] or 0),
+        }
+        for row in rows
+    ]
+
+
+async def list_player_inventory(uid: int, page: int = 1, page_size: int = 40) -> dict:
+    page = max(1, int(page or 1))
+    page_size = _limit(page_size, 60)
+    offset = (page - 1) * page_size
+    async with connect_mysql() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT COUNT(*) FROM user_item WHERE uid=%s AND item_num>0",
+                (int(uid),),
+            )
+            total = int((await cursor.fetchone())[0])
+            await cursor.execute(
+                """SELECT ui.item_id,di.`name`,di.`type`,di.`desc`,di.`access`,ui.item_num
+                   FROM user_item ui
+                   JOIN data_item di ON di.id=ui.item_id
+                   WHERE ui.uid=%s AND ui.item_num>0
+                   ORDER BY di.`type`,ui.item_id
+                   LIMIT %s OFFSET %s""",
+                (int(uid), page_size, offset),
+            )
+            rows = await cursor.fetchall()
+    return {
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "items": [
+            {
+                "id": int(row[0]),
+                "name": row[1],
+                "type": int(row[2] or 0),
+                "description": row[3] or "",
+                "access": row[4] or "",
+                "amount": int(row[5] or 0),
+            }
+            for row in rows
+        ],
+    }
+
+
 async def search_players(query: str = "", limit: int = 20) -> list:
     term = str(query or "").strip()[:32]
     limit = _limit(limit, 50)

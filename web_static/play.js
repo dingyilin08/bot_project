@@ -6,8 +6,11 @@
   const resultPanel = document.querySelector("#result-panel");
   const actionPanel = document.querySelector("#action-panel");
   const requestState = document.querySelector("#request-state");
+  const collectionPanel = document.querySelector("#collection-panel");
+  const collectionContent = document.querySelector("#collection-content");
   let csrfToken = "";
   let busy = false;
+  let currentCollection = "";
 
   async function api(path, options = {}) {
     const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
@@ -100,9 +103,10 @@
       button.type = "button";
       button.textContent = action.label;
       button.addEventListener("click", () => {
-        if (action.command.endsWith(" ")) {
+        if (action.requires_input) {
           const input = document.querySelector("#command-input");
-          input.value = action.command;
+          input.value = `${action.command} `;
+          input.placeholder = `请补充“${action.label}”所需内容后施行`;
           input.focus();
         } else {
           runCommand(action.command, action.label);
@@ -110,6 +114,59 @@
       });
       actionPanel.appendChild(button);
     });
+  }
+
+  function collectionCard(titleText, metaText, stats, actionLabel, actionCommand) {
+    const card = document.createElement("article");
+    card.className = "collection-card";
+    const title = document.createElement("h4");
+    title.textContent = titleText;
+    const meta = document.createElement("p");
+    meta.className = "collection-meta";
+    meta.textContent = metaText;
+    const detail = document.createElement("p");
+    detail.textContent = stats;
+    card.append(title, meta, detail);
+    if (actionLabel && actionCommand) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = actionLabel;
+      button.addEventListener("click", () => runCommand(actionCommand, actionLabel));
+      card.appendChild(button);
+    }
+    return card;
+  }
+
+  async function loadCollection(view) {
+    currentCollection = view;
+    collectionContent.replaceChildren();
+    collectionPanel.hidden = false;
+    if (view === "roles") {
+      document.querySelector("#collection-title").textContent = "诸天角色";
+      const data = await api("/api/web/roles");
+      (data.roles || []).forEach((role) => {
+        collectionContent.appendChild(collectionCard(
+          `${role.name}${role.active ? " · 出战" : ""}`,
+          `${role.world}｜${role.stage}｜Lv.${role.level}`,
+          `攻击 ${number(role.attack)} · 防御 ${number(role.defense)} · 气血 ${number(role.health)}`,
+          role.active ? "查看当前角色" : "设为出战",
+          role.active ? "当前角色" : `出战 ${role.id}`,
+        ));
+      });
+    } else if (view === "inventory") {
+      document.querySelector("#collection-title").textContent = "乾坤背包";
+      const data = await api("/api/web/inventory?page=1&page_size=60");
+      (data.items || []).forEach((item) => {
+        collectionContent.appendChild(collectionCard(
+          `${item.name} × ${number(item.amount)}`,
+          `物品编号 #${item.id}｜类别 ${item.type}`,
+          item.description || "暂无物品说明。",
+          "查看详情",
+          `物品信息 ${item.name}`,
+        ));
+      });
+      if (!(data.items || []).length) collectionContent.textContent = "背包空空如也。";
+    }
   }
 
   async function loadDashboard() {
@@ -127,6 +184,7 @@
       });
       renderResponse(data);
       await loadDashboard();
+      if (currentCollection && !collectionPanel.hidden) await loadCollection(currentCollection);
     } catch (error) {
       renderResponse({ content: `##### 本次推演未完成\n\n${error.message}`, actions: [] });
     } finally {
@@ -158,6 +216,14 @@
     button.addEventListener("click", () => {
       document.querySelectorAll(".nav-button").forEach((item) => item.classList.remove("active"));
       if (button.classList.contains("nav-button")) button.classList.add("active");
+      if (button.dataset.view) {
+        loadCollection(button.dataset.view).catch((error) => {
+          collectionContent.textContent = error.message;
+        });
+      } else if (button.classList.contains("nav-button")) {
+        collectionPanel.hidden = true;
+        currentCollection = "";
+      }
       runCommand(button.dataset.command, button.textContent.trim());
     });
   });
@@ -165,13 +231,21 @@
   document.querySelector("#command-form").addEventListener("submit", (event) => {
     event.preventDefault();
     const input = document.querySelector("#command-input");
-    if (input.value.trim()) runCommand(input.value.trim(), input.value.trim());
+    if (input.value.trim()) {
+      runCommand(input.value.trim(), input.value.trim());
+      input.placeholder = "也可输入已有游戏指令，例如：角色背包";
+    }
   });
 
   document.querySelector("#refresh-dashboard").addEventListener("click", async () => {
     if (busy) return;
     setBusy(true, "刷新状态……");
     try { await loadDashboard(); } finally { setBusy(false); }
+  });
+
+  document.querySelector("#close-collection").addEventListener("click", () => {
+    collectionPanel.hidden = true;
+    currentCollection = "";
   });
 
   document.querySelector("#logout-button").addEventListener("click", async () => {

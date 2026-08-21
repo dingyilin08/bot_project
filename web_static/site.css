@@ -311,6 +311,23 @@ input::placeholder { color: #81918b; }
   padding: 24px 2px;
 }
 
+.collection-panel {
+  margin: 18px 0 0;
+  padding: 16px;
+  background: rgba(219, 232, 219, .38);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.collection-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.collection-heading h3 { margin: 0; color: var(--jade-deep); }
+.collection-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 12px; }
+.collection-card { padding: 13px; background: rgba(255,255,250,.78); border: 1px solid var(--line); border-radius: 9px; }
+.collection-card h4 { margin: 0 0 3px; color: var(--jade-deep); }
+.collection-card p { margin: 4px 0; font-size: 13px; }
+.collection-card .collection-meta { color: var(--cinnabar); }
+.collection-card button { margin-top: 8px; padding: 6px 10px; color: var(--jade-deep); background: var(--jade-pale); border: 1px solid rgba(31,90,77,.25); border-radius: 7px; }
+
 .result-panel h3 { margin: 18px 0 8px; color: var(--jade-deep); font-size: 18px; }
 .result-panel p { margin: 7px 0; white-space: pre-wrap; }
 .result-panel .quote { padding-left: 14px; color: var(--ink-soft); border-left: 3px solid var(--gold); }
