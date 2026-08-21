@@ -199,6 +199,68 @@
     }
   }
 
+  function dungeonActionCard(titleText, metaText, stats, actions) {
+    const card = collectionCard(titleText, metaText, stats);
+    const row = document.createElement("div");
+    row.className = "card-actions";
+    actions.forEach(({ label, command, disabled }) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = label;
+      button.disabled = Boolean(disabled);
+      button.addEventListener("click", () => runCommand(command, label));
+      row.appendChild(button);
+    });
+    card.appendChild(row);
+    return card;
+  }
+
+  function renderDungeons(data) {
+    collectionContent.replaceChildren();
+    if (!data.role) {
+      collectionContent.textContent = "当前没有出战角色，请先在角色道体中选择出战角色。";
+      return;
+    }
+    if (data.active_progress) {
+      const progress = data.active_progress;
+      collectionContent.appendChild(dungeonActionCard(
+        `历练中 · ${progress.dungeon_name}`,
+        `第 ${progress.wave}/${progress.total_waves} 波｜气血 ${progress.player_hp_percent}%｜连胜 ${progress.kill_streak}`,
+        `已击败 ${progress.defeated_count} 位敌手，总击杀 ${progress.total_kills}`,
+        [{
+          label: data.battle_active ? "继续当前回合" : "查看本波敌手",
+          command: data.battle_active ? "战斗状态" : "查看怪物",
+        }, { label: "放弃本次历练", command: "放弃副本" }],
+      ));
+      if (!data.battle_active) {
+        progress.monsters.filter((monster) => !monster.defeated).forEach((monster) => {
+          collectionContent.appendChild(dungeonActionCard(
+            `${monster.type === "boss" ? "首领" : "敌手"} #${monster.index} · ${monster.name}`,
+            monster.description || "秘境中的未知敌手",
+            "尚可挑战",
+            [{ label: `挑战 ${monster.name}`, command: `挑战怪物 ${monster.index}` }],
+          ));
+        });
+      }
+    }
+    const remaining = Number(data.remaining_attempts || 0);
+    (data.dungeons || []).forEach((dungeon) => {
+      collectionContent.appendChild(dungeonActionCard(
+        `#${dungeon.id} · ${dungeon.name}`,
+        `${dungeon.world}｜Lv.${dungeon.min_level}+ · ${dungeon.min_stage}｜${dungeon.cross_world ? "跨界历练" : "同界历练"}`,
+        `${dungeon.description}｜通关基础奖励：经验 ${number(dungeon.reward_exp)}、灵石 ${number(dungeon.reward_lingshi)}｜已通关 ${dungeon.clear_count} 次`,
+        [
+          { label: "查看秘境详情", command: `副本信息 ${dungeon.id}` },
+          {
+            label: remaining > 0 ? "开始挑战" : "校验今日额度",
+            command: `挑战副本 ${dungeon.id}`,
+            disabled: Boolean(data.active_progress),
+          },
+        ],
+      ));
+    });
+  }
+
   async function loadCollection(view) {
     currentCollection = view;
     collectionContent.replaceChildren();
@@ -231,6 +293,9 @@
     } else if (view === "dao-heart") {
       document.querySelector("#collection-title").textContent = "道心问境";
       renderDaoHeart(await api("/api/web/dao-heart"));
+    } else if (view === "dungeons") {
+      document.querySelector("#collection-title").textContent = "秘境历练";
+      renderDungeons(await api("/api/web/dungeons?page=1&page_size=18"));
     }
   }
 

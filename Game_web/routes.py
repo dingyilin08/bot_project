@@ -30,6 +30,7 @@ from Game_domain.web_auth_service import (
 from Game_web.portal_service import (
     get_dashboard,
     list_admin_audit,
+    list_player_dungeons,
     list_player_inventory,
     list_player_roles,
     search_items,
@@ -228,6 +229,15 @@ async def player_roles(request: Request):
 async def player_inventory(request: Request, page: int = 1, page_size: int = 40):
     identity = await _identity(request, PLAYER_SCOPE)
     return await list_player_inventory(identity.uid, page, page_size)
+
+
+@router.get("/api/web/dungeons")
+async def player_dungeons(request: Request, page: int = 1, page_size: int = 12):
+    identity = await _identity(request, PLAYER_SCOPE)
+    try:
+        return await list_player_dungeons(identity.uid, page, page_size)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/api/web/command")

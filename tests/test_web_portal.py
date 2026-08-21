@@ -18,7 +18,11 @@ from Game_domain.web_auth_service import (
 )
 from Game_web.presentation import adapt_game_response, dispatch_web_command
 from Game_web.routes import ADMIN_SESSION_COOKIE, PLAYER_SESSION_COOKIE
-from Game_web.portal_service import list_player_inventory, list_player_roles
+from Game_web.portal_service import (
+    list_player_dungeons,
+    list_player_inventory,
+    list_player_roles,
+)
 from Game_main import g24_gm
 from output_main import jiance
 
@@ -90,6 +94,44 @@ class _PortalCursor:
         return [
             (2, "赤焰砂", 2, "火焰结晶", "挑战副本", 5),
             (34, "吸掌卷轴", 3, "技能卷轴", "挑战副本", 1),
+        ]
+
+
+class _DungeonPortalCursor:
+    def __init__(self):
+        self.calls = []
+
+    async def execute(self, sql, params=None):
+        self.calls.append((" ".join(sql.split()), params))
+
+    async def fetchone(self):
+        statement = self.calls[-1][0]
+        if statement.startswith("SELECT dungeon_num FROM user_zt"):
+            return (7,)
+        if statement.startswith("SELECT id,`name`,dengji,world FROM user_role"):
+            return (88, "韩立", 22, "凡人修仙传")
+        if statement.startswith("SELECT udp.dungeon_id"):
+            return (
+                23,
+                "乱星海海域",
+                2,
+                3,
+                '[{"index":1,"name":"海妖","type":"normal","description":"逐浪而来","defeated":false}]',
+                0,
+                0.75,
+                2,
+                6,
+            )
+        if statement.startswith("SELECT 1 FROM battle_session"):
+            return (1,)
+        if statement.startswith("SELECT COUNT(*) FROM data_dungeon"):
+            return (2,)
+        return None
+
+    async def fetchall(self):
+        return [
+            (23, "乱星海海域", "凡人修仙传", 20, "结丹", "出海除妖", 500, 200, 1),
+            (3, "塔戈尔沙漠", "斗破苍穹", 20, "大斗师", "沙海异火", 500, 200, 0),
         ]
 
 
@@ -226,6 +268,22 @@ class WebPortalServiceTests(unittest.TestCase):
         self.assertTrue(uid_params)
         self.assertTrue(all(params[0] == 10001 for params in uid_params))
 
+    def test_structured_dungeons_include_progress_and_cross_world_state(self):
+        cursor = _DungeonPortalCursor()
+        connection = _Connection(cursor)
+        with patch("Game_web.portal_service.connect_mysql", return_value=connection):
+            data = asyncio.run(list_player_dungeons(10001, page=1, page_size=12))
+
+        self.assertEqual(7, data["remaining_attempts"])
+        self.assertTrue(data["battle_active"])
+        self.assertEqual("海妖", data["active_progress"]["monsters"][0]["name"])
+        self.assertEqual(75, data["active_progress"]["player_hp_percent"])
+        self.assertFalse(data["dungeons"][0]["cross_world"])
+        self.assertTrue(data["dungeons"][1]["cross_world"])
+        uid_scoped = [params for sql, params in cursor.calls if "uid=%s" in sql or "id=%s" in sql]
+        self.assertTrue(uid_scoped)
+        self.assertTrue(all(params[0] == 10001 for params in uid_scoped))
+
 
 class WebPortalStructureTests(unittest.TestCase):
     def test_routes_and_isolated_cookie_names_exist(self):
@@ -237,6 +295,7 @@ class WebPortalStructureTests(unittest.TestCase):
             "/api/web/command",
             "/api/web/roles",
             "/api/web/inventory",
+            "/api/web/dungeons",
             "/api/admin/auth/link",
             "/api/admin/grants/item",
             "/api/admin/grants/xianyu",

@@ -327,6 +327,8 @@ input::placeholder { color: #81918b; }
 .collection-card p { margin: 4px 0; font-size: 13px; }
 .collection-card .collection-meta { color: var(--cinnabar); }
 .collection-card button { margin-top: 8px; padding: 6px 10px; color: var(--jade-deep); background: var(--jade-pale); border: 1px solid rgba(31,90,77,.25); border-radius: 7px; }
+.card-actions { display: flex; flex-wrap: wrap; gap: 0.55rem; }
+.card-actions button:disabled { cursor: not-allowed; filter: grayscale(.8); opacity: .55; }
 
 .result-panel h3 { margin: 18px 0 8px; color: var(--jade-deep); font-size: 18px; }
 .result-panel p { margin: 7px 0; white-space: pre-wrap; }

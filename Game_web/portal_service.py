@@ -13,6 +13,16 @@ def _limit(value, maximum=100):
         return 20
 
 
+def _json_list(value):
+    if isinstance(value, list):
+        return value
+    try:
+        parsed = json.loads(value or "[]")
+    except (TypeError, ValueError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
 async def get_dashboard(uid: int) -> dict:
     async with connect_mysql() as conn:
         async with conn.cursor() as cursor:
@@ -129,6 +139,130 @@ async def list_player_inventory(uid: int, page: int = 1, page_size: int = 40) ->
                 "description": row[3] or "",
                 "access": row[4] or "",
                 "amount": int(row[5] or 0),
+            }
+            for row in rows
+        ],
+    }
+
+
+async def list_player_dungeons(uid: int, page: int = 1, page_size: int = 12) -> dict:
+    """返回网页原生秘境列表和当前进度；写操作仍由共享命令服务完成。"""
+
+    page = max(1, int(page or 1))
+    page_size = _limit(page_size, 24)
+    offset = (page - 1) * page_size
+    async with connect_mysql() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT dungeon_num FROM user_zt WHERE id=%s LIMIT 1",
+                (int(uid),),
+            )
+            player = await cursor.fetchone()
+            if not player:
+                raise ValueError("玩家不存在。")
+            await cursor.execute(
+                """SELECT id,`name`,dengji,world FROM user_role
+                   WHERE uid=%s AND is_chuzhan=1 LIMIT 1""",
+                (int(uid),),
+            )
+            role = await cursor.fetchone()
+            if not role:
+                return {
+                    "page": page,
+                    "page_size": page_size,
+                    "total": 0,
+                    "remaining_attempts": int(player[0] or 0),
+                    "role": None,
+                    "active_progress": None,
+                    "battle_active": False,
+                    "dungeons": [],
+                }
+
+            role_level = int(role[2] or 0)
+            await cursor.execute(
+                """SELECT udp.dungeon_id,dd.`name`,udp.wave,udp.total_waves,
+                          udp.monsters,udp.defeated_count,udp.player_hp_ratio,
+                          udp.kill_streak,udp.total_kills
+                   FROM user_dungeon_progress udp
+                   JOIN data_dungeon dd ON dd.id=udp.dungeon_id
+                   WHERE udp.uid=%s AND udp.status='fighting' LIMIT 1""",
+                (int(uid),),
+            )
+            progress = await cursor.fetchone()
+            await cursor.execute(
+                """SELECT 1 FROM battle_session
+                   WHERE owner_uid=%s AND state IN
+                       ('CREATED','WAITING_ACTIONS','RESOLVING','RECOVERY_REQUIRED')
+                   LIMIT 1""",
+                (int(uid),),
+            )
+            battle_active = bool(await cursor.fetchone())
+            await cursor.execute(
+                "SELECT COUNT(*) FROM data_dungeon WHERE min_level<=%s",
+                (role_level,),
+            )
+            total = int((await cursor.fetchone())[0])
+            await cursor.execute(
+                """SELECT dd.id,dd.`name`,dd.world,dd.min_level,dd.min_stage,
+                          dd.`description`,dd.reward_exp,dd.reward_lingshi,
+                          COALESCE(udc.clear_count,0)
+                   FROM data_dungeon dd
+                   LEFT JOIN user_dungeon_clear udc
+                     ON udc.dungeon_id=dd.id AND udc.uid=%s
+                   WHERE dd.min_level<=%s
+                   ORDER BY (dd.world=%s) DESC,dd.min_level DESC,dd.id
+                   LIMIT %s OFFSET %s""",
+                (int(uid), role_level, role[3], page_size, offset),
+            )
+            rows = await cursor.fetchall()
+
+    active_progress = None
+    if progress:
+        monsters = []
+        for monster in _json_list(progress[4]):
+            monsters.append({
+                "index": int(monster.get("index", 0)),
+                "name": str(monster.get("name", "未知敌手")),
+                "type": str(monster.get("type", "normal")),
+                "description": str(monster.get("description", "")),
+                "defeated": bool(monster.get("defeated", False)),
+            })
+        active_progress = {
+            "dungeon_id": int(progress[0]),
+            "dungeon_name": progress[1],
+            "wave": int(progress[2]),
+            "total_waves": int(progress[3]),
+            "monsters": monsters,
+            "defeated_count": int(progress[5] or 0),
+            "player_hp_percent": max(0, min(100, int(float(progress[6] or 0) * 100))),
+            "kill_streak": int(progress[7] or 0),
+            "total_kills": int(progress[8] or 0),
+        }
+    return {
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "remaining_attempts": int(player[0] or 0),
+        "role": {
+            "id": int(role[0]),
+            "name": role[1],
+            "level": role_level,
+            "world": role[3] or "诸天",
+        },
+        "active_progress": active_progress,
+        "battle_active": battle_active,
+        "dungeons": [
+            {
+                "id": int(row[0]),
+                "name": row[1],
+                "world": row[2],
+                "min_level": int(row[3]),
+                "min_stage": row[4],
+                "description": row[5] or "",
+                "reward_exp": int(row[6] or 0),
+                "reward_lingshi": int(row[7] or 0),
+                "clear_count": int(row[8] or 0),
+                "cross_world": row[2] != role[3],
             }
             for row in rows
         ],
