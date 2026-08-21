@@ -19,6 +19,7 @@ from Tool.qq_group_welcome import build_friend_welcome_message, build_group_welc
 from Tool.qq_reply_footer import append_rotating_reply_notice
 from Tool.power_card import cached_power_card_path
 from Game_domain.monthly_card_service import record_monthly_card_player_activity
+from Game_web.routes import install_web_routes
 
 send_content = ''
 user_last_call_time = {}
@@ -117,6 +118,7 @@ else:
 TOKEN_URL = "https://bots.qq.com/app/getAppAccessToken"
 
 app = FastAPI()
+install_web_routes(app)
 event_inbox = MySQLEventInbox()
 
 # 配置日志

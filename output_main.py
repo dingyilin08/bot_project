@@ -46,6 +46,7 @@ from Game_main.g35_daily_compass import *      # 今日修行指引
 from Game_main.g36_reincarnation import *       # 角色轮回重生
 from Game_main.g37_monthly_card import *         # 月卡权益
 from Game_main.g38_power_portrait import *          # 玩家战力立绘与 GM 审核
+from Game_main.g39_web_portal import *              # Web 玩家端与隔离管理端绑定
 from Game_main.g0_menu import *          # 菜单系统
 from Tool.qq_keyboard import attach_keyboard
 from Game_domain.gm_service import GMError, authenticate_admin
@@ -60,6 +61,7 @@ wuhouzhui += '|日常任务|签到|签到记录|签到奖励|攻略|开荒攻略
 wuhouzhui += '|今日修行'
 wuhouzhui += '|月卡|领取月卡'
 wuhouzhui += '|更换战力立绘|立绘状态|GM立绘审核'
+wuhouzhui += '|网页绑定|GM网页绑定'
 wuhouzhui += '|因果印记|赛季装扮|坊市菜单|坊市帮助'
 wuhouzhui += '|邀请菜单|我的邀请码|邀请列表|领取邀请奖励'
 wuhouzhui += '|深渊|深渊菜单|深渊怪物|深渊结算|离开深渊'
@@ -809,6 +811,10 @@ async def content(
         return await gm_power_portrait_approve(uid, con_arr1)
     elif con_arr0 == 'GM驳回立绘':
         return await gm_power_portrait_reject(uid, con_arr1)
+    elif con_arr0 == '网页绑定':
+        return await web_player_link(uid)
+    elif con_arr0 == 'GM网页绑定':
+        return await web_admin_link(uid)
 
     # ==================== 菜单系统命令 ==================== #
 

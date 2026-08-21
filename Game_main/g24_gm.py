@@ -50,6 +50,7 @@ async def gm_menu(uid, qz):
     content += f"{_button('关闭图片模式', '关闭图片')} | {_button('开启图片模式', '开启图片')}\n\n"
     content += f"{_button('GM世界消息', '世界消息库')}\n\n"
     content += f"{_button('GM立绘审核', '玩家立绘审核')}\n\n"
+    content += f"{_button('GM网页绑定', '登录网页管理端')}\n\n"
     content += "> 物品格式：GM发放物品 目标UID-物品名称或编号-数量\n"
     content += "> 仙玉格式：GM发放仙玉 目标UID-数量\n"
     content += "> 全服格式：GM全服发放灵石 数量，或 GM全服发放仙玉 数量\n\n"
@@ -66,6 +67,7 @@ async def gm_menu(uid, qz):
         ("关闭图片模式", "关闭图片"), ("开启图片模式", "开启图片"),
         ("GM世界消息", "世界消息库"),
         ("GM立绘审核", "玩家立绘审核"),
+        ("GM网页绑定", "网页管理端"),
         ("主菜单", "主菜单"),
     ))
 

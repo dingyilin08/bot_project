@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>问道诸天 · 管理台</title>
+  <link rel="stylesheet" href="/web/static/site.css">
+</head>
+<body class="admin-page">
+  <main id="admin-login-view" class="login-shell">
+    <section class="paper-card login-card admin-login-card" aria-labelledby="admin-login-title">
+      <p class="eyebrow">独立管理会话 · 最长 8 小时</p>
+      <h1 id="admin-login-title" class="brand-title smaller">诸天司录</h1>
+      <p class="brand-subtitle">游戏数据管理与道具发放</p>
+      <ol class="login-guide">
+        <li>先在 QQ 完成“GM验证”</li>
+        <li>发送“GM网页绑定”获取一次性管理码</li>
+        <li>管理登录与玩家登录完全隔离</li>
+      </ol>
+      <form id="admin-login-form" class="stack-form">
+        <label for="admin-login-uid">管理员 UID</label>
+        <input id="admin-login-uid" inputmode="numeric" autocomplete="username" required>
+        <label for="admin-login-code">一次性管理码</label>
+        <input id="admin-login-code" autocomplete="one-time-code" maxlength="20" required>
+        <button class="primary-button" type="submit">进入司录台</button>
+        <p id="admin-login-error" class="form-message error" role="alert"></p>
+      </form>
+      <a class="quiet-link" href="/play">返回玩家入口</a>
+    </section>
+  </main>
+
+  <div id="admin-view" class="admin-shell" hidden>
+    <header class="admin-header">
+      <div>
+        <p class="eyebrow">问道诸天 · 隔离管理端</p>
+        <h1>诸天司录</h1>
+      </div>
+      <div class="admin-identity">
+        <span id="admin-name">管理员</span>
+        <span id="admin-uid" class="muted"></span>
+        <button id="admin-logout" class="text-button danger-text" type="button">安全退出</button>
+      </div>
+    </header>
+
+    <main class="admin-content">
+      <section class="admin-panel search-panel" aria-labelledby="player-search-title">
+        <div class="panel-heading">
+          <div><p class="eyebrow">第一步</p><h2 id="player-search-title">选择玩家</h2></div>
+        </div>
+        <form id="player-search-form" class="inline-form">
+          <label class="sr-only" for="player-query">UID 或昵称</label>
+          <input id="player-query" maxlength="32" placeholder="输入 UID 或昵称">
+          <button class="secondary-button" type="submit">查询玩家</button>
+        </form>
+        <div id="player-results" class="data-list" aria-live="polite"></div>
+      </section>
+
+      <section class="admin-panel grant-panel" aria-labelledby="grant-title">
+        <div class="panel-heading">
+          <div><p class="eyebrow">第二步</p><h2 id="grant-title">发放资源</h2></div>
+          <span id="selected-player" class="status-pill warning">未选择玩家</span>
+        </div>
+        <div class="grant-columns">
+          <form id="item-grant-form" class="stack-form compact-form">
+            <h3>发放道具</h3>
+            <label for="item-query">物品名称或编号</label>
+            <div class="inline-form">
+              <input id="item-query" maxlength="50" placeholder="例如 九转丹">
+              <button id="item-search-button" class="text-button" type="button">查目录</button>
+            </div>
+            <div id="item-results" class="item-results"></div>
+            <input id="selected-item" type="hidden">
+            <label for="item-amount">数量</label>
+            <input id="item-amount" type="number" min="1" max="1000000000" value="1" required>
+            <button class="primary-button" type="submit">确认发放道具</button>
+          </form>
+          <form id="xianyu-grant-form" class="stack-form compact-form">
+            <h3>发放仙玉</h3>
+            <label for="xianyu-amount">仙玉数量</label>
+            <input id="xianyu-amount" type="number" min="1" max="1000000000" value="100" required>
+            <p class="field-help">操作写入奖励流水、GM 操作日志和网页管理审计；重复请求不会重复到账。</p>
+            <button class="primary-button" type="submit">确认发放仙玉</button>
+          </form>
+        </div>
+        <p id="grant-message" class="form-message" role="status"></p>
+      </section>
+
+      <section class="admin-panel audit-panel" aria-labelledby="audit-title">
+        <div class="panel-heading">
+          <div><p class="eyebrow">留痕</p><h2 id="audit-title">最近管理操作</h2></div>
+          <button id="refresh-audit" class="text-button" type="button">刷新审计</button>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>时间</th><th>操作人</th><th>目标</th><th>动作</th><th>状态</th><th>详情</th></tr></thead>
+            <tbody id="audit-rows"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/web/static/admin.js" defer></script>
+</body>
+</html>

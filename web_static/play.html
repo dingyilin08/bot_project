@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>问道诸天 · 网页版</title>
+  <meta name="description" content="问道诸天修仙文字游戏网页版">
+  <link rel="stylesheet" href="/web/static/site.css">
+</head>
+<body class="player-page">
+  <div class="mist mist-one" aria-hidden="true"></div>
+  <div class="mist mist-two" aria-hidden="true"></div>
+
+  <main id="login-view" class="login-shell">
+    <section class="paper-card login-card" aria-labelledby="login-title">
+      <p class="eyebrow">QQ 与网页数据互通</p>
+      <h1 id="login-title" class="brand-title">问道诸天</h1>
+      <p class="brand-subtitle">一卷天书，诸界问道</p>
+      <ol class="login-guide">
+        <li>在 QQ 机器人私聊中发送“网页绑定”</li>
+        <li>将机器人返回的 UID 与 10 位绑定码填入下方</li>
+        <li>绑定码 10 分钟内有效，使用后立即失效</li>
+      </ol>
+      <form id="login-form" class="stack-form">
+        <label for="login-uid">玩家 UID</label>
+        <input id="login-uid" name="uid" inputmode="numeric" autocomplete="username" required placeholder="例如 100001">
+        <label for="login-code">一次性绑定码</label>
+        <input id="login-code" name="code" autocomplete="one-time-code" maxlength="20" required placeholder="例如 ABCD-234567">
+        <button class="primary-button" type="submit">进入洞天</button>
+        <p id="login-error" class="form-message error" role="alert"></p>
+      </form>
+      <a class="quiet-link" href="/admin">管理员入口</a>
+    </section>
+  </main>
+
+  <div id="game-view" class="game-shell" hidden>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">诸天道场</p>
+        <h1 class="compact-brand">问道诸天</h1>
+      </div>
+      <div class="topbar-player">
+        <span id="top-player-name">道友</span>
+        <span id="top-player-uid" class="muted"></span>
+        <button id="refresh-dashboard" class="text-button" type="button">刷新状态</button>
+        <button id="logout-button" class="text-button danger-text" type="button">退出</button>
+      </div>
+    </header>
+
+    <aside class="side-nav" aria-label="主要功能">
+      <p class="nav-title">修行诸事</p>
+      <button class="nav-button active" type="button" data-command="今日修行"><span>今</span>今日修行</button>
+      <button class="nav-button" type="button" data-command="当前角色"><span>身</span>角色道体</button>
+      <button class="nav-button" type="button" data-command="参悟状态"><span>悟</span>参悟修炼</button>
+      <button class="nav-button" type="button" data-command="副本列表"><span>战</span>秘境战斗</button>
+      <button class="nav-button" type="button" data-command="药园"><span>药</span>药园丹炉</button>
+      <button class="nav-button" type="button" data-command="灵兽"><span>灵</span>诸天灵契</button>
+      <button class="nav-button" type="button" data-command="洞府"><span>府</span>洞府经营</button>
+      <button class="nav-button" type="button" data-command="宗门"><span>宗</span>宗门师徒</button>
+      <button class="nav-button" type="button" data-command="物品背包"><span>囊</span>乾坤背包</button>
+      <button class="nav-button" type="button" data-command="坊市"><span>市</span>诸天坊市</button>
+    </aside>
+
+    <section class="main-stage" aria-labelledby="stage-title">
+      <div class="stage-heading">
+        <div>
+          <p class="eyebrow">天机卷</p>
+          <h2 id="stage-title">今日修行</h2>
+        </div>
+        <span id="request-state" class="status-pill">道场已连接</span>
+      </div>
+      <div id="result-panel" class="result-panel" aria-live="polite">
+        <p class="empty-state">正在展开今日天机……</p>
+      </div>
+      <div id="action-panel" class="action-panel" aria-label="可执行动作"></div>
+      <form id="command-form" class="command-bar">
+        <label class="sr-only" for="command-input">输入游戏指令</label>
+        <input id="command-input" maxlength="120" placeholder="也可输入已有游戏指令，例如：角色背包">
+        <button type="submit" class="secondary-button">施行</button>
+      </form>
+    </section>
+
+    <aside class="status-rail" aria-label="角色状态">
+      <section class="paper-card identity-card">
+        <p class="eyebrow">当前道体</p>
+        <div class="seal" aria-hidden="true">道</div>
+        <h2 id="role-name">尚未选择</h2>
+        <p id="role-stage" class="role-stage">凡身</p>
+        <dl class="stat-list">
+          <div><dt>等级</dt><dd id="role-level">—</dd></div>
+          <div><dt>战力</dt><dd id="player-power">—</dd></div>
+          <div><dt>攻击</dt><dd id="role-attack">—</dd></div>
+          <div><dt>气血</dt><dd id="role-health">—</dd></div>
+        </dl>
+      </section>
+      <section class="paper-card resource-card">
+        <p class="eyebrow">随身资粮</p>
+        <dl class="resource-list">
+          <div><dt>灵石</dt><dd id="player-lingshi">0</dd></div>
+          <div><dt>仙玉</dt><dd id="player-xianyu">0</dd></div>
+          <div><dt>秘境次数</dt><dd id="dungeon-attempts">0</dd></div>
+          <div><dt>参悟</dt><dd id="cultivation-state">未参悟</dd></div>
+        </dl>
+      </section>
+      <section class="paper-card quick-card">
+        <p class="eyebrow">一念即行</p>
+        <div class="quick-grid">
+          <button type="button" data-command="签到">每日签到</button>
+          <button type="button" data-command="参悟">开始参悟</button>
+          <button type="button" data-command="领取参悟经验">领取感悟</button>
+          <button type="button" data-command="战斗状态">战斗状态</button>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <script src="/web/static/play.js" defer></script>
+</body>
+</html>

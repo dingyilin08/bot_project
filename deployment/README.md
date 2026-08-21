@@ -48,6 +48,24 @@ Before publishing the player portrait feature, execute the idempotent migration:
 mysql -u bot_project -p bot_project < /opt/qq-rpg/current/数据库源文件/p14_power_portrait.sql
 ```
 
+Before enabling `/play` and `/admin`, execute the Web portal migration and add
+the Web-only secrets to `/etc/qq-rpg/qq-rpg.env`:
+
+```bash
+mysql -u bot_project -p bot_project < /opt/qq-rpg/current/数据库源文件/p15_web_portal.sql
+```
+
+```dotenv
+WEB_AUTH_SECRET=replace-with-at-least-32-random-characters
+WEB_PUBLIC_ORIGIN=https://YOUR_DOMAIN
+WEB_COOKIE_SECURE=true
+```
+
+`WEB_AUTH_SECRET` is used only to hash one-time QQ binding codes, session
+tokens, CSRF tokens, IP addresses, and user-agent metadata. Do not reuse the QQ,
+database, or GM password. Changing it invalidates every Web binding code and
+session without affecting QQ gameplay.
+
 ```bash
 install -d -m 700 /etc/qq-rpg
 install -m 600 /dev/null /etc/qq-rpg/qq-rpg.env
