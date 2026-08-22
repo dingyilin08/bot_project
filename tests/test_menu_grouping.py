@@ -1,4 +1,6 @@
+import os
 import unittest
+from unittest.mock import patch
 
 from Game_main import g0_menu
 from output_main import jiance
@@ -42,10 +44,15 @@ class MenuGroupingTests(unittest.IsolatedAsyncioTestCase):
         g0_menu.get_player_basic_info = lambda uid: _async_value({"name": "测试", "lingshi": 1, "xianyu": 0})
         g0_menu.get_current_role_info = lambda uid: _async_value(None)
         try:
-            content = (await g0_menu.show_main_menu.__wrapped__(1, ""))["content"]
+            with patch.dict(os.environ, {"WEB_PLAYER_PORTAL_ENABLED": "false"}):
+                content = (await g0_menu.show_main_menu.__wrapped__(1, ""))["content"]
+            with patch.dict(os.environ, {"WEB_PLAYER_PORTAL_ENABLED": "true"}):
+                enabled_content = (await g0_menu.show_main_menu.__wrapped__(1, ""))["content"]
         finally:
             g0_menu.get_player_basic_info = original_player
             g0_menu.get_current_role_info = original_role
+        self.assertNotIn("网页绑定", content)
+        self.assertIn("网页绑定", enabled_content)
         self.assertIn("text='队伍菜单'", content)
         self.assertIn("text='灵兽菜单'", content)
         self.assertIn("text='洞府菜单'", content)

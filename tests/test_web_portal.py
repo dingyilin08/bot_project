@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import main
+from fastapi import HTTPException
 from Game_domain.web_auth_service import (
     ADMIN_SCOPE,
     PLAYER_SCOPE,
@@ -17,7 +18,7 @@ from Game_domain.web_auth_service import (
     verify_csrf,
 )
 from Game_web.presentation import adapt_game_response, dispatch_web_command
-from Game_web.routes import ADMIN_SESSION_COOKIE, PLAYER_SESSION_COOKIE
+from Game_web.routes import ADMIN_SESSION_COOKIE, PLAYER_SESSION_COOKIE, player_page
 from Game_web.portal_service import (
     list_player_dungeons,
     list_player_inventory,
@@ -235,8 +236,11 @@ class WebPresentationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "不能执行管理指令"):
             asyncio.run(dispatch_web_command(10001, "GM发放仙玉 10002-10"))
 
-    def test_qq_binding_commands_are_registered(self):
-        self.assertEqual(("网页绑定", ""), asyncio.run(jiance("网页绑定")))
+    def test_player_binding_command_follows_feature_switch(self):
+        with patch.dict(os.environ, {"WEB_PLAYER_PORTAL_ENABLED": "false"}):
+            self.assertEqual(("", ""), asyncio.run(jiance("网页绑定")))
+        with patch.dict(os.environ, {"WEB_PLAYER_PORTAL_ENABLED": "true"}):
+            self.assertEqual(("网页绑定", ""), asyncio.run(jiance("网页绑定")))
         self.assertEqual(("GM网页绑定", ""), asyncio.run(jiance("GM网页绑定")))
 
     def test_gm_menu_exposes_isolated_web_admin_link(self):
@@ -286,6 +290,12 @@ class WebPortalServiceTests(unittest.TestCase):
 
 
 class WebPortalStructureTests(unittest.TestCase):
+    def test_disabled_player_portal_returns_not_found(self):
+        with patch.dict(os.environ, {"WEB_PLAYER_PORTAL_ENABLED": "false"}):
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(player_page())
+        self.assertEqual(404, raised.exception.status_code)
+
     def test_routes_and_isolated_cookie_names_exist(self):
         paths = {route.path for route in main.app.routes if hasattr(route, "path")}
         self.assertTrue({

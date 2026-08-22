@@ -63,6 +63,7 @@ mysql -u bot_project -p bot_project < /opt/qq-rpg/current/数据库源文件/p16
 
 ```dotenv
 WEB_AUTH_SECRET=replace-with-at-least-32-random-characters
+WEB_PLAYER_PORTAL_ENABLED=false
 WEB_PUBLIC_ORIGIN=https://YOUR_DOMAIN
 WEB_COOKIE_SECURE=true
 ```
@@ -71,6 +72,11 @@ WEB_COOKIE_SECURE=true
 tokens, CSRF tokens, IP addresses, and user-agent metadata. Do not reuse the QQ,
 database, or GM password. Changing it invalidates every Web binding code and
 session without affecting QQ gameplay.
+
+`WEB_PLAYER_PORTAL_ENABLED` defaults to `false`. Keep it disabled until the
+player portal has passed public-network and mobile acceptance. When set to
+`false`, the QQ player binding command is hidden and `/play` plus `/api/web/*`
+return 404; the isolated `/admin` portal remains available.
 
 ```bash
 install -d -m 700 /etc/qq-rpg

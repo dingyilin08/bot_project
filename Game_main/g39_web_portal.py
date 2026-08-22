@@ -3,7 +3,7 @@
 
 import logging
 
-from config import DOMAIN
+from config import DOMAIN, is_web_player_portal_enabled
 from func.pd_func import pd_reg_func
 from Game_domain.web_auth_service import (
     ADMIN_SCOPE,
@@ -32,6 +32,8 @@ def _binding_message(result: dict, *, admin: bool) -> dict:
 
 @pd_reg_func
 async def web_player_link(uid, qz):
+    if not is_web_player_portal_enabled():
+        return {"type": "markdown", "content": "##### 网页版暂未开放"}
     try:
         return _binding_message(await issue_link_code(uid, PLAYER_SCOPE), admin=False)
     except WebAuthError as exc:

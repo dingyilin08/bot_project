@@ -38,6 +38,7 @@ from Game_web.portal_service import (
     write_admin_audit,
 )
 from Game_web.presentation import dispatch_web_command
+from config import is_web_player_portal_enabled
 
 
 LOGGER = logging.getLogger(__name__)
@@ -78,6 +79,11 @@ class XianyuGrantRequest(BaseModel):
     target_uid: int = Field(gt=0)
     amount: int = Field(gt=0, le=1_000_000_000)
     request_id: str | None = Field(default=None, max_length=80)
+
+
+def _require_player_portal_enabled() -> None:
+    if not is_web_player_portal_enabled():
+        raise HTTPException(status_code=404, detail="Not Found")
 
 
 def _cookie_secure(request: Request) -> bool:
@@ -162,6 +168,7 @@ def _clear_session_cookies(response: Response, scope: str) -> None:
 
 @router.get("/play", include_in_schema=False)
 async def player_page():
+    _require_player_portal_enabled()
     return FileResponse(STATIC_ROOT / "play.html", media_type="text/html")
 
 
@@ -172,6 +179,7 @@ async def admin_page():
 
 @router.post("/api/web/auth/link")
 async def player_login(payload: LinkLoginRequest, request: Request, response: Response):
+    _require_player_portal_enabled()
     _require_same_origin(request)
     try:
         credentials = await exchange_link_code(
@@ -196,6 +204,7 @@ async def player_login(payload: LinkLoginRequest, request: Request, response: Re
 
 @router.get("/api/web/session")
 async def player_session(request: Request):
+    _require_player_portal_enabled()
     identity = await _identity(request, PLAYER_SCOPE)
     return {
         "authenticated": True,
@@ -207,6 +216,7 @@ async def player_session(request: Request):
 
 @router.delete("/api/web/session")
 async def player_logout(request: Request, response: Response):
+    _require_player_portal_enabled()
     await _identity(request, PLAYER_SCOPE, write=True)
     await revoke_session(request.cookies.get(PLAYER_SESSION_COOKIE, ""), PLAYER_SCOPE)
     _clear_session_cookies(response, PLAYER_SCOPE)
@@ -215,24 +225,28 @@ async def player_logout(request: Request, response: Response):
 
 @router.get("/api/web/dashboard")
 async def player_dashboard(request: Request):
+    _require_player_portal_enabled()
     identity = await _identity(request, PLAYER_SCOPE)
     return await get_dashboard(identity.uid)
 
 
 @router.get("/api/web/roles")
 async def player_roles(request: Request):
+    _require_player_portal_enabled()
     identity = await _identity(request, PLAYER_SCOPE)
     return {"roles": await list_player_roles(identity.uid)}
 
 
 @router.get("/api/web/inventory")
 async def player_inventory(request: Request, page: int = 1, page_size: int = 40):
+    _require_player_portal_enabled()
     identity = await _identity(request, PLAYER_SCOPE)
     return await list_player_inventory(identity.uid, page, page_size)
 
 
 @router.get("/api/web/dungeons")
 async def player_dungeons(request: Request, page: int = 1, page_size: int = 12):
+    _require_player_portal_enabled()
     identity = await _identity(request, PLAYER_SCOPE)
     try:
         return await list_player_dungeons(identity.uid, page, page_size)
@@ -242,6 +256,7 @@ async def player_dungeons(request: Request, page: int = 1, page_size: int = 12):
 
 @router.post("/api/web/command")
 async def player_command(payload: CommandRequest, request: Request):
+    _require_player_portal_enabled()
     identity = await _identity(request, PLAYER_SCOPE, write=True)
     try:
         return await dispatch_web_command(
@@ -255,6 +270,7 @@ async def player_command(payload: CommandRequest, request: Request):
 
 @router.get("/api/web/dao-heart")
 async def player_dao_heart(request: Request):
+    _require_player_portal_enabled()
     identity = await _identity(request, PLAYER_SCOPE)
     try:
         return await get_daily_state(identity.uid)
@@ -264,6 +280,7 @@ async def player_dao_heart(request: Request):
 
 @router.post("/api/web/dao-heart/choice")
 async def player_dao_heart_choice(payload: DaoHeartChoiceRequest, request: Request):
+    _require_player_portal_enabled()
     identity = await _identity(request, PLAYER_SCOPE, write=True)
     try:
         return await choose_daily_path(

@@ -7,7 +7,12 @@ import re
 from datetime import datetime
 
 from Tool.tool_user import *
-from config import is_image_mode, set_image_mode, ADMIN_PASSWORD
+from config import (
+    ADMIN_PASSWORD,
+    is_image_mode,
+    is_web_player_portal_enabled,
+    set_image_mode,
+)
 
 from Game_main.g1_role import *          # 角色
 from Game_main.g2_canwu import *         # 参悟
@@ -163,6 +168,8 @@ async def jiance(message):
                 zz = y_item
                 hz = message.replace(zz, '')
                 break
+    if zz == '网页绑定' and not is_web_player_portal_enabled():
+        return '', ''
     return zz, hz
 
 
@@ -814,7 +821,7 @@ async def content(
         return await gm_power_portrait_approve(uid, con_arr1)
     elif con_arr0 == 'GM驳回立绘':
         return await gm_power_portrait_reject(uid, con_arr1)
-    elif con_arr0 == '网页绑定':
+    elif con_arr0 == '网页绑定' and is_web_player_portal_enabled():
         return await web_player_link(uid)
     elif con_arr0 == 'GM网页绑定':
         return await web_admin_link(uid)

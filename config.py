@@ -18,6 +18,17 @@ IMG_BASE_URL = f"{DOMAIN}/images"
 # 管理员密令（用于图片模式切换等管理员功能的校验口令）
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 
+
+def is_web_player_portal_enabled() -> bool:
+    """玩家网页入口默认关闭，仅在部署环境显式开启。"""
+
+    return os.getenv("WEB_PLAYER_PORTAL_ENABLED", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
 def is_image_mode() -> bool:
     """当前是否为图片模式；状态持久化到 gm_state.yaml。"""
     return get_image_mode()

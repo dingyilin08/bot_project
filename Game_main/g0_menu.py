@@ -16,6 +16,7 @@ from Game_domain.monthly_card_service import (
     ensure_monthly_card_schema,
     monthly_card_display_name,
 )
+from config import is_web_player_portal_enabled
 
 
 # ================================
@@ -270,7 +271,8 @@ async def show_main_menu(uid, qz):
     output += f"**灵石：** {player_info['lingshi']} | **仙玉：** {player_info['xianyu']}\n\n"
     output += "> 不确定下一步时，先进入「今日修行」；其余入口按系统分区保留。\n\n"
     output += f"{_menu_link('今日修行', '🧭 今日修行')} | {_menu_link('问道札记', '新手札记')} | {_menu_link('日常任务', '日常任务')}\n\n"
-    output += f"{_menu_link('网页绑定', '🌐 登录网页版')}\n\n"
+    if is_web_player_portal_enabled():
+        output += f"{_menu_link('网页绑定', '🌐 登录网页版')}\n\n"
 
     for title, description, entries in MAIN_MENU_SECTIONS:
         output += f"***\n\n**{title}**\n> {description}\n"
