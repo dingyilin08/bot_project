@@ -3,9 +3,11 @@ from Game_main.g31_invitation import (
     InvitationError,
     bind_invitation_code,
     create_new_invitation_profile,
+    create_returning_invitation_profile,
     ensure_legacy_invitation_profiles,
     parse_registration_input,
 )
+from Game_domain.account_deletion_service import allocate_player_uid, was_openid_deleted
 from Tool.tool_user import *
 from func.pd_func import *
 from config import IMG_BASE_URL
@@ -345,13 +347,16 @@ async def user_zhuce(openid, player_name):
             try:
                 # 先将功能上线前的账号无奖励归属到当前管理员，再创建新玩家档案。
                 await ensure_legacy_invitation_profiles(cursor)
-                sql = "SELECT COUNT(*) FROM user_zt"
-                await cursor.execute(sql)
-                result = await cursor.fetchone()
-                uid = result[0] + 100000 + 1
+                returning_player = await was_openid_deleted(cursor, openid)
+                if returning_player and invite_code:
+                    raise InvitationError("删号后重新注册不能再次绑定新玩家邀请码。")
+                uid = await allocate_player_uid(cursor)
                 sql = "INSERT INTO user_zt (id, openid, `name`, is_chushi) VALUES (%s, %s, %s, 0)"
                 await cursor.execute(sql, (uid, openid, player_name))
-                await create_new_invitation_profile(cursor, uid)
+                if returning_player:
+                    await create_returning_invitation_profile(cursor, uid)
+                else:
+                    await create_new_invitation_profile(cursor, uid)
                 inviter_uid = None
                 if invite_code:
                     inviter_uid = await bind_invitation_code(cursor, uid, invite_code)
@@ -361,12 +366,20 @@ async def user_zhuce(openid, player_name):
                 return {"type": "markdown", "content": f"##### 注册失败\n\n{exc}"}
             except Exception:
                 await conn.rollback()
-                return {"type": "markdown", "content": "##### 注册失败\n\n邀请码功能尚未完成数据迁移，请联系管理员执行 p2_invitation.sql。"}
+                return {
+                    "type": "markdown",
+                    "content": (
+                        "##### 注册失败\n\n注册数据初始化失败，请联系管理员检查 "
+                        "p2_invitation.sql 与 p17_account_deletion.sql。"
+                    ),
+                }
             line.append("##### 注册成功！")
             line.append(f"**您的UID：** {uid}")
             if inviter_uid:
                 line.append("**邀请码已绑定：** 双方各有 500仙玉 + 1600灵石 可领取；完成全部新手札记后，双方再各得 1000仙玉。")
                 line.append("<qqbot-cmd-input text='领取邀请奖励' show='领取邀请奖励' /> | <qqbot-cmd-input text='邀请列表' show='邀请进度' />")
+            elif returning_player:
+                line.append("> 当前 QQ 曾执行删号；本次可正常重新游玩，但不再参与新玩家邀请码奖励。")
             else:
                 line.append("> 未填写邀请码；邀请码为可选项，不影响注册和游玩。之后可发送“填写邀请码”补填一次。")
             line.append(f"**待选角色：**")

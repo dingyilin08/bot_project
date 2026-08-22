@@ -53,6 +53,7 @@ from Game_main.g37_monthly_card import *         # 月卡权益
 from Game_main.g38_power_portrait import *          # 玩家战力立绘与 GM 审核
 from Game_main.g39_web_portal import *              # Web 玩家端与隔离管理端绑定
 from Game_main.g40_dao_heart import *               # 每日道心问境
+from Game_main.g41_account_deletion import *        # 低等级玩家删号
 from Game_main.g0_menu import *          # 菜单系统
 from Tool.qq_keyboard import attach_keyboard
 from Game_domain.gm_service import GMError, authenticate_admin
@@ -85,6 +86,7 @@ youhouzhui += '|GM全服发放灵石|GM全服发放仙玉'
 youhouzhui += '|兑换|GM生成兑换码|月卡兑换|GM生成月卡码'
 youhouzhui += '|GM查看立绘|GM通过立绘|GM驳回立绘'
 youhouzhui += '|轮回重生'
+youhouzhui += '|删号'
 youhouzhui += '|道心抉择'
 youhouzhui += '|专属图鉴'
 youhouzhui += '|灵兽初契|灵兽详情|灵兽图鉴|灵兽寻踪|灵兽线索|灵兽重复|灵兽培养|灵兽喂养|灵兽突破|灵兽洗髓|灵兽洗髓确认|灵兽洗髓取消|灵兽血脉|灵兽血脉激活|灵兽技能|灵兽技能参悟|灵兽技能装配|灵兽技能卸下|灵兽照料|灵兽一键照料|灵兽上阵|灵兽下阵|灵兽预设|灵兽派遣开始|灵兽派遣领取|灵兽派遣取消|万灵秘境挑战|灵兽传记|灵兽传记选择|灵兽归真|灵兽归真确认|灵兽归真取消|灵兽批量归真确认|灵兽批量归真取消|灵兽改名|灵兽锁定|灵兽切磋'
@@ -301,6 +303,8 @@ async def content(
         return await cz_role_attr(uid)
     elif con_arr0 == '轮回重生':
         return await reincarnation(uid, con_arr1)
+    elif con_arr0 == '删号':
+        return await delete_account(uid, con_arr1)
     elif con_arr0 == '参悟':
         return await canwu_role(uid)
     elif con_arr0 == '参悟状态':

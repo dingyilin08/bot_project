@@ -61,6 +61,13 @@ Before enabling the daily Dao Heart encounter, execute its idempotent migration:
 mysql -u bot_project -p bot_project < /opt/qq-rpg/current/数据库源文件/p16_dao_heart.sql
 ```
 
+Before enabling the low-level player account deletion command, execute its
+idempotent audit migration:
+
+```bash
+mysql -u bot_project -p bot_project < /opt/qq-rpg/current/数据库源文件/p17_account_deletion.sql
+```
+
 ```dotenv
 WEB_AUTH_SECRET=replace-with-at-least-32-random-characters
 WEB_PLAYER_PORTAL_ENABLED=false

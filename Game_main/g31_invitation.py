@@ -114,6 +114,12 @@ async def create_new_invitation_profile(cursor, uid):
     return await _create_profile(cursor, uid, reward_eligible=True)
 
 
+async def create_returning_invitation_profile(cursor, uid):
+    """删号后重新注册不再取得新玩家邀请奖励资格。"""
+
+    return await _create_profile(cursor, uid, reward_eligible=False)
+
+
 async def bind_invitation_code(cursor, invitee_uid, invite_code):
     code = normalize_invite_code(invite_code)
     await cursor.execute(

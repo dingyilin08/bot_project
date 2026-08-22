@@ -454,6 +454,9 @@ async def show_role_menu(uid, qz):
     output += "> 当前角色等级达到境界巅峰时，可发送'悟道进阶'，突破下个境界\n\n"
     output += "<qqbot-cmd-input text='轮回重生' show='轮回重生' />\n"
     output += "> 当前角色达到100级后可轮回重生，保留10%裸属性，最高第9世\n\n"
+    if role_info and int(role_info["level"]) < 10:
+        output += "<qqbot-cmd-input text='删号' show='永久删号' />\n"
+        output += "> 仅所有角色均未达到10级时可用；需二次确认，删除后无法恢复\n\n"
     output += "<qqbot-cmd-input text='出战' show='出战 角色编号' />\n"
     output += "> 点击蓝字后输入角色编号可出战该角色，示例：出战 10001\n\n"
     output += "<qqbot-cmd-input text='收回' show='收回' />\n"

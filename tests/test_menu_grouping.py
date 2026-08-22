@@ -1,12 +1,28 @@
 import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from Game_main import g0_menu
 from output_main import jiance
 
 
 class MenuGroupingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_role_menu_only_shows_account_deletion_below_level_ten(self):
+        with patch.object(
+            g0_menu,
+            "get_current_role_info",
+            AsyncMock(return_value={"name": "韩立", "level": 9, "stage": "炼气"}),
+        ):
+            eligible = (await g0_menu.show_role_menu.__wrapped__(1, ""))["content"]
+        with patch.object(
+            g0_menu,
+            "get_current_role_info",
+            AsyncMock(return_value={"name": "韩立", "level": 10, "stage": "筑基"}),
+        ):
+            ineligible = (await g0_menu.show_role_menu.__wrapped__(1, ""))["content"]
+        self.assertIn("text='删号'", eligible)
+        self.assertNotIn("text='删号'", ineligible)
+
     async def test_progression_menus_expose_real_effect_actions(self):
         party = (await g0_menu.show_party_menu.__wrapped__(1, ""))["content"]
         self.assertIn("锋矢·前列伤害+8%", party)
